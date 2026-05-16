@@ -67,7 +67,7 @@ npm install
 ### For Admins
 1. **Knowledge Base** - Upload PDF/DOCX/TXT documents
    - Documents are automatically chunked and indexed
-   - Embeddings generated using Gemini
+   - Embeddings are optional and only generated if your local server supports them
    - Searchable via semantic similarity
 
 2. **AI Settings** - Configure:
@@ -78,13 +78,16 @@ npm install
 ## Important Notes
 
 ### Environment Variables
-- `VITE_GEMINI_API_KEY` - Required for all AI features
+- `VITE_OPENAI_BASE_URL` - Local OpenAI-compatible chatbot endpoint
+- `VITE_OPENAI_API_KEY` - API key for the local chatbot endpoint
+- `VITE_OPENAI_MODEL` - Optional model name for the local chatbot endpoint
+- `VITE_OPENAI_EMBEDDING_MODEL` - Optional embedding model for knowledge base search
 - `VITE_SUPABASE_URL` - Already configured
 - `VITE_SUPABASE_ANON_KEY` - Already configured
 
 ### Database Requirements
 - Supabase project with pgvector extension enabled
-- Vector embedding dimension: 768 (Google Gemini standard)
+- Vector embedding dimension depends on your embedding model
 
 ### File Upload Limits
 - Max file size: 50MB
@@ -97,9 +100,10 @@ npm install
 
 ## Troubleshooting
 
-### "VITE_GEMINI_API_KEY not configured"
-- Check `.env` file has `VITE_GEMINI_API_KEY` set
-- Restart dev server after updating `.env`
+### "Vector search returns no results"
+- Upload documents to knowledge base first
+- If embeddings are disabled on the local server, retrieval will stay empty but chat still works
+- Try broader search queries
 
 ### "Failed to parse PDF"
 - Ensure file is a valid, non-corrupted PDF
@@ -110,16 +114,18 @@ npm install
 - Wait for embeddings to be generated (takes a few seconds)
 - Try broader search queries
 
-### Gemini API errors
-- Check your API key is valid
-- Verify rate limits haven't been exceeded
-- Check Google AI Studio for errors
+### Local chatbot API errors
+- Check your local API key is valid
+- Verify the server is reachable at `http://192.168.1.14/v1`
+- Confirm the selected model is available on the local server
 
 ## Production Deployment
 
 1. **Set environment variables** in production deployment:
    ```
-   VITE_GEMINI_API_KEY=your_production_key
+   VITE_OPENAI_BASE_URL=https://your-server.example/v1
+   VITE_OPENAI_API_KEY=your_production_key
+   VITE_OPENAI_MODEL=your_model_name
    VITE_SUPABASE_URL=your_supabase_url
    VITE_SUPABASE_ANON_KEY=your_key
    ```
@@ -142,8 +148,7 @@ npm install
 - **Google Gemini API**: Free tier available (high limits)
 - **Vector Embeddings**: Minimal cost per embedding
 - **Supabase**: Free pgvector support on any plan
-
-Check Google AI Studio pricing: https://ai.google.dev/pricing
+- **Local LLM**: Cost depends on your own hardware and serving setup
 
 ## Next Steps
 

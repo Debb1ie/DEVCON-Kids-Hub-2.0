@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Send, MessageSquare, Maximize2, Minimize2, Loader } from 'lucide-react';
-import { callGeminiWithContext, generateSessionSummary } from '../services/geminiService';
+import { callChatWithContext, generateSessionSummary } from '../services/chatService';
 import { retrieveContext } from '../services/ragService';
 import './AIChat.css';
 
@@ -9,7 +9,7 @@ export default function AIChat({ isFullscreen = false, onClose }) {
     {
       id: 1,
       role: 'assistant',
-      content: 'Hi! I\'m the DEVCON Kids AI Assistant. I can help you with:\n• Volunteer onboarding\n• Event planning and coordination\n• FAQ and policy questions\n• General organizational guidance\n\nWhat can I help you with today?',
+      content: 'Hi! I\'m the DEVCON Kids AI Assistant. I can help you with:\n• DEVCON Kids mission and core pillars\n• Volunteer onboarding and guidelines\n• Event planning and coordination\n• Knowledge Base uploads and document questions\n• Dashboard access and role-based guidance\n\nTry one of the quick questions below, or ask something in your own words.',
       timestamp: new Date()
     }
   ]);
@@ -20,10 +20,10 @@ export default function AIChat({ isFullscreen = false, onClose }) {
 
   // Suggested prompts based on context
   const suggestedPrompts = [
-    'How do I onboard a new volunteer?',
-    'What\'s the process for creating an event?',
     'Tell me about DEVCON Kids mission',
-    'How do I request event resources?',
+    'What can the dashboard pages do?',
+    'How do I onboard a new volunteer?',
+    'What is the process for creating an event?',
     'What are the volunteer guidelines?'
   ];
 
@@ -54,7 +54,7 @@ export default function AIChat({ isFullscreen = false, onClose }) {
       const context = await retrieveContext(text);
 
       // Call Gemini with RAG context
-      const result = await callGeminiWithContext(text, context, 
+      const result = await callChatWithContext(text, context, 
         messages.map(m => ({ role: m.role, content: m.content }))
       );
 

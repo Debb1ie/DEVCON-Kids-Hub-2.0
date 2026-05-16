@@ -129,6 +129,12 @@
   animation-delay: 4s;
 }
 
+.card-4 {
+  top: 20%;
+  right: 25%;
+  animation-delay: 6s;
+}
+
 @keyframes float {
   0% { transform: translateY(0px); }
   50% { transform: translateY(-20px); }
@@ -159,6 +165,42 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 2rem;
+}
+
+.programs-section {
+  padding: 4rem 5%;
+  background-color: var(--bg-surface);
+}
+
+.programs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.program-card {
+  padding: 1.75rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.program-card h3 {
+  margin: 0;
+}
+
+.program-icon {
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.program-cta {
+  margin-top: 0.75rem;
+  text-decoration: none;
 }
 
 .pillar-card {

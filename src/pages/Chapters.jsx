@@ -4,7 +4,7 @@ import { MapPin, ArrowRight, Plus, PencilLine, Trash2 } from 'lucide-react';
 import './Chapters.css';
 
 export default function Chapters() {
-  const { chapters, addChapter, updateChapter, deleteChapter } = useApp();
+  const { chapters, addChapter, updateChapter, deleteChapter, isSuperadmin } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
@@ -65,13 +65,15 @@ export default function Chapters() {
             <p className="text-muted">Nationwide locations bringing tech to the youth.</p>
           </div>
         </div>
-        <button className="btn-primary" onClick={openCreateForm}>
-          <Plus size={20} />
-          Add Chapter
-        </button>
+        {isSuperadmin && (
+          <button className="btn-primary" onClick={openCreateForm}>
+            <Plus size={20} />
+            Add Chapter
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {isSuperadmin && showForm && (
         <div className="card animate-fade-in" style={{ marginBottom: '1rem' }}>
           <h3>{editingId ? 'Edit Chapter' : 'Add New Chapter'}</h3>
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
@@ -113,14 +115,16 @@ export default function Chapters() {
               View Chapter Details <ArrowRight size={16} />
             </button>
 
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button className="btn-secondary full-width chapter-action" onClick={() => openEditForm(chapter)}>
-                <PencilLine size={16} /> Edit
-              </button>
-              <button className="btn-secondary full-width chapter-action" onClick={() => deleteChapter(chapter.id)} style={{ borderColor: '#DC2626', color: '#DC2626' }}>
-                <Trash2 size={16} /> Delete
-              </button>
-            </div>
+            {isSuperadmin && (
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button className="btn-secondary full-width chapter-action" onClick={() => openEditForm(chapter)}>
+                  <PencilLine size={16} /> Edit
+                </button>
+                <button className="btn-secondary full-width chapter-action" onClick={() => deleteChapter(chapter.id)} style={{ borderColor: '#DC2626', color: '#DC2626' }}>
+                  <Trash2 size={16} /> Delete
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>

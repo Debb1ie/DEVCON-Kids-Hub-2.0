@@ -5,20 +5,22 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import './Dashboard.css';
 
 export default function Dashboard() {
-  const { stats, chapters, growthData, addLearner, eventsList } = useApp();
+  const { stats, chapters, growthData, addLearner, eventsList, isSuperadmin, user } = useApp();
   const hourOfAiEvent = eventsList?.find((event) => (event.title || '').toLowerCase().includes('hour of ai')) || eventsList?.[0];
 
   return (
     <div className="dashboard">
       <div className="hero-section">
         <div className="hero-content">
-          <h1>Welcome back, <span>Admin!</span></h1>
+          <h1>Welcome back, <span>{user?.name || user?.role || 'Visitor'}!</span></h1>
           <p>Here's what's happening with DEVCON Kids across the nation today, with Hour of AI as the main course solution.</p>
         </div>
-        <button className="btn-primary" onClick={addLearner}>
-          <GraduationCap size={20} />
-          Record New Learner
-        </button>
+        {isSuperadmin && (
+          <button className="btn-primary" onClick={addLearner}>
+            <GraduationCap size={20} />
+            Record New Learner
+          </button>
+        )}
       </div>
 
       <div className="kpi-grid">

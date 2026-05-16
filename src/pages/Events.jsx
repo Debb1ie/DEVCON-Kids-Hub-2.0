@@ -23,7 +23,7 @@ const buildFolderPreview = (title) => {
 };
 
 export default function Events() {
-  const { eventsList, addEvent, updateEvent, deleteEvent } = useApp();
+  const { eventsList, addEvent, updateEvent, deleteEvent, isSuperadmin } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -94,10 +94,12 @@ export default function Events() {
             <p className="text-muted">Coordinate cycle programs, including Hour of AI, and generate Google Drive folder blueprints for each event.</p>
           </div>
         </div>
-        <button className="btn-primary" onClick={openCreateForm}>
-          <Plus size={20} />
-          Create Event
-        </button>
+        {isSuperadmin && (
+          <button className="btn-primary" onClick={openCreateForm}>
+            <Plus size={20} />
+            Create Event
+          </button>
+        )}
       </div>
 
       {featuredEvent && (
@@ -127,7 +129,7 @@ export default function Events() {
         </div>
       )}
 
-      {showForm && (
+      {isSuperadmin && showForm && (
         <div className="card animate-fade-in event-form-card">
           <div className="event-form-header">
             <div>
@@ -256,16 +258,18 @@ export default function Events() {
                   </div>
                 </div>
 
-                <div className="event-actions">
-                  <button className="btn-secondary small-action" onClick={() => openEditForm(event)}>
-                    <PencilLine size={16} />
-                    Edit
-                  </button>
-                  <button className="btn-secondary small-action danger" onClick={() => deleteEvent(event.id)}>
-                    <Trash2 size={16} />
-                    Delete
-                  </button>
-                </div>
+                {isSuperadmin && (
+                  <div className="event-actions">
+                    <button className="btn-secondary small-action" onClick={() => openEditForm(event)}>
+                      <PencilLine size={16} />
+                      Edit
+                    </button>
+                    <button className="btn-secondary small-action danger" onClick={() => deleteEvent(event.id)}>
+                      <Trash2 size={16} />
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             </article>
           ))}

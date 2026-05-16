@@ -5,42 +5,44 @@
 
 import { supabase } from '../lib/supabase';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const EMBEDDING_MODEL = 'models/text-embedding-004';
-const EMBEDDING_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent';
+const OPENAI_BASE_URL = import.meta.env.VITE_OPENAI_BASE_URL || 'http://192.168.1.14/v1';
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+const OPENAI_EMBEDDING_MODEL = import.meta.env.VITE_OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
+const OPENAI_EMBEDDING_ENDPOINT = `${OPENAI_BASE_URL.replace(/\/$/, '')}/embeddings`;
 
 /**
- * Generate embeddings for text using Google Gemini API
+ * Generate embeddings for text using the local OpenAI-compatible API
  */
 export async function generateEmbedding(text) {
-  if (!GEMINI_API_KEY) {
-    throw new Error('VITE_GEMINI_API_KEY not configured');
+  if (!OPENAI_API_KEY) {
+    return [];
   }
 
   const requestBody = {
-    model: EMBEDDING_MODEL,
-    content: {
-      parts: [{ text }]
-    }
+    model: OPENAI_EMBEDDING_MODEL,
+    input: text
   };
 
   try {
-    const response = await fetch(`${EMBEDDING_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(OPENAI_EMBEDDING_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(`Embedding error: ${error.error?.message}`);
+      throw new Error(`Embedding error: ${error.error?.message || error.message || 'Unknown error'}`);
     }
 
     const data = await response.json();
-    return data.embedding?.values || [];
+    return data.data?.[0]?.embedding || [];
   } catch (error) {
     console.error('Embedding generation error:', error);
-    throw error;
+    return [];
   }
 }
 
@@ -58,7 +60,7 @@ export async function storeDocumentChunks(documentId, documentTitle, chunks) {
         document_id: documentId,
         document_title: documentTitle,
         content: chunk.content,
-        embedding: embedding,
+        embedding: embedding.length > 0 ? embedding : null,
         page_number: chunk.pageNumber,
         created_at: new Date().toISOString()
       });
@@ -82,8 +84,16 @@ export async function storeDocumentChunks(documentId, documentTitle, chunks) {
  */
 export async function semanticSearch(query, limit = 5) {
   try {
+    if (!OPENAI_API_KEY) {
+      return [];
+    }
+
     // Generate embedding for query
     const queryEmbedding = await generateEmbedding(query);
+
+    if (!queryEmbedding.length) {
+      return [];
+    }
 
     // Search in Supabase using pgvector similarity
     const { data, error } = await supabase.rpc('search_knowledge_base', {

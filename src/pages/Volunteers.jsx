@@ -4,7 +4,7 @@ import { Users, Search, Plus, Trash2, PencilLine } from 'lucide-react';
 import './Volunteers.css';
 
 export default function Volunteers() {
-  const { volunteersList, addVolunteer, updateVolunteer, deleteVolunteer } = useApp();
+  const { volunteersList, addVolunteer, updateVolunteer, deleteVolunteer, isSuperadmin } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -59,13 +59,15 @@ export default function Volunteers() {
             <p className="text-muted">Manage your nationwide community of tech educators.</p>
           </div>
         </div>
-        <button className="btn-primary" onClick={openCreateForm}>
-          <Plus size={20} />
-          Add Volunteer
-        </button>
+        {isSuperadmin && (
+          <button className="btn-primary" onClick={openCreateForm}>
+            <Plus size={20} />
+            Add Volunteer
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {isSuperadmin && showForm && (
         <div className="card animate-fade-in" style={{ marginBottom: '1rem' }}>
           <h3>{editingId ? 'Edit Volunteer' : 'Add New Volunteer'}</h3>
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
@@ -133,14 +135,16 @@ export default function Volunteers() {
                     <span className={`status-badge ${(volunteer.status || 'active').toLowerCase()}`}>{volunteer.status}</span>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="icon-btn action-btn" onClick={() => openEditForm(volunteer)} title="Edit">
-                        <PencilLine size={18} color="#8B5CF6" />
-                      </button>
-                      <button className="icon-btn action-btn" onClick={() => deleteVolunteer(volunteer.id)} title="Delete">
-                        <Trash2 size={18} color="#DC2626" />
-                      </button>
-                    </div>
+                    {isSuperadmin && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="icon-btn action-btn" onClick={() => openEditForm(volunteer)} title="Edit">
+                          <PencilLine size={18} color="#8B5CF6" />
+                        </button>
+                        <button className="icon-btn action-btn" onClick={() => deleteVolunteer(volunteer.id)} title="Delete">
+                          <Trash2 size={18} color="#DC2626" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Code, HeartHandshake } from 'lucide-react';
+import { GraduationCap, Code, HeartHandshake, Cpu } from 'lucide-react';
+import { useApp } from '../context/AppState';
 import './LandingPage.css';
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { stats } = useApp();
 
   return (
     <div className="landing-page">
@@ -57,6 +59,13 @@ export default function LandingPage() {
                 <p>Volunteers</p>
               </div>
             </div>
+            <div className="floating-card card-4">
+              <Cpu size={32} color="var(--primary-purple)" />
+              <div className="card-info">
+                <h4>{stats.hourOfAIStudents ?? 0}</h4>
+                <p>Hour of AI Students</p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -86,6 +95,47 @@ export default function LandingPage() {
               </div>
               <h3>Development</h3>
               <p>Reaching underserved communities and promoting equitable access.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="programs-section">
+          <div className="mission-header">
+            <h2>What We Do</h2>
+            <p>Programs that inspire, enable, and empower children.</p>
+          </div>
+          <div className="programs-grid">
+            <div className="program-card card">
+              <div className="program-icon" style={{ backgroundColor: 'rgba(139, 92, 246, 0.08)' }}>
+                Code Camps
+              </div>
+              <h3>Code Camps</h3>
+              <p>Hands-on camps for ages 9-15, covering robotics, games, and apps.</p>
+            </div>
+
+            <div className="program-card card">
+              <div className="program-icon" style={{ backgroundColor: 'rgba(99, 102, 241, 0.08)' }}>
+                Discovery
+              </div>
+              <h3>Discovery Expos</h3>
+              <p>Short CS festivals that bring tech to K-12 students.</p>
+            </div>
+
+            <div className="program-card card">
+              <div className="program-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.08)' }}>
+                AI
+              </div>
+              <h3>Hour of AI</h3>
+              <p>Introductory AI activities and lessons that introduce children to AI concepts.</p>
+              <a className="program-cta btn-primary" href="https://www.devconkids.org" target="_blank" rel="noopener noreferrer">Learn More</a>
+            </div>
+
+            <div className="program-card card">
+              <div className="program-icon" style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)' }}>
+                Train
+              </div>
+              <h3>Lead Learner Workshops</h3>
+              <p>Educator training to help scale and sustain programs.</p>
             </div>
           </div>
         </section>

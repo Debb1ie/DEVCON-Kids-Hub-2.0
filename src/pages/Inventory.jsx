@@ -4,7 +4,7 @@ import { Package, AlertCircle, CheckCircle, Search, Plus, Trash2, Image as Image
 import './Inventory.css';
 
 export default function Inventory() {
-  const { inventoryList, addInventoryItem, updateInventoryItem, deleteInventoryItem } = useApp();
+  const { inventoryList, addInventoryItem, updateInventoryItem, deleteInventoryItem, isSuperadmin } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -64,13 +64,15 @@ export default function Inventory() {
             <p className="text-muted">Track and request hardware and materials for workshops.</p>
           </div>
         </div>
-        <button className="btn-primary" onClick={openCreateForm}>
-          <Plus size={20} />
-          Add Item
-        </button>
+        {isSuperadmin && (
+          <button className="btn-primary" onClick={openCreateForm}>
+            <Plus size={20} />
+            Add Item
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {isSuperadmin && showForm && (
         <div className="card animate-fade-in" style={{ marginBottom: '1rem' }}>
           <h3>{editingId ? 'Edit Inventory Item' : 'Add New Inventory Item'}</h3>
           <form onSubmit={handleAdd} style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
@@ -145,7 +147,7 @@ export default function Inventory() {
                 <th>Category</th>
                 <th>Stock Level</th>
                 <th>Status</th>
-                <th>Action</th>
+                {isSuperadmin && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
@@ -170,21 +172,23 @@ export default function Inventory() {
                       {item.status}
                     </div>
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="icon-btn action-btn" onClick={() => openEditForm(item)} title="Edit">
-                        <PencilLine size={18} color="#8B5CF6" />
-                      </button>
-                      <button className="icon-btn action-btn" onClick={() => deleteInventoryItem(item.id)} title="Delete">
-                        <Trash2 size={18} color="#DC2626" />
-                      </button>
-                    </div>
-                  </td>
+                  {isSuperadmin && (
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="icon-btn action-btn" onClick={() => openEditForm(item)} title="Edit">
+                          <PencilLine size={18} color="#8B5CF6" />
+                        </button>
+                        <button className="icon-btn action-btn" onClick={() => deleteInventoryItem(item.id)} title="Delete">
+                          <Trash2 size={18} color="#DC2626" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="empty-state">No inventory items found. Make sure to add one!</td>
+                  <td colSpan={isSuperadmin ? "6" : "5"} className="empty-state">No inventory items found. Make sure to add one!</td>
                 </tr>
               )}
             </tbody>

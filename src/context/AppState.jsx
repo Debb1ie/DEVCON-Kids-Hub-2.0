@@ -32,6 +32,28 @@ const normalizeFolderName = (value = '') =>
     .replace(/[\\/:*?"<>|]/g, '')
     .replace(/\s+/g, ' ');
 
+const resolveRole = (email, userMetadata = {}) => {
+  const metadataRole = (userMetadata.role || '').toLowerCase();
+  const normalizedEmail = (email || '').toLowerCase();
+
+  if (normalizedEmail === 'pmanucom@devcon.ph' || metadataRole === 'superadmin' || metadataRole === 'admin') {
+    return 'Superadmin';
+  }
+
+  if (metadataRole === 'visitor') {
+    return 'Visitor';
+  }
+
+  return 'Visitor';
+};
+
+const buildUserProfile = (sessionUser, fallbackRole = 'Visitor') => ({
+  id: sessionUser.id,
+  email: sessionUser.email,
+  name: sessionUser.user_metadata?.name || sessionUser.user_metadata?.full_name || sessionUser.email,
+  role: resolveRole(sessionUser.email, sessionUser.user_metadata) || fallbackRole
+});
+
 const buildEventFolderMetadata = (event) => {
   const safeTitle = normalizeFolderName(event.title || 'New Event');
   const folderRoot = 'Google Drive/DEVCON Kids/Events';
@@ -63,7 +85,8 @@ export const AppProvider = ({ children }) => {
     learnersReached: 12450,
     successfulWorkshops: 142,
     activeChapters: 11,
-    volunteers: 850
+    volunteers: 850,
+    hourOfAIStudents: 0
   });
 
   const [chapters, setChapters] = useState(fallbackChapters);
@@ -82,6 +105,7 @@ export const AppProvider = ({ children }) => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   // Fetch Data from Supabase
   useEffect(() => {
@@ -95,6 +119,8 @@ export const AppProvider = ({ children }) => {
   // Sync Supabase auth session on mount and listen for changes
   useEffect(() => {
     let mounted = true;
+    const isOAuthCallback =
+      typeof window !== 'undefined' && window.location.pathname === '/auth/callback';
 
     const syncSession = async () => {
       try {
@@ -102,14 +128,12 @@ export const AppProvider = ({ children }) => {
         const session = data?.session;
         if (session?.user && mounted) {
           setIsAuthenticated(true);
-          setUser({
-            id: session.user.id,
-            email: session.user.email,
-            ...session.user.user_metadata
-          });
+          setUser(buildUserProfile(session.user));
         }
       } catch (e) {
         console.warn('Failed to get supabase session', e);
+      } finally {
+        if (mounted && !isOAuthCallback) setAuthLoading(false);
       }
     };
 
@@ -118,16 +142,26 @@ export const AppProvider = ({ children }) => {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setIsAuthenticated(true);
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-          ...session.user.user_metadata
-        });
+        setUser(buildUserProfile(session.user));
       } else {
         setIsAuthenticated(false);
         setUser(null);
       }
+      // Ensure loading is cleared once we receive any auth state change
+      setAuthLoading(false);
     });
+
+    if (isOAuthCallback) {
+      const callbackFallbackTimer = window.setTimeout(() => {
+        if (mounted) setAuthLoading(false);
+      }, 8000);
+
+      return () => {
+        mounted = false;
+        window.clearTimeout(callbackFallbackTimer);
+        if (listener && listener.subscription) listener.subscription.unsubscribe();
+      };
+    }
 
     return () => {
       mounted = false;
@@ -200,7 +234,7 @@ export const AppProvider = ({ children }) => {
 
   const loginWithGoogle = async () => {
     try {
-      const redirectUrl = window.location.origin + '/dashboard';
+      const redirectUrl = window.location.origin + '/auth/callback';
       console.log('Initiating Google OAuth. Redirect URL:', redirectUrl);
       const { data, error } = await supabase.auth.signInWithOAuth({ 
         provider: 'google', 
@@ -209,6 +243,10 @@ export const AppProvider = ({ children }) => {
       if (error) {
         console.error('OAuth error:', error);
         throw error;
+      }
+      if (data?.url && typeof window !== 'undefined') {
+        window.location.href = data.url;
+        return { success: true, redirectUrl: data.url };
       }
       console.log('OAuth initiated successfully. Redirecting...');
       return { success: true, data };
@@ -417,6 +455,9 @@ export const AppProvider = ({ children }) => {
       growthData,
       isAuthenticated,
       user,
+      role: user?.role || 'Visitor',
+      isSuperadmin: (user?.role || '').toLowerCase() === 'superadmin',
+      canManageContent: (user?.role || '').toLowerCase() === 'superadmin',
       login,
       loginWithGoogle,
       logout,

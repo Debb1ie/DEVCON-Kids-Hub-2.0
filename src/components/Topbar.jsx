@@ -4,7 +4,7 @@ import { useApp } from '../context/AppState';
 import './Topbar.css';
 
 export default function Topbar({ toggleSidebar }) {
-  const { logout } = useApp();
+  const { logout, isSuperadmin, user } = useApp();
 
   return (
     <header className="topbar">
@@ -23,9 +23,14 @@ export default function Topbar({ toggleSidebar }) {
           <Bell size={20} />
           <span className="badge">3</span>
         </button>
-        <button className="btn-primary">
-          + New Workshop
-        </button>
+        {isSuperadmin && (
+          <button className="btn-primary">
+            + New Workshop
+          </button>
+        )}
+        <span className="topbar-user-label" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          {user?.role || 'Visitor'}
+        </span>
         <button className="icon-btn" onClick={logout} title="Logout">
           <LogOut size={20} />
         </button>

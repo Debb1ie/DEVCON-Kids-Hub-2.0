@@ -193,7 +193,7 @@ export default function KnowledgeBase() {
           <li><strong>Document Types:</strong> PDF, DOCX, TXT</li>
           <li><strong>Max File Size:</strong> 50MB</li>
           <li><strong>Processing:</strong> Documents are automatically chunked and indexed with embeddings</li>
-          <li><strong>AI Grounding:</strong> Uploaded documents are used to ground Gemini AI responses</li>
+          <li><strong>AI Grounding:</strong> Uploaded documents are used to ground chatbot responses when embeddings are available</li>
           <li><strong>Search:</strong> Semantic search matches user queries to relevant document chunks</li>
         </ul>
       </div>
