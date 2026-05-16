@@ -1,0 +1,57 @@
+.inventory-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.stat-card h4 {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.stat-card h2 {
+  margin: 0;
+  font-size: 2rem;
+  color: var(--text-main);
+}
+
+.stat-card.warning h2 {
+  color: var(--accent-yellow);
+}
+
+.stat-card.danger h2 {
+  color: #DC2626;
+}
+
+.inventory-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.inventory-status.in-stock {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--accent-green-dark);
+}
+
+.inventory-status.low-stock {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--accent-yellow);
+}
+
+.inventory-status.out-of-stock {
+  background-color: rgba(220, 38, 38, 0.1);
+  color: #DC2626;
+}

@@ -1,0 +1,141 @@
+.module-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.module-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.module-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.module-title h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.list-container {
+  padding: 0;
+  overflow: hidden;
+}
+
+.list-toolbar {
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.border-input {
+  border: 1px solid rgba(0,0,0,0.1);
+  background-color: white;
+  max-width: 300px;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 1rem 1.5rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  white-space: nowrap;
+}
+
+.data-table th {
+  background-color: rgba(0,0,0,0.02);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.small-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 0.8rem;
+}
+
+.font-medium {
+  font-weight: 500;
+}
+
+.chapter-badge {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: var(--primary-purple-dark);
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status-badge.active {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--accent-green-dark);
+}
+
+.status-badge.inactive {
+  background-color: rgba(0,0,0,0.05);
+  color: var(--text-muted);
+}
+
+.action-btn {
+  background-color: rgba(0,0,0,0.02);
+  border-radius: var(--border-radius-sm);
+  padding: 0.5rem;
+}
+
+.action-btn:hover {
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.empty-state {
+  text-align: center !important;
+  color: var(--text-muted);
+  padding: 3rem !important;
+}
+
+@media (max-width: 768px) {
+  .module-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
