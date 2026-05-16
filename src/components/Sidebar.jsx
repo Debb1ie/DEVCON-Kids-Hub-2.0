@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays, Brain, Database } from 'lucide-react';
 import './Sidebar.css';
 
 export default function Sidebar() {
@@ -10,6 +10,10 @@ export default function Sidebar() {
     { name: 'Volunteers', path: '/dashboard/volunteers', icon: <Users size={20} /> },
     { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
     { name: 'Events & CodeCamps', path: '/dashboard/events', icon: <CalendarDays size={20} /> },
+    { name: 'AI', path: '/dashboard/knowledge-base', icon: <Brain size={20} /> },
+    { name: 'Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
+    { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Settings size={20} /> },
+    { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
     { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
   ];
 

@@ -10,6 +10,9 @@ import Volunteers from './pages/Volunteers';
 import Chapters from './pages/Chapters';
 import Inventory from './pages/Inventory';
 import Events from './pages/Events';
+import Admin from './pages/Admin';
+import KnowledgeBase from './pages/KnowledgeBase';
+import AISettings from './pages/AISettings';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -39,6 +42,9 @@ function AppRoutes() {
           <Route path="volunteers" element={<Volunteers />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="events" element={<Events />} />
+          <Route path="admin" element={<Admin />} />
+          <Route path="knowledge-base" element={<KnowledgeBase />} />
+          <Route path="ai-settings" element={<AISettings />} />
           <Route path="settings" element={<MockPage />} />
         </Route>
 

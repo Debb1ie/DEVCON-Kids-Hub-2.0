@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import AIChat from './AIChat';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [aiChatOpen, setAIChatOpen] = useState(false);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -25,6 +27,10 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      {/* AI Chat Widget */}
+      {!aiChatOpen && <AIChat />}
+      {aiChatOpen && <AIChat isFullscreen={true} onClose={() => setAIChatOpen(false)} />}
     </div>
   );
 }

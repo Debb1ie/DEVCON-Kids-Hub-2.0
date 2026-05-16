@@ -92,6 +92,49 @@ export const AppProvider = ({ children }) => {
     fetchEvents();
   }, []);
 
+  // Sync Supabase auth session on mount and listen for changes
+  useEffect(() => {
+    let mounted = true;
+
+    const syncSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
+        if (session?.user && mounted) {
+          setIsAuthenticated(true);
+          setUser({
+            id: session.user.id,
+            email: session.user.email,
+            ...session.user.user_metadata
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to get supabase session', e);
+      }
+    };
+
+    syncSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setIsAuthenticated(true);
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+          ...session.user.user_metadata
+        });
+      } else {
+        setIsAuthenticated(false);
+        setUser(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      if (listener && listener.subscription) listener.subscription.unsubscribe();
+    };
+  }, []);
+
   const fetchChapters = async () => {
     try {
       const { data, error } = await supabase.from('chapters').select('*');
@@ -155,13 +198,32 @@ export const AppProvider = ({ children }) => {
     return { success: false, message: 'Invalid credentials. Please use pmanucom@devcon.ph / devconkids101' };
   };
 
-  const loginWithGoogle = () => {
-    setIsAuthenticated(true);
-    setUser({ email: 'pmanucom@devcon.ph', name: 'Admin User', role: 'Superadmin' });
-    return { success: true };
+  const loginWithGoogle = async () => {
+    try {
+      const redirectUrl = window.location.origin + '/dashboard';
+      console.log('Initiating Google OAuth. Redirect URL:', redirectUrl);
+      const { data, error } = await supabase.auth.signInWithOAuth({ 
+        provider: 'google', 
+        options: { redirectTo: redirectUrl } 
+      });
+      if (error) {
+        console.error('OAuth error:', error);
+        throw error;
+      }
+      console.log('OAuth initiated successfully. Redirecting...');
+      return { success: true, data };
+    } catch (error) {
+      console.warn('Google login failed', error);
+      return { success: false, error };
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.warn('Sign out failed', error);
+    }
     setIsAuthenticated(false);
     setUser(null);
   };

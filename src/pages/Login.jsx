@@ -7,6 +7,7 @@ export default function Login() {
   const [email, setEmail] = useState('pmanucom@devcon.ph');
   const [password, setPassword] = useState('devconkids101');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -14,6 +15,24 @@ export default function Login() {
     const result = login(email, password);
     if (!result.success) {
       setError(result.message);
+    }
+  };
+
+  const handleGoogleSignIn = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const result = await loginWithGoogle();
+      if (!result.success) {
+        setError('Google sign-in failed. Check your Supabase OAuth setup.');
+        setLoading(false);
+      }
+      // If successful, Supabase redirects automatically; don't reset loading
+    } catch (err) {
+      setError('An error occurred during sign-in.');
+      console.error(err);
+      setLoading(false);
     }
   };
 
@@ -58,7 +77,7 @@ export default function Login() {
           <span>OR</span>
         </div>
 
-        <button onClick={loginWithGoogle} className="btn-secondary google-btn">
+        <button onClick={handleGoogleSignIn} disabled={loading} className="btn-secondary google-btn">
           <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
             <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
               <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
@@ -67,7 +86,7 @@ export default function Login() {
               <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"/>
             </g>
           </svg>
-          Sign in with Google
+          {loading ? 'Redirecting...' : 'Sign in with Google'}
         </button>
       </div>
     </div>
