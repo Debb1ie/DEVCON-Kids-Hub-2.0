@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppState';
 import { CalendarDays, FolderKanban, Image as ImageIcon, PencilLine, Plus, Trash2, FolderOpen } from 'lucide-react';
 import './Events.css';
@@ -23,6 +24,8 @@ const buildFolderPreview = (title) => {
 };
 
 export default function Events() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { eventsList, addEvent, updateEvent, deleteEvent, isSuperadmin } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -44,6 +47,15 @@ export default function Events() {
     setForm(emptyForm);
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (!location.state?.openCreateForm) {
+      return;
+    }
+
+    openCreateForm();
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   const openEditForm = (event) => {
     setEditingId(event.id);

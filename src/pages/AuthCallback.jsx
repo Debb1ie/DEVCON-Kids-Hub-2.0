@@ -1,24 +1,37 @@
-import React, { useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useApp } from '../context/AppState';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 export default function AuthCallback() {
-  const { authLoading, isAuthenticated } = useApp();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Signing you in...';
-  }, []);
+    // Set a flag to indicate OAuth is in progress - this prevents redirect to login
+    try { sessionStorage.setItem('oauth_in_progress', 'true'); } catch { /* ignore */ }
 
-  if (authLoading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center' }}>
-        <div>
-          <h2 style={{ marginBottom: '0.5rem' }}>Signing you in...</h2>
-          <p style={{ margin: 0, color: 'var(--text-muted)' }}>Please wait while we finish setting up your session.</p>
-        </div>
+    const handleAuth = async () => {
+      // Give Supabase a moment to process the OAuth callback
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Ensure session is ready (we don't need the result, just ensuring it's synced)
+      await supabase.auth.getSession();
+      
+      // Redirect to dashboard
+      navigate('/dashboard', { replace: true });
+    };
+
+    handleAuth().catch(() => {
+      // On error, still redirect to dashboard
+      navigate('/dashboard', { replace: true });
+    });
+  }, [navigate]);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center' }}>
+      <div>
+        <h2 style={{ marginBottom: '0.5rem' }}>Signing you in…</h2>
+        <p style={{ margin: 0, color: 'var(--text-muted)' }}>Redirecting to dashboard...</p>
       </div>
-    );
-  }
-
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
+    </div>
+  );
 }

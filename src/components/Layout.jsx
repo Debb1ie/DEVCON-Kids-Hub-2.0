@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -21,15 +21,15 @@ export default function Layout() {
         <div className="sidebar-overlay" onClick={toggleSidebar}></div>
       )}
       
-      <main className="main-content">
+      <main className="main-content" style={{ pointerEvents: 'auto' }}>
         <Topbar toggleSidebar={toggleSidebar} />
-        <div className="scrollable-content animate-fade-in">
+        <div className="scrollable-content animate-fade-in" style={{ pointerEvents: 'auto' }}>
           <Outlet />
         </div>
       </main>
 
       {/* AI Chat Widget */}
-      {!aiChatOpen && <AIChat />}
+      {!aiChatOpen && <AIChat onOpen={() => setAIChatOpen(true)} />}
       {aiChatOpen && <AIChat isFullscreen={true} onClose={() => setAIChatOpen(false)} />}
     </div>
   );

@@ -1,12 +1,16 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Code, HeartHandshake, Cpu } from 'lucide-react';
+import { GraduationCap, Code, HeartHandshake, Cpu, LogOut, Moon, Sun } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import './LandingPage.css';
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { stats } = useApp();
+  const { stats, isAuthenticated, logout, themeMode, toggleThemeMode } = useApp();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="landing-page">
@@ -15,9 +19,20 @@ export default function LandingPage() {
           <div className="logo-icon">{'</>'}</div>
           <h2>DEVCON <span>Kids</span></h2>
         </div>
-        <button className="btn-primary login-cta" onClick={() => navigate('/login')}>
-          Login to Platform
-        </button>
+        <div className="landing-header-actions">
+          <button type="button" className="icon-btn theme-toggle-btn" onClick={toggleThemeMode} title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            {themeMode === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          {isAuthenticated ? (
+            <button type="button" className="icon-btn" onClick={handleLogout} title="Logout">
+              <LogOut size={20} />
+            </button>
+          ) : (
+            <button className="btn-primary login-cta" onClick={() => navigate('/login')}>
+              Login to Platform
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="landing-main">

@@ -1,7 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+﻿import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppState';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
+import MockPage from './pages/MockPage';
 import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
 import LandingPage from './pages/LandingPage';
@@ -12,7 +13,6 @@ import Events from './pages/Events';
 import Admin from './pages/Admin';
 import KnowledgeBase from './pages/KnowledgeBase';
 import AISettings from './pages/AISettings';
-import Settings from './pages/Settings';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -23,7 +23,7 @@ function ProtectedRoute({ children }) {
     ? sessionStorage.getItem('oauth_in_progress') === 'true'
     : false;
   
-  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authentication…</div>;
+  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authenticationâ€¦</div>;
   
   // Allow access if authenticated OR if OAuth is in progress
   if (!isAuthenticated && !isOAuthInProgress) {
@@ -32,7 +32,7 @@ function ProtectedRoute({ children }) {
   
   // Clear the OAuth flag once user is authenticated
   if (isAuthenticated && isOAuthInProgress) {
-    try { sessionStorage.removeItem('oauth_in_progress'); } catch { /* ignore */ }
+    try { sessionStorage.removeItem('oauth_in_progress'); } catch {}
   }
   
   return children;
@@ -40,16 +40,11 @@ function ProtectedRoute({ children }) {
 
 function SuperadminRoute({ children }) {
   const { isSuperadmin, authLoading, isAuthenticated } = useApp();
-  
-  const isOAuthInProgress = typeof sessionStorage !== 'undefined' 
-    ? sessionStorage.getItem('oauth_in_progress') === 'true'
-    : false;
-  
-  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authentication…</div>;
-  if (!isAuthenticated && !isOAuthInProgress) {
+  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authenticationâ€¦</div>;
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  if (!isOAuthInProgress && !isSuperadmin) {
+  if (!isSuperadmin) {
     return (
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center'}}>
         <div>
@@ -65,7 +60,7 @@ function SuperadminRoute({ children }) {
 function AppRoutes() {
   const { isAuthenticated, authLoading } = useApp();
 
-  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authentication…</div>;
+  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authenticationâ€¦</div>;
 
   return (
     <BrowserRouter>
@@ -75,9 +70,7 @@ function AppRoutes() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         
         <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
+          <Layout />
         }>
           <Route index element={<Dashboard />} />
           <Route path="chapters" element={<Chapters />} />
@@ -87,7 +80,7 @@ function AppRoutes() {
           <Route path="admin" element={<SuperadminRoute><Admin /></SuperadminRoute>} />
           <Route path="knowledge-base" element={<KnowledgeBase />} />
           <Route path="ai-settings" element={<SuperadminRoute><AISettings /></SuperadminRoute>} />
-          <Route path="settings" element={<SuperadminRoute><Settings /></SuperadminRoute>} />
+          <Route path="settings" element={<SuperadminRoute><MockPage /></SuperadminRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -105,3 +98,4 @@ function App() {
 }
 
 export default App;
+

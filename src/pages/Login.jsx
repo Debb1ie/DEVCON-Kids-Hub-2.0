@@ -23,15 +23,24 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
+      const redirectUrl = window.location.origin + '/auth/callback';
+      console.log('🔵 [GoogleSignIn] Starting Google OAuth flow');
+      console.log('🔵 [GoogleSignIn] Redirect URL:', redirectUrl);
+      console.log('🔵 [GoogleSignIn] Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+      console.log('🔵 [GoogleSignIn] Client ID being used (should be 615888800431-...):', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'LOADED' : 'MISSING');
+      
       const result = await loginWithGoogle();
+      console.log('🔵 [GoogleSignIn] loginWithGoogle() returned:', result.success ? 'SUCCESS' : 'FAILED');
+      
       if (!result.success) {
         setError('Google sign-in failed. Check your Supabase OAuth setup.');
+        console.error('🔵 [GoogleSignIn] Error:', result.error);
         setLoading(false);
       }
       // If successful, Supabase redirects automatically; don't reset loading
     } catch (err) {
       setError('An error occurred during sign-in.');
-      console.error(err);
+      console.error('🔵 [GoogleSignIn] Exception:', err);
       setLoading(false);
     }
   };

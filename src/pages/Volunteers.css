@@ -44,7 +44,7 @@
 
 .border-input {
   border: 1px solid rgba(0,0,0,0.1);
-  background-color: white;
+  background-color: var(--bg-card);
   max-width: 300px;
 }
 

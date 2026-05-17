@@ -15,6 +15,17 @@
   box-shadow: var(--shadow-colored);
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.hero-secondary-btn {
+  min-width: 0;
+}
+
 .hero-content h1 {
   font-size: 2rem;
   margin-bottom: 0.5rem;
@@ -63,8 +74,16 @@
 
 .dashboard-content {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.5rem;
+}
+
+.dashboard-compact .kpi-grid {
+  gap: 1rem;
+}
+
+.dashboard-compact .card {
+  padding: 1.1rem;
 }
 
 .course-spotlight {
@@ -117,7 +136,7 @@
 .course-spotlight-card {
   border-radius: 20px;
   overflow: hidden;
-  background: white;
+  background: var(--bg-card);
   min-height: 240px;
   display: flex;
   flex-direction: column;
@@ -266,5 +285,9 @@
     align-items: flex-start;
     gap: 1.5rem;
     padding: 1.5rem;
+  }
+
+  .hero-actions {
+    justify-content: flex-start;
   }
 }

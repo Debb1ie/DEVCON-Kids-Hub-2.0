@@ -7,6 +7,7 @@ export default function Chapters() {
   const { chapters, addChapter, updateChapter, deleteChapter, isSuperadmin } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [selectedChapter, setSelectedChapter] = useState(null);
   const [form, setForm] = useState({
     name: '',
     learners: 0,
@@ -87,6 +88,34 @@ export default function Chapters() {
         </div>
       )}
 
+      {selectedChapter && (
+        <div className="card animate-fade-in" style={{ marginBottom: '1rem', padding: '2rem', borderLeft: `4px solid ${selectedChapter.color}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 style={{ margin: 0 }}>{selectedChapter.name} - Chapter Details</h2>
+            <button onClick={() => setSelectedChapter(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-muted)' }}>✕</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+            <div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 0.5rem 0' }}>Total Learners</p>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0', color: selectedChapter.color }}>{selectedChapter.learners.toLocaleString()}</p>
+            </div>
+            <div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 0.5rem 0' }}>Workshops Conducted</p>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0', color: selectedChapter.color }}>{selectedChapter.workshops}</p>
+            </div>
+            <div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 0.5rem 0' }}>Completion Rate</p>
+              <p style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0', color: selectedChapter.color }}>{selectedChapter.completion}%</p>
+            </div>
+          </div>
+          <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: `${selectedChapter.color}10`, borderRadius: '8px' }}>
+            <p style={{ margin: 0, color: 'var(--text-main)' }}>
+              <strong>Status:</strong> This chapter is {selectedChapter.completion >= 80 ? 'thriving' : selectedChapter.completion >= 50 ? 'growing' : 'in early stages'} with {selectedChapter.completion}% completion rate.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="chapters-grid">
         {chapters.map((chapter) => (
           <div className="card chapter-grid-card" key={chapter.id}>
@@ -111,7 +140,7 @@ export default function Chapters() {
               </div>
             </div>
 
-            <button className="btn-secondary full-width chapter-action">
+            <button className="btn-secondary full-width chapter-action" onClick={() => setSelectedChapter(chapter)}>
               View Chapter Details <ArrowRight size={16} />
             </button>
 

@@ -18,12 +18,14 @@
   --font-heading: 'Poppins', sans-serif;
   --font-body: 'Inter', sans-serif;
 
-  /* Backgrounds */
+  /* Backgrounds - Light Mode */
   --bg-main: #F9FAFB; /* Soft cream/gray */
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
+  --bg-surface: #F3F4F6;
+  --border-subtle: rgba(17, 24, 39, 0.08);
 
-  /* Text Colors */
+  /* Text Colors - Light Mode */
   --text-main: #1F2937;
   --text-muted: #6B7280;
   --text-light: #F9FAFB;
@@ -41,6 +43,18 @@
   /* Transitions */
   --transition-fast: 0.15s ease-in-out;
   --transition-normal: 0.3s ease-in-out;
+}
+
+/* Dark Mode */
+body.dark-mode {
+  --bg-main: #0F172A; /* Deep dark blue-gray */
+  --bg-card: #1E293B; /* Darker card background */
+  --bg-sidebar: #1E293B;
+  --bg-surface: #0B1220;
+  --border-subtle: rgba(148, 163, 184, 0.16);
+  --text-main: #F1F5F9; /* Light text */
+  --text-muted: #94A3B8; /* Medium gray text */
+  --text-light: #F1F5F9;
 }
 
 * {
@@ -124,6 +138,7 @@ button {
   border-radius: var(--border-radius-md);
   padding: 1.5rem;
   box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-subtle);
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
@@ -151,7 +166,7 @@ button {
 }
 
 .btn-secondary {
-  background: white;
+  background: var(--bg-card);
   color: var(--primary-purple);
   border: 1px solid var(--primary-purple);
   padding: 0.75rem 1.5rem;

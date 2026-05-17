@@ -11,7 +11,7 @@
   width: 100%;
   max-width: 420px;
   padding: 2.5rem;
-  background: white;
+  background: var(--bg-card);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-lg);
 }

@@ -158,7 +158,7 @@
 }
 
 .event-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 20px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);

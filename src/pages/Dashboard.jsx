@@ -1,25 +1,39 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppState';
-import { Users, GraduationCap, Map, HeartHandshake, TrendingUp, CalendarDays, FolderOpen, Image as ImageIcon } from 'lucide-react';
+import { Users, GraduationCap, Map, HeartHandshake, TrendingUp, CalendarDays, FolderOpen, Image as ImageIcon, Settings, CalendarPlus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './Dashboard.css';
 
 export default function Dashboard() {
-  const { stats, chapters, growthData, addLearner, eventsList, isSuperadmin, user } = useApp();
+  const navigate = useNavigate();
+  const { stats, chapters, growthData, eventsList, isSuperadmin, user, dashboardSettings } = useApp();
   const hourOfAiEvent = eventsList?.find((event) => (event.title || '').toLowerCase().includes('hour of ai')) || eventsList?.[0];
+  const shouldShowChart = dashboardSettings?.showGrowthChart !== false;
+  const shouldShowChapterOverview = dashboardSettings?.showChapterOverview !== false;
+  const shouldShowCourseSpotlight = dashboardSettings?.showCourseSpotlight !== false;
+  const shouldShowQuickActions = dashboardSettings?.showQuickActions !== false;
 
   return (
-    <div className="dashboard">
+    <div className={`dashboard ${dashboardSettings?.compactCards ? 'dashboard-compact' : ''}`}>
       <div className="hero-section">
         <div className="hero-content">
           <h1>Welcome back, <span>{user?.name || user?.role || 'Visitor'}!</span></h1>
           <p>Here's what's happening with DEVCON Kids across the nation today, with Hour of AI as the main course solution.</p>
         </div>
-        {isSuperadmin && (
-          <button className="btn-primary" onClick={addLearner}>
-            <GraduationCap size={20} />
-            Record New Learner
-          </button>
+        {shouldShowQuickActions && (
+          <div className="hero-actions">
+            <button className="btn-secondary hero-secondary-btn" onClick={() => navigate('/dashboard/events')} type="button">
+              <CalendarPlus size={18} />
+              Open Events
+            </button>
+            {isSuperadmin && (
+              <button className="btn-secondary hero-secondary-btn" onClick={() => navigate('/dashboard/ai-settings')} type="button">
+                <Settings size={18} />
+                AI Settings
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -66,7 +80,8 @@ export default function Dashboard() {
       </div>
 
       <div className="dashboard-content">
-        <div className="chart-section card">
+        {shouldShowChart && (
+          <div className="chart-section card">
           <div className="section-header">
             <h2>Impact Growth Trends</h2>
           </div>
@@ -89,9 +104,11 @@ export default function Dashboard() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+          </div>
+        )}
 
-        <div className="chapters-section card">
+        {shouldShowChapterOverview && (
+          <div className="chapters-section card">
           <div className="section-header">
             <h2>Nationwide Impact Overview</h2>
             <p className="text-muted text-sm">Top performing chapters</p>
@@ -127,38 +144,41 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-        </div>
+          </div>
+        )}
       </div>
 
-      <div className="course-spotlight card">
-        <div className="course-spotlight-copy">
-          <div className="course-tag">Main Course Focus</div>
-          <h2>Hour of AI</h2>
-          <p>
-            A cycle program designed for kids and handled by coordinators across every chapter. Use the dashboard to
-            plan events, create codecamps, and generate a matching Google Drive folder structure for each run.
-          </p>
-          <div className="course-meta">
-            <span><CalendarDays size={14} /> Coordinated event delivery</span>
-            <span><FolderOpen size={14} /> Auto-generated Google folder</span>
-            <span><Users size={14} /> Admin and coordinator visibility</span>
-          </div>
-        </div>
-        <div className="course-spotlight-card">
-          {hourOfAiEvent?.image_url ? (
-            <img src={hourOfAiEvent.image_url} alt={hourOfAiEvent.title} />
-          ) : (
-            <div className="course-image-placeholder">
-              <ImageIcon size={40} />
-              <span>Add an Hour of AI image in Events & CodeCamps</span>
+      {shouldShowCourseSpotlight && (
+        <div className="course-spotlight card">
+          <div className="course-spotlight-copy">
+            <div className="course-tag">Main Course Focus</div>
+            <h2>Hour of AI</h2>
+            <p>
+              A cycle program designed for kids and handled by coordinators across every chapter. Use the dashboard to
+              plan events, create codecamps, and generate a matching Google Drive folder structure for each run.
+            </p>
+            <div className="course-meta">
+              <span><CalendarDays size={14} /> Coordinated event delivery</span>
+              <span><FolderOpen size={14} /> Auto-generated Google folder</span>
+              <span><Users size={14} /> Admin and coordinator visibility</span>
             </div>
-          )}
-          <div className="course-spotlight-footer">
-            <strong>{hourOfAiEvent?.google_folder_name || 'Hour of AI'}</strong>
-            <span>{hourOfAiEvent?.status || 'Scheduled'}</span>
+          </div>
+          <div className="course-spotlight-card">
+            {hourOfAiEvent?.image_url ? (
+              <img src={hourOfAiEvent.image_url} alt={hourOfAiEvent.title} />
+            ) : (
+              <div className="course-image-placeholder">
+                <ImageIcon size={40} />
+                <span>Add an Hour of AI image in Events & CodeCamps</span>
+              </div>
+            )}
+            <div className="course-spotlight-footer">
+              <strong>{hourOfAiEvent?.google_folder_name || 'Hour of AI'}</strong>
+              <span>{hourOfAiEvent?.status || 'Scheduled'}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

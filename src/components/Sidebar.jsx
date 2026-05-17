@@ -1,4 +1,3 @@
-import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays, Brain, Database } from 'lucide-react';
 import { useApp } from '../context/AppState';
@@ -45,12 +44,11 @@ export default function Sidebar() {
         ))}
       </nav>
       
-      <div className="sidebar-footer">
+<div className="sidebar-footer">
         <div className="user-profile">
           <div className="avatar">A</div>
           <div className="user-info">
             <span className="user-name">{user?.name || user?.email || 'Visitor'}</span>
-            <span className="user-role">{user?.role || 'Visitor'}</span>
           </div>
         </div>
       </div>
