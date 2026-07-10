@@ -1,64 +1,76 @@
 /**
  * Vector Embedding & RAG Service
- * Handles document embeddings, storage, and semantic search using Supabase pgvector
+ * Handles document embeddings, storage, and semantic search using Supabase pgvector.
+ * 
+ * Embedding provider: Mistral AI (mistral-embed, 1024 dimensions)
+ * Free tier: 1M tokens/month — more than enough for a knowledge base.
+ * Docs: https://docs.mistral.ai/capabilities/embeddings/
  */
 
 import { supabase } from '../lib/supabase';
 
-const OPENAI_BASE_URL = import.meta.env.VITE_OPENAI_BASE_URL || 'http://192.168.1.14/v1';
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-const OPENAI_EMBEDDING_MODEL = import.meta.env.VITE_OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
-const OPENAI_EMBEDDING_ENDPOINT = `${OPENAI_BASE_URL.replace(/\/$/, '')}/embeddings`;
+// --- Mistral Embedding Config ---
+const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY;
+const MISTRAL_EMBED_MODEL = 'mistral-embed';
+const MISTRAL_EMBED_URL = 'https://api.mistral.ai/v1/embeddings';
 
 /**
- * Generate embeddings for text using an OpenAI-compatible API.
- * Currently disabled — will be replaced with Gemini Edge Function in Phase 2.
- * Returns empty array (graceful skip) so document upload still works without embeddings.
+ * Generate a 1024-dim embedding vector using Mistral's embedding API.
+ * Returns [] if the API key is missing or the call fails (graceful degradation).
  * 
- * @param {string} text - Text to generate embedding for
- * @returns {Array<number>} 768-dim embedding vector, or [] if unavailable
+ * @param {string} text - Text to embed (max ~8k tokens per chunk is fine)
+ * @returns {Array<number>} 1024-dim embedding vector, or [] on failure
  */
 export async function generateEmbedding(text) {
-  // Skip embedding if no valid API key or if pointing to a local server
-  // that may be unreachable. This will be replaced with an Edge Function
-  // in Phase 2 that calls Gemini text-embedding-004.
-  if (!OPENAI_API_KEY || OPENAI_BASE_URL.includes('192.168.')) {
+  if (!MISTRAL_API_KEY) {
+    console.warn('[ragService] No VITE_MISTRAL_API_KEY set — skipping embedding generation.');
     return [];
   }
 
-  const requestBody = {
-    model: OPENAI_EMBEDDING_MODEL,
-    input: text
-  };
+  if (!text || text.trim().length === 0) {
+    return [];
+  }
 
   try {
-    // Set a timeout so we don't hang forever if the server is unreachable
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
-    const response = await fetch(OPENAI_EMBEDDING_ENDPOINT, {
+    const response = await fetch(MISTRAL_EMBED_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`
+        'Authorization': `Bearer ${MISTRAL_API_KEY}`
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        model: MISTRAL_EMBED_MODEL,
+        input: [text]  // Mistral expects an array of strings
+      }),
       signal: controller.signal
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Embedding error: ${error.error?.message || error.message || 'Unknown error'}`);
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(
+        `Mistral embedding error (${response.status}): ${errorBody?.message || errorBody?.detail || 'Unknown'}`
+      );
     }
 
     const data = await response.json();
-    return data.data?.[0]?.embedding || [];
+    const embedding = data?.data?.[0]?.embedding;
+
+    if (!embedding || embedding.length === 0) {
+      console.warn('[ragService] Mistral returned empty embedding.');
+      return [];
+    }
+
+    return embedding; // 1024-dim float array
   } catch (error) {
-    // Don't log timeout/abort errors repeatedly — they're expected when server is down
-    if (error.name !== 'AbortError') {
-      console.error('[ragService] Embedding generation error:', error);
+    if (error.name === 'AbortError') {
+      console.warn('[ragService] Mistral embedding request timed out.');
+    } else {
+      console.error('[ragService] Embedding generation error:', error.message);
     }
     return [];
   }
@@ -114,22 +126,24 @@ export async function storeDocumentChunks(documentId, documentTitle, chunks) {
 }
 
 /**
- * Semantic search in knowledge base using vector similarity
+ * Semantic search in knowledge base using vector similarity.
+ * Requires VITE_MISTRAL_API_KEY to generate the query embedding.
  */
 export async function semanticSearch(query, limit = 5) {
   try {
-    if (!OPENAI_API_KEY) {
+    if (!MISTRAL_API_KEY) {
+      console.warn('[ragService] No Mistral API key — semantic search disabled.');
       return [];
     }
 
-    // Generate embedding for query
+    // Generate embedding for the user's query
     const queryEmbedding = await generateEmbedding(query);
 
     if (!queryEmbedding.length) {
       return [];
     }
 
-    // Search in Supabase using pgvector similarity
+    // Search in Supabase using pgvector cosine similarity
     const { data, error } = await supabase.rpc('search_knowledge_base', {
       query_embedding: queryEmbedding,
       similarity_threshold: 0.7,
@@ -138,7 +152,7 @@ export async function semanticSearch(query, limit = 5) {
 
     if (error) throw error;
 
-    return data.map(item => ({
+    return (data || []).map(item => ({
       content: item.content,
       similarity: item.similarity,
       metadata: {
@@ -148,7 +162,7 @@ export async function semanticSearch(query, limit = 5) {
       }
     }));
   } catch (error) {
-    console.error('Semantic search error:', error);
+    console.error('[ragService] Semantic search error:', error);
     return [];
   }
 }
