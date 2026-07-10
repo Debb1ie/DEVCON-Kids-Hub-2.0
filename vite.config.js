@@ -11,6 +11,6 @@ export default defineConfig({
     strictPort: true,
   },
   optimizeDeps: {
-    exclude: ['pdfjs-dist', 'docx']
+    exclude: ['docx']
   },
 })

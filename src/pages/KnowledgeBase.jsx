@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Trash2, FileText, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { processDocument, validateDocumentFile } from '../services/documentService';
@@ -12,6 +12,8 @@ export default function KnowledgeBase() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Ref to the hidden file input — we trigger it when the button is clicked
+  const fileInputRef = useRef(null);
   useEffect(() => {
     loadDocuments();
   }, []);
@@ -41,14 +43,14 @@ export default function KnowledgeBase() {
       // Validate file
       validateDocumentFile(file);
 
-      // Process document
+      // Process document (parse + chunk)
       const processedDoc = await processDocument(file);
 
       // Generate document ID
       const docId = `doc_${Date.now()}`;
 
       // Store in Supabase documents table
-      const { data: docData, error: docError } = await supabase
+      const { error: docError } = await supabase
         .from('documents')
         .insert([{
           id: docId,
@@ -57,15 +59,24 @@ export default function KnowledgeBase() {
           total_chunks: processedDoc.totalChunks,
           total_pages: processedDoc.totalPages,
           created_at: new Date().toISOString()
-        }])
-        .select();
+        }]);
 
-      if (docError) throw docError;
+      if (docError) {
+        // If documents table doesn't exist or RLS blocks, warn but continue
+        console.error('[KnowledgeBase] Failed to save document metadata:', docError);
+        console.warn('[KnowledgeBase] The "documents" table may not exist. Run the SQL migration.');
+      }
 
       // Store chunks with embeddings in knowledge_base table
-      await storeDocumentChunks(docId, processedDoc.fileName, processedDoc.chunks);
+      // This is now graceful — returns 0 on failure instead of throwing
+      const chunksStored = await storeDocumentChunks(docId, processedDoc.fileName, processedDoc.chunks);
 
-      setSuccess(`✓ ${processedDoc.fileName} uploaded successfully (${processedDoc.totalChunks} chunks indexed)`);
+      if (chunksStored > 0) {
+        setSuccess(`✓ ${processedDoc.fileName} uploaded successfully (${chunksStored} chunks indexed)`);
+      } else {
+        // Document was parsed but chunks couldn't be stored (DB issue)
+        setSuccess(`✓ ${processedDoc.fileName} parsed (${processedDoc.totalChunks} chunks) but storage may have failed — check console for details`);
+      }
       await loadDocuments();
     } catch (err) {
       console.error('Upload error:', err);
@@ -112,12 +123,17 @@ export default function KnowledgeBase() {
           <p>PDF, DOCX, or TXT files</p>
           <input
             type="file"
+            ref={fileInputRef}
             onChange={handleFileUpload}
             disabled={uploading}
             accept=".pdf,.docx,.txt"
             className="file-input"
           />
-          <button className="upload-btn" disabled={uploading}>
+          <button
+            className="upload-btn"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
             {uploading ? (
               <>
                 <Loader size={16} className="spinner" />

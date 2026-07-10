@@ -1,18 +1,34 @@
 /**
- * Anthropic-powered chat service with streaming, retries, caching, and context trimming.
+ * Chat Service — Groq-powered (Llama 3.3 70B) with streaming, retries, caching, and context trimming.
+ * 
+ * This service handles all AI chat interactions for the DEVCON Kids app.
+ * Uses Groq's OpenAI-compatible API with Llama 3.3 70B model.
+ * 
+ * KEY EXPORTS (do not rename — AIChat.jsx depends on these):
+ * - callChatWithContext(message, context, history, options) → {response, citations, sources, apiUsed, model, metrics}
+ * - callGeminiWithContext — alias for callChatWithContext (backward compat)
+ * - generateSessionSummary(messages) → string
+ * 
+ * NOTE: VITE_GROQ_API_KEY is temporary in frontend (Phase 1). Moves to Edge Function in Phase 2.
  */
 
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
-const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
-const CLAUDE_HAIKU_MODEL = import.meta.env.VITE_ANTHROPIC_HAIKU_MODEL || 'claude-3-5-haiku-20241022';
-const CLAUDE_SONNET_MODEL = import.meta.env.VITE_ANTHROPIC_SONNET_MODEL || 'claude-3-5-sonnet-20241022';
+import { supabase } from '../lib/supabase';
+
+// --- Configuration ---
+// Groq API (OpenAI-compatible format, free tier: 30 req/min, 14400/day)
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+// Chat behavior limits
 const MAX_HISTORY_MESSAGES = 10;
 const MAX_APPROX_TOKENS = 4000;
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+// In-memory response cache
 const responseCache = new Map();
 
+// --- Built-in knowledge (fallback when API is unavailable) ---
 const DEVCON_KNOWLEDGE = {
   mission: 'DEVCON Kids brings computer science education directly to students across the Philippines and makes tech accessible, fun, and equitable for children.',
   audience: 'Volunteers, coordinators, admins, and learners involved in DEVCON Kids programs.',
@@ -29,74 +45,86 @@ const DEVCON_KNOWLEDGE = {
     'Admin dashboard and role-based access'
   ],
   modules: [
-    'Chapters',
-    'Volunteers',
-    'Inventory',
-    'Events & CodeCamps',
-    'Knowledge Base',
-    'AI Settings',
-    'Admin'
+    'Chapters', 'Volunteers', 'Inventory',
+    'Events & CodeCamps', 'Knowledge Base', 'AI Settings', 'Admin'
   ]
 };
 
+// --- Default AI Settings (overridden by admin config) ---
+const defaultSettings = {
+  aiPersonality: 'Professional, warm, and encouraging. Patient with newcomers.',
+  temperatureLevel: 0.7,
+  maxContextChunks: 5
+};
+
+
+/**
+ * Load AI settings from Supabase, falling back to localStorage, then defaults.
+ */
+async function loadAISettings() {
+  try {
+    const { data } = await supabase.from('ai_settings').select('*').single();
+    if (data) return { ...defaultSettings, ...data };
+  } catch { /* Supabase unavailable */ }
+  try {
+    const raw = localStorage.getItem('aiSettings');
+    if (raw) return { ...defaultSettings, ...JSON.parse(raw) };
+  } catch { /* localStorage unavailable */ }
+  return defaultSettings;
+}
+
+// ============================================================
+// MAIN EXPORT: callChatWithContext
+// ============================================================
+
+/**
+ * Send a message to the AI with optional RAG context and conversation history.
+ * @param {string} userMessage - The user's question
+ * @param {Array} context - RAG context chunks from ragService
+ * @param {Array} chatHistory - Previous messages [{role, content}]
+ * @param {Object} options - {onDelta, onFirstToken} callbacks for streaming
+ * @returns {Object} {response, citations, sources, apiUsed, model, metrics}
+ */
 export async function callChatWithContext(userMessage, context = [], chatHistory = [], options = {}) {
-  const systemPrompt = buildSystemPrompt(context);
-  const selectedModel = selectModel(userMessage);
+  const settings = await loadAISettings();
+  const systemPrompt = buildSystemPrompt(context, settings);
   const conversationMessages = prepareConversationMessages(chatHistory, userMessage);
-  const cacheKey = buildCacheKey(userMessage, context, selectedModel);
+  const cacheKey = buildCacheKey(userMessage, context, GROQ_MODEL);
 
   const cached = readCache(cacheKey);
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
   const requestPromise = runWithRetries(async () => {
-    if (!ANTHROPIC_API_KEY) {
-      return buildFallbackPayload(userMessage, context, 'fallback');
-    }
-
-    return streamAnthropicResponse({
-      apiKey: ANTHROPIC_API_KEY,
-      model: selectedModel,
-      systemPrompt,
-      messages: conversationMessages,
-      context,
-      onDelta: options.onDelta,
-      onFirstToken: options.onFirstToken,
-      onUsage: options.onUsage
-    });
-  }, { userMessage, context, conversationMessages, selectedModel, systemPrompt });
+    if (!GROQ_API_KEY) return buildFallbackPayload(userMessage, context, 'fallback');
+    return callGroqAPI({ systemPrompt, messages: conversationMessages, context, temperature: settings.temperatureLevel, onDelta: options.onDelta, onFirstToken: options.onFirstToken });
+  }, { userMessage, context });
 
   writeCache(cacheKey, requestPromise);
   return requestPromise;
 }
 
-async function streamAnthropicResponse({ apiKey, model, systemPrompt, messages, context, onDelta, onFirstToken, onUsage }) {
-  const requestBody = {
-    model,
-    max_tokens: 1024,
-    temperature: 0.4,
-    system: systemPrompt,
-    messages,
-    stream: true
-  };
+// Backward-compatible alias
+export const callGeminiWithContext = callChatWithContext;
 
-  const response = await fetch(ANTHROPIC_BASE_URL, {
+// ============================================================
+// GROQ API CALL (OpenAI-compatible with streaming)
+// ============================================================
+
+async function callGroqAPI({ systemPrompt, messages, context, temperature, onDelta, onFirstToken }) {
+  const apiMessages = [{ role: 'system', content: systemPrompt }, ...messages];
+
+  const response = await fetch(GROQ_BASE_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': ANTHROPIC_VERSION
+      'Authorization': `Bearer ${GROQ_API_KEY}`
     },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify({ model: GROQ_MODEL, messages: apiMessages, temperature, max_tokens: 1024, stream: true })
   });
 
   if (!response.ok) {
-    throw new Error(await parseAnthropicError(response));
-  }
-
-  if (!response.body) {
-    throw new Error('Streaming response body was not available.');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData?.error?.message || `Groq API error (${response.status})`);
   }
 
   const reader = response.body.getReader();
@@ -104,399 +132,189 @@ async function streamAnthropicResponse({ apiKey, model, systemPrompt, messages, 
   let buffer = '';
   let responseText = '';
   let sawFirstToken = false;
-  let usage = null;
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-
     buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split('\n\n');
-    buffer = events.pop() || '';
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
 
-    for (const rawEvent of events) {
-      const event = parseSseEvent(rawEvent);
-      if (!event) continue;
-
-      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-        const delta = event.delta.text || '';
-        if (!sawFirstToken) {
-          sawFirstToken = true;
-          onFirstToken?.();
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const jsonStr = line.replace(/^data:\s*/, '');
+      if (jsonStr === '[DONE]') continue;
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const delta = parsed?.choices?.[0]?.delta?.content;
+        if (delta) {
+          if (!sawFirstToken) { sawFirstToken = true; onFirstToken?.(); }
+          responseText += delta;
+          onDelta?.(delta, responseText);
         }
-        responseText += delta;
-        onDelta?.(delta, responseText);
-      }
-
-      if (event.type === 'message_delta' && event.usage) {
-        usage = event.usage;
-        onUsage?.(usage);
-      }
+      } catch { /* skip malformed chunks */ }
     }
   }
 
-  if (!responseText.trim()) {
-    throw new Error('The model returned an empty response.');
-  }
-
-  return buildSuccessPayload(responseText, model, messages, context, usage);
+  if (!responseText.trim()) throw new Error('AI returned an empty response.');
+  return buildSuccessPayload(responseText, GROQ_MODEL, messages, context);
 }
 
-export const callGeminiWithContext = callChatWithContext;
+// ============================================================
+// SESSION SUMMARY
+// ============================================================
 
-function buildSystemPrompt(context) {
+export async function generateSessionSummary(messages) {
+  if (!GROQ_API_KEY) return 'Summary unavailable';
+  try {
+    const text = messages.map(m => `${m.role}: ${m.content}`).join('\n');
+    const res = await fetch(GROQ_BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({ model: GROQ_MODEL, messages: [{ role: 'user', content: `Summarize in 2 sentences:\n\n${text}` }], temperature: 0.2, max_tokens: 100 })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content?.trim() || 'Summary unavailable';
+    }
+  } catch (err) { console.warn('[chatService] Summary failed:', err); }
+  return 'Summary unavailable';
+}
+
+
+// ============================================================
+// SYSTEM PROMPT BUILDER
+// ============================================================
+
+function buildSystemPrompt(context, settings) {
   let prompt = `You are the DEVCON Kids AI Assistant.
 
-Persona:
-- Friendly, concise, calm, and helpful.
-- You speak like a knowledgeable program coordinator who understands education, events, and volunteer operations.
-- You support the DEVCON Kids community without sounding robotic or overly formal.
+Persona: ${settings.aiPersonality || defaultSettings.aiPersonality}
+You speak like a knowledgeable program coordinator who understands education, events, and volunteer operations.
 
-Scope:
-- Answer questions about DEVCON Kids, Hour of AI, chapters, volunteers, workshops, events, inventory, knowledge base documents, and admin workflows.
-- Help users understand how the app works and how to complete tasks inside the platform.
-- If the answer is not in the provided context, say so clearly and give the best safe guidance you can.
+Scope: Answer questions about DEVCON Kids, Hour of AI, chapters, volunteers, workshops, events, inventory, and admin workflows. If the answer is not in the provided context, say so clearly.
 
-Rules:
-- Be concise by default.
-- Use short paragraphs and bullet points when listing items or steps.
-- If the user asks for a process, give a clear step-by-step answer.
-- If you are uncertain, say what is unknown instead of guessing.
-- Prefer practical guidance over long explanations.
-- When helpful, mention relevant DEVCON Kids modules and next actions.
+Rules: Be concise. Use bullet points for lists. If uncertain, say so. Mention relevant modules when helpful.
 
-App context:
-- DEVCON Kids is a nonprofit education platform focused on making computer science and AI accessible to children in the Philippines.
-- Core programs include Hour of AI, workshops, code camps, chapter-led activities, and educator or volunteer support.
-- Typical users include volunteers, coordinators, chapter leads, admins, and learners.
-- Main modules include Chapters, Volunteers, Inventory, Events, Knowledge Base, AI Settings, and Admin tools.
-- The app helps manage chapter activity, volunteer onboarding, event planning, workshop coordination, and knowledge base searches.
-
-Style guide:
-- Be warm, direct, and structured.
-- Use bullets for lists.
-- Keep answers easy to scan.
-- Avoid unnecessary filler.
-
+App modules: ${DEVCON_KNOWLEDGE.modules.join(', ')}
 Mission: ${DEVCON_KNOWLEDGE.mission}
-Audience: ${DEVCON_KNOWLEDGE.audience}
-Modules: ${DEVCON_KNOWLEDGE.modules.join(', ')}
 `;
-
   if (context.length > 0) {
     prompt += `\nKnowledge base context:\n`;
     context.forEach((doc, idx) => {
-      prompt += `\n[Source ${idx + 1}: ${doc.metadata?.title || 'Document'}]\n${doc.content}\n`;
+      prompt += `[Source ${idx + 1}: ${doc.metadata?.title || 'Document'}]\n${doc.content}\n\n`;
     });
-    prompt += `\nWhen answering, prioritize the provided context over general knowledge. If a fact comes from a source, mention the source naturally.`;
+    prompt += `Prioritize this context over general knowledge. Mention sources naturally.`;
   }
-
   return prompt;
 }
 
-function prepareConversationMessages(chatHistory, userMessage) {
-  const normalizedHistory = chatHistory
-    .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-    .slice(-MAX_HISTORY_MESSAGES)
-    .map((msg) => ({
-      role: msg.role,
-      content: String(msg.content || '')
-    }));
+// ============================================================
+// CONVERSATION HELPERS
+// ============================================================
 
-  const combined = [...normalizedHistory, { role: 'user', content: String(userMessage || '') }];
+function prepareConversationMessages(chatHistory, userMessage) {
+  const history = chatHistory
+    .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map(msg => ({ role: msg.role, content: String(msg.content || '') }));
+  const combined = [...history, { role: 'user', content: String(userMessage || '') }];
   return trimMessagesToTokenLimit(combined, MAX_APPROX_TOKENS);
 }
 
-function trimMessagesToTokenLimit(messages, maxApproxTokens) {
+function trimMessagesToTokenLimit(messages, maxTokens) {
   const trimmed = [...messages];
-
-  while (trimmed.length > 2 && estimateApproxTokens(trimmed) > maxApproxTokens) {
-    trimmed.shift();
-  }
-
+  while (trimmed.length > 2 && estimateTokens(trimmed) > maxTokens) trimmed.shift();
   return trimmed;
 }
 
-function estimateApproxTokens(messages) {
-  const totalChars = messages.reduce((sum, message) => sum + String(message.content || '').length, 0);
-  return Math.ceil(totalChars / 4);
+function estimateTokens(messages) {
+  return Math.ceil(messages.reduce((sum, m) => sum + String(m.content || '').length, 0) / 4);
 }
 
-function selectModel(userMessage) {
-  const wordCount = String(userMessage || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .length;
+// ============================================================
+// CACHING
+// ============================================================
 
-  return wordCount > 0 && wordCount < 10 ? CLAUDE_HAIKU_MODEL : CLAUDE_SONNET_MODEL;
+function buildCacheKey(msg, context, model) {
+  const ctx = context.map(d => `${d.metadata?.documentId || 'doc'}:${String(d.content || '').slice(0, 160)}`).join('||');
+  return [model, normalize(msg), normalize(ctx)].join('::');
 }
 
-function normalizeText(value) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+function normalize(v) { return String(v || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+
+function readCache(key) {
+  const e = responseCache.get(key);
+  if (!e) return null;
+  if (e.expiresAt <= Date.now()) { responseCache.delete(key); return null; }
+  return e.value ? Promise.resolve(e.value) : e.promise;
 }
 
-function buildCacheKey(userMessage, context, model) {
-  const contextSignature = context
-    .map((doc) => `${doc.metadata?.documentId || doc.metadata?.title || 'doc'}:${String(doc.content || '').slice(0, 160)}`)
-    .join('||');
-
-  return [model, normalizeText(userMessage), normalizeText(contextSignature)].join('::');
-}
-
-function readCache(cacheKey) {
-  const entry = responseCache.get(cacheKey);
-  if (!entry) return null;
-
-  if (entry.expiresAt <= Date.now()) {
-    responseCache.delete(cacheKey);
-    return null;
-  }
-
-  return entry.value ? Promise.resolve(entry.value) : entry.promise;
-}
-
-function writeCache(cacheKey, promise) {
+function writeCache(key, promise) {
   const expiresAt = Date.now() + CACHE_TTL_MS;
   const entry = {
-    promise: promise.then((value) => {
-      const current = responseCache.get(cacheKey);
-      if (current) {
-        current.value = value;
-        current.promise = null;
-        current.expiresAt = expiresAt;
-      }
-      return value;
-    }).catch((error) => {
-      responseCache.delete(cacheKey);
-      throw error;
-    }),
-    value: null,
-    expiresAt
+    promise: promise.then(v => { const c = responseCache.get(key); if (c) { c.value = v; c.promise = null; } return v; }).catch(e => { responseCache.delete(key); throw e; }),
+    value: null, expiresAt
   };
-
-  responseCache.set(cacheKey, entry);
-
-  setTimeout(() => {
-    const current = responseCache.get(cacheKey);
-    if (current && current.expiresAt <= Date.now()) {
-      responseCache.delete(cacheKey);
-    }
-  }, CACHE_TTL_MS);
+  responseCache.set(key, entry);
 }
+
+// ============================================================
+// RETRY LOGIC
+// ============================================================
 
 async function runWithRetries(executor, metadata) {
-  const maxAttempts = 3;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      return await executor();
-    } catch (error) {
-      if (attempt === maxAttempts) {
-        console.error('[Chat] Anthropic request failed after retries:', error, metadata);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try { return await executor(); }
+    catch (error) {
+      if (attempt === 3) {
+        console.error('[chatService] Failed after 3 retries:', error);
         return buildFailurePayload(metadata.userMessage, metadata.context, error);
       }
-
-      console.warn(`[Chat] Attempt ${attempt} failed, retrying in 1 second:`, error);
-      await sleep(1000);
+      console.warn(`[chatService] Attempt ${attempt} failed:`, error.message);
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
-
-  return buildFailurePayload(metadata.userMessage, metadata.context, new Error('Unknown chat failure'));
 }
 
-async function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+// ============================================================
+// RESPONSE BUILDERS
+// ============================================================
 
-function parseSseEvent(rawEvent) {
-  const dataLines = rawEvent
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('data:'));
-
-  if (!dataLines.length) return null;
-
-  const payload = dataLines
-    .map((line) => line.replace(/^data:\s*/, ''))
-    .join('\n');
-
-  if (!payload || payload === '[DONE]') return null;
-
-  try {
-    return JSON.parse(payload);
-  } catch {
-    return null;
-  }
-}
-
-async function parseAnthropicError(response) {
-  try {
-    const data = await response.json();
-    return data?.error?.message || data?.message || `Anthropic API error (${response.status})`;
-  } catch {
-    return `Anthropic API error (${response.status})`;
-  }
-}
-
-function buildSuccessPayload(responseText, model, messages, context, usage) {
+function buildSuccessPayload(text, model, messages, context) {
   return {
-    response: responseText,
+    response: text,
     citations: extractCitations(context),
-    sources: context.map((doc) => ({
-      title: doc.metadata?.title || 'Unknown',
-      excerpt: String(doc.content || '').substring(0, 200),
-      documentId: doc.metadata?.documentId
-    })),
-    apiUsed: 'anthropic',
+    sources: context.map(d => ({ title: d.metadata?.title || 'Unknown', excerpt: String(d.content || '').substring(0, 200), documentId: d.metadata?.documentId })),
+    apiUsed: 'groq',
     model,
-    metrics: {
-      inputTokens: usage?.input_tokens ?? estimateApproxTokens(messages),
-      outputTokens: usage?.output_tokens ?? Math.max(1, Math.ceil(responseText.length / 4)),
-      totalTokens: usage?.input_tokens && usage?.output_tokens ? usage.input_tokens + usage.output_tokens : undefined
-    }
+    metrics: { inputTokens: estimateTokens(messages), outputTokens: Math.ceil(text.length / 4), totalTokens: estimateTokens(messages) + Math.ceil(text.length / 4) }
   };
 }
 
 function buildFallbackPayload(userMessage, context, apiUsed) {
-  const responseText = buildEnhancedFallbackResponse(userMessage, context);
-
+  const text = buildFallbackResponse(userMessage);
   return {
-    response: responseText,
-    citations: extractCitations(context),
-    sources: context.map((doc) => ({
-      title: doc.metadata?.title || 'Unknown',
-      excerpt: String(doc.content || '').substring(0, 200),
-      documentId: doc.metadata?.documentId
-    })),
-    apiUsed,
-    model: 'fallback',
-    metrics: {
-      inputTokens: estimateApproxTokens([{ role: 'user', content: userMessage }]),
-      outputTokens: Math.max(1, Math.ceil(responseText.length / 4))
-    }
+    response: text, citations: extractCitations(context),
+    sources: context.map(d => ({ title: d.metadata?.title || 'Unknown', excerpt: String(d.content || '').substring(0, 200), documentId: d.metadata?.documentId })),
+    apiUsed, model: 'fallback', metrics: { inputTokens: 0, outputTokens: Math.ceil(text.length / 4) }
   };
 }
 
 function buildFailurePayload(userMessage, context, error) {
-  const responseText = `I'm having trouble generating a live answer right now. Please try again in a moment.\n\nIf you want, I can still help with:\n${DEVCON_KNOWLEDGE.topics.map((topic) => `- ${topic}`).join('\n')}`;
-
-  return {
-    response: responseText,
-    citations: extractCitations(context),
-    sources: context.map((doc) => ({
-      title: doc.metadata?.title || 'Unknown',
-      excerpt: String(doc.content || '').substring(0, 200),
-      documentId: doc.metadata?.documentId
-    })),
-    apiUsed: 'error',
-    model: 'unknown',
-    error: error?.message || 'Unknown error',
-    metrics: {
-      inputTokens: estimateApproxTokens([{ role: 'user', content: userMessage }]),
-      outputTokens: Math.max(1, Math.ceil(responseText.length / 4))
-    }
-  };
+  const text = `I'm having trouble right now. Please try again.\n\nI can help with:\n${DEVCON_KNOWLEDGE.topics.map(t => `• ${t}`).join('\n')}`;
+  return { response: text, citations: extractCitations(context || []), sources: [], apiUsed: 'error', model: 'unknown', error: error?.message, metrics: { inputTokens: 0, outputTokens: Math.ceil(text.length / 4) } };
 }
 
-function buildEnhancedFallbackResponse(userMessage, context) {
-  const normalized = userMessage.toLowerCase();
-  let response = '';
-
-  if (normalized.match(/mission|purpose|about|goal/i)) {
-    response = `# DEVCON Kids Mission & Impact\n\n${DEVCON_KNOWLEDGE.mission}\n\n**Core Pillars:**\n${DEVCON_KNOWLEDGE.pillars.map(p => `• ${p}`).join('\n')}`;
-  } else if (normalized.match(/volunteer|onboard|role/i)) {
-    response = `# Volunteer Support\n\nI can help with:\n• Creating volunteer profiles in the directory\n• Understanding different volunteer roles\n• Chapter assignment and engagement strategies\n• Setting clear expectations and responsibilities`;
-  } else if (normalized.match(/event|codecamp|workshop/i)) {
-    response = `# Event Planning & Coordination\n\nI can guide you through:\n• Setting up new events in the system\n• Organizing folder structures on Google Drive\n• Scheduling workshops across chapters\n• Hour of AI and CodeCamp implementation`;
-  } else if (normalized.match(/knowledge base|document|upload/i)) {
-    response = `# Knowledge Base & Document Management\n\nI can help with:\n• Uploading PDFs and resources\n• Managing document chunks and indexing\n• Semantic search across your documents\n• RAG (Retrieval Augmented Generation)`;
-  } else if (normalized.match(/admin|dashboard|module/i)) {
-    response = `# Dashboard & Admin Features\n\n**Available Modules:**\n${DEVCON_KNOWLEDGE.modules.map(m => `• ${m}`).join('\n')}\n\n**Common Tasks:**\n• Managing chapters and volunteer data\n• Configuring AI settings\n• Analyzing program metrics`;
-  } else if (normalized.match(/inventory|asset|resource/i)) {
-    response = `# Inventory & Resource Management\n\nI can help with:\n• Adding and updating inventory items\n• Tracking stock levels\n• Forecasting needs for events\n• Managing equipment across chapters`;
-  } else if (normalized.match(/chapter|location|region/i)) {
-    response = `# Chapter Management & Growth\n\nI can help with:\n• Creating and managing chapter profiles\n• Tracking learner numbers and workshops\n• Monitoring completion rates\n• Scaling programs to new locations`;
-  } else {
-    response = `# DEVCON Kids AI Assistant\n\nI'm here to provide strategic guidance. I can help with:\n${DEVCON_KNOWLEDGE.topics.map(t => `• ${t}`).join('\n')}\n\nWhat specific challenge can I help you with?`;
-  }
-
-  return response;
-}
-
-function buildFallbackResponse(userMessage) {
-  const normalized = userMessage.toLowerCase();
-
-  if (normalized.includes('mission') || normalized.includes('about devcon kids')) {
-    return `DEVCON Kids brings computer science education directly to students across the Philippines and makes tech accessible, fun, and equitable for children.`;
-  }
-
-  if (normalized.includes('volunteer') || normalized.includes('onboard')) {
-    return 'I can help with volunteer onboarding, directory management, and guidelines.';
-  }
-
-  if (normalized.includes('event') || normalized.includes('codecamp') || normalized.includes('workshop')) {
-    return 'I can help with event planning, coordination, and understanding the Hour of AI / CodeCamp workflow.';
-  }
-
-  if (normalized.includes('knowledge base') || normalized.includes('document')) {
-    return 'I can help with the Knowledge Base, document uploads, and grounded answers.';
-  }
-
-  if (normalized.includes('admin') || normalized.includes('dashboard')) {
-    return 'I can help with dashboard modules and access levels.';
-  }
-
-  return `I can help with: ${DEVCON_KNOWLEDGE.topics.join(', ')}`;
+function buildFallbackResponse(q) {
+  const l = q.toLowerCase();
+  if (l.match(/mission|purpose|about/)) return `**DEVCON Kids Mission**\n\n${DEVCON_KNOWLEDGE.mission}\n\n**Pillars:**\n${DEVCON_KNOWLEDGE.pillars.map(p => `• ${p}`).join('\n')}`;
+  if (l.match(/volunteer|onboard/)) return `**Volunteer Support**\n\n• Profiles and directory\n• Understanding roles\n• Chapter assignments\n• Onboarding steps`;
+  if (l.match(/event|workshop/)) return `**Events**\n\n• Creating events\n• Drive folder setup\n• Workshop scheduling`;
+  return `**DEVCON Kids AI Assistant**\n\nI can help with:\n${DEVCON_KNOWLEDGE.topics.map(t => `• ${t}`).join('\n')}`;
 }
 
 function extractCitations(context) {
-  return context.map((doc, idx) => ({
-    id: idx + 1,
-    title: doc.metadata?.title || 'Document',
-    documentId: doc.metadata?.documentId,
-    source: doc.metadata?.source || 'Knowledge Base'
-  }));
-}
-
-export async function generateSessionSummary(messages) {
-  const conversationText = messages
-    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-    .join('\n');
-
-  const summaryPrompt = `Provide a concise 2-3 sentence summary of this conversation:\n\n${conversationText}`;
-
-  try {
-    if (ANTHROPIC_API_KEY) {
-      const response = await fetch(ANTHROPIC_BASE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': ANTHROPIC_VERSION
-        },
-        body: JSON.stringify({
-          model: CLAUDE_HAIKU_MODEL,
-          max_tokens: 256,
-          temperature: 0.2,
-          system: 'Summarize conversations in 2-3 concise sentences.',
-          messages: [{ role: 'user', content: [{ type: 'text', text: summaryPrompt }] }]
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const text = extractAnthropicText(data);
-        if (text.trim()) return text;
-      }
-    }
-  } catch (err) {
-    console.warn('Anthropic summary failed:', err);
-  }
-
-  return 'Summary generation unavailable - check API configuration';
-}
-
-function extractAnthropicText(data) {
-  return data?.content?.map((part) => part.text || '').join('') || '';
+  if (!context?.length) return [];
+  return context.map((d, i) => ({ id: i + 1, title: d.metadata?.title || 'Document', documentId: d.metadata?.documentId, source: 'Knowledge Base' }));
 }

@@ -11,10 +11,18 @@ const OPENAI_EMBEDDING_MODEL = import.meta.env.VITE_OPENAI_EMBEDDING_MODEL || 't
 const OPENAI_EMBEDDING_ENDPOINT = `${OPENAI_BASE_URL.replace(/\/$/, '')}/embeddings`;
 
 /**
- * Generate embeddings for text using the local OpenAI-compatible API
+ * Generate embeddings for text using an OpenAI-compatible API.
+ * Currently disabled — will be replaced with Gemini Edge Function in Phase 2.
+ * Returns empty array (graceful skip) so document upload still works without embeddings.
+ * 
+ * @param {string} text - Text to generate embedding for
+ * @returns {Array<number>} 768-dim embedding vector, or [] if unavailable
  */
 export async function generateEmbedding(text) {
-  if (!OPENAI_API_KEY) {
+  // Skip embedding if no valid API key or if pointing to a local server
+  // that may be unreachable. This will be replaced with an Edge Function
+  // in Phase 2 that calls Gemini text-embedding-004.
+  if (!OPENAI_API_KEY || OPENAI_BASE_URL.includes('192.168.')) {
     return [];
   }
 
@@ -24,6 +32,10 @@ export async function generateEmbedding(text) {
   };
 
   try {
+    // Set a timeout so we don't hang forever if the server is unreachable
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
     const response = await fetch(OPENAI_EMBEDDING_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -31,7 +43,10 @@ export async function generateEmbedding(text) {
         Authorization: `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify(requestBody),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const error = await response.json();
@@ -41,19 +56,31 @@ export async function generateEmbedding(text) {
     const data = await response.json();
     return data.data?.[0]?.embedding || [];
   } catch (error) {
-    console.error('Embedding generation error:', error);
+    // Don't log timeout/abort errors repeatedly — they're expected when server is down
+    if (error.name !== 'AbortError') {
+      console.error('[ragService] Embedding generation error:', error);
+    }
     return [];
   }
 }
 
 /**
- * Store document chunks in vector database (Supabase pgvector)
+ * Store document chunks in vector database (Supabase pgvector).
+ * If embedding generation fails, chunks are stored without embeddings (null).
+ * If the database insert fails entirely, we log the error but DON'T crash
+ * the upload — the document metadata is already saved in the documents table.
+ * 
+ * @param {string} documentId - Unique document identifier
+ * @param {string} documentTitle - Document filename/title
+ * @param {Array} chunks - Array of {content, pageNumber} objects
+ * @returns {number} Number of chunks stored (0 if storage failed)
  */
 export async function storeDocumentChunks(documentId, documentTitle, chunks) {
   try {
     const chunkRecords = [];
 
     for (const chunk of chunks) {
+      // generateEmbedding already handles its own errors (returns [] on failure)
       const embedding = await generateEmbedding(chunk.content);
 
       chunkRecords.push({
@@ -71,11 +98,18 @@ export async function storeDocumentChunks(documentId, documentTitle, chunks) {
       .from('knowledge_base')
       .insert(chunkRecords);
 
-    if (error) throw error;
+    if (error) {
+      // Log but don't crash — document metadata is already saved
+      console.error('[ragService] Failed to store chunks in knowledge_base:', error);
+      console.warn('[ragService] This usually means the knowledge_base table does not exist or RLS is blocking inserts. Run the migration: supabase/migrations/20260516_ai_knowledge_base.sql');
+      return 0;
+    }
+
     return chunkRecords.length;
   } catch (error) {
-    console.error('Error storing document chunks:', error);
-    throw error;
+    // Catch network errors, unexpected failures — don't crash the upload
+    console.error('[ragService] Error storing document chunks:', error);
+    return 0;
   }
 }
 

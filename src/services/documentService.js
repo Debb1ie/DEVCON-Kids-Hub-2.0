@@ -4,33 +4,39 @@
  */
 
 /**
- * Parse PDF file and extract text
- * Uses pdfjs-dist for parsing (loaded dynamically)
+ * Parse PDF file and extract text.
+ * Uses pdfjs-dist v6 with the worker served as a static file from /public.
+ * 
+ * WHY this approach: pdfjs-dist requires a Web Worker for PDF parsing.
+ * Vite's bundler struggles with dynamic worker imports from node_modules.
+ * The reliable fix is to copy the worker to public/ and reference it by URL.
+ * If you upgrade pdfjs-dist, re-copy the worker:
+ *   cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs
+ * 
+ * @param {File} file - The PDF file uploaded by the user
+ * @returns {Array<{pageNumber: number, content: string}>} Extracted text per page
  */
 export async function parsePDF(file) {
   try {
-    // Dynamic import using computed string to avoid Vite static analysis
-    const pdfModule = 'pdfjs-dist';
-    let pdfjs;
-    
-    try {
-      // Use dynamic require-like pattern
-      pdfjs = await import(/* @vite-ignore */ pdfModule);
-    } catch {
-      throw new Error('PDF parsing library not available. Please install pdfjs-dist: npm install pdfjs-dist');
-    }
+    // Import the main pdfjs library (Vite bundles this fine — it's the worker that's tricky)
+    const pdfjs = await import('pdfjs-dist');
 
-    if (pdfjs.GlobalWorkerOptions) {
-      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-    }
+    // Point to the worker file we copied to public/ — served as a static asset
+    // This avoids all Vite bundler/worker resolution issues
+    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
+    // Read the file as binary data (ArrayBuffer)
     const arrayBuffer = await file.arrayBuffer();
+
+    // Parse the PDF document — returns an object with page count and page accessors
     const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
     
+    // Extract text from each page one by one
     const pages = [];
     for (let i = 0; i < pdf.numPages; i++) {
       const page = await pdf.getPage(i + 1);
       const textContent = await page.getTextContent();
+      // textContent.items is an array of text segments — join them into one string
       const text = textContent.items.map(item => item.str).join(' ');
       pages.push({
         pageNumber: i + 1,
@@ -40,37 +46,56 @@ export async function parsePDF(file) {
 
     return pages;
   } catch (error) {
-    console.error('PDF parsing error:', error);
-    throw new Error(`Failed to parse PDF: ${error.message}`);
+    console.error('[documentService] PDF parsing error:', error);
+    throw new Error(`Failed to parse PDF: ${error.message}`, { cause: error });
   }
 }
 
 /**
- * Parse DOCX file and extract text
- * Uses basic text extraction (DOCX format varies)
+ * Parse DOCX file and extract text.
+ * Uses mammoth.js which properly reads the ZIP/XML structure of .docx files.
+ * The old approach (file.text()) returned garbled binary — mammoth handles it correctly.
+ * 
+ * @param {File} file - The .docx file uploaded by the user
+ * @returns {Array<{pageNumber: number, content: string}>} Extracted text as pages
  */
 export async function parseDOCX(file) {
   try {
-    // DOCX files are ZIP archives with XML inside
-    // For simplicity, we extract text by reading as text
-    // Note: This is a basic approach - for production, consider using:
-    // mammoth.js or docx-parser library
-    
-    const text = await file.text();
-    
-    // Filter out XML tags if any are visible
-    const cleanText = text
-      .replace(/<[^>]*>/g, ' ')  // Remove XML/HTML tags
-      .replace(/\s+/g, ' ')      // Normalize whitespace
-      .trim();
-    
+    // mammoth needs an ArrayBuffer (raw binary data), not a text string
+    const arrayBuffer = await file.arrayBuffer();
+
+    // Dynamically import mammoth so it doesn't block initial page load
+    const mammoth = await import('mammoth');
+
+    // extractRawText gives us plain text without HTML formatting
+    // (we only need the text content for chunking and embedding)
+    const result = await mammoth.extractRawText({ arrayBuffer });
+
+    // result.value contains the extracted text
+    // result.messages contains any warnings (we log them but don't fail)
+    if (result.messages && result.messages.length > 0) {
+      console.warn('[documentService] DOCX parsing warnings:', result.messages);
+    }
+
+    const text = (result.value || '').trim();
+
+    if (!text) {
+      return [{
+        pageNumber: 1,
+        content: 'DOCX content could not be extracted. The file may be empty or use unsupported formatting.'
+      }];
+    }
+
     return [{
       pageNumber: 1,
-      content: cleanText || 'DOCX content could not be extracted. Please try uploading as PDF or TXT.'
+      content: text
     }];
   } catch (error) {
-    console.error('DOCX parsing error:', error);
-    throw new Error('Failed to parse DOCX file. Please ensure it is a valid Word document or use PDF/TXT format.');
+    console.error('[documentService] DOCX parsing error:', error);
+    throw new Error(
+      `Failed to parse DOCX file: ${error.message}. Please ensure it is a valid Word document.`,
+      { cause: error }
+    );
   }
 }
 
