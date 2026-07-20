@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Send, MessageSquare, Minimize2, Loader } from 'lucide-react';
+import { X, Send, MessageSquare, Minimize2, Loader, Trash2, Copy, ThumbsUp, ThumbsDown, Check } from 'lucide-react';
 import { callChatWithContext } from '../services/chatService';
 import { retrieveContext } from '../services/ragService';
+import { supabase } from '../lib/supabase';
 import './AIChat.css';
 
 export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
@@ -19,9 +20,73 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(isFullscreen);
+  const [copiedId, setCopiedId] = useState(null);
+  const [feedbackGiven, setFeedbackGiven] = useState({});
   const messagesEndRef = useRef(null);
   const messageIdRef = useRef(1000);
   const activeAssistantMessageRef = useRef(null);
+  const sessionIdRef = useRef(null);
+
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('chatHistory');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.messages?.length > 1) {
+          setMessages(parsed.messages.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
+          sessionIdRef.current = parsed.sessionId || null;
+          messageIdRef.current = Math.max(...parsed.messages.map(m => m.id)) + 1;
+        }
+      }
+    } catch { /* ignore corrupt localStorage */ }
+  }, []);
+
+  // Save chat history to localStorage on change
+  useEffect(() => {
+    if (messages.length > 1) {
+      try {
+        localStorage.setItem('chatHistory', JSON.stringify({
+          sessionId: sessionIdRef.current,
+          messages: messages.filter(m => !m.isStreaming)
+        }));
+      } catch { /* localStorage full or unavailable */ }
+    }
+  }, [messages]);
+
+  /**
+   * Clear conversation — reset to welcome message, start fresh session
+   */
+  const handleClearChat = () => {
+    setMessages([{
+      id: messageIdRef.current++,
+      role: 'assistant',
+      content: 'Hi! I\'m the DEVCON Kids AI Assistant. I can help you with:\n• DEVCON Kids mission and core pillars\n• Volunteer onboarding and guidelines\n• Event planning and coordination\n• Knowledge Base uploads and document questions\n• Dashboard access and role-based guidance\n\nTry one of the quick questions below, or ask something in your own words.',
+      timestamp: new Date(),
+      meta: { label: 'Welcome' }
+    }]);
+    sessionIdRef.current = null;
+    setFeedbackGiven({});
+    localStorage.removeItem('chatHistory');
+  };
+
+  /**
+   * Copy an assistant message's text to clipboard
+   */
+  const handleCopy = async (msgId, content) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch { /* clipboard API unavailable */ }
+  };
+
+  /**
+   * Submit feedback (👍/👎) for a message
+   */
+  const handleFeedback = (msgId, isPositive) => {
+    setFeedbackGiven(prev => ({ ...prev, [msgId]: isPositive ? 'up' : 'down' }));
+  };
 
   // Suggested prompts based on context
   const suggestedPrompts = [
@@ -213,6 +278,34 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           ))}
         </div>
       )}
+      {/* Action buttons for assistant messages (not welcome, not streaming) */}
+      {msg.role === 'assistant' && msg.content && !msg.isStreaming && msg.meta?.label !== 'Welcome' && (
+        <div className="message-actions">
+          <button
+            className={`action-btn ${copiedId === msg.id ? 'active' : ''}`}
+            onClick={() => handleCopy(msg.id, msg.content)}
+            title="Copy response"
+          >
+            {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+          <button
+            className={`action-btn ${feedbackGiven[msg.id] === 'up' ? 'active' : ''}`}
+            onClick={() => handleFeedback(msg.id, true)}
+            title="Good response"
+            disabled={!!feedbackGiven[msg.id]}
+          >
+            <ThumbsUp size={14} />
+          </button>
+          <button
+            className={`action-btn ${feedbackGiven[msg.id] === 'down' ? 'active' : ''}`}
+            onClick={() => handleFeedback(msg.id, false)}
+            title="Bad response"
+            disabled={!!feedbackGiven[msg.id]}
+          >
+            <ThumbsDown size={14} />
+          </button>
+        </div>
+      )}
       <div className="message-footer">
         <span className="message-time">
           {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -282,6 +375,9 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
         <div className="ai-chat-header">
           <h2>DEVCON Kids AI Assistant</h2>
           <div className="ai-header-actions">
+            <button onClick={handleClearChat} className="icon-btn" title="Clear conversation">
+              <Trash2 size={20} />
+            </button>
             <button onClick={() => setExpanded(false)} className="icon-btn" title="Minimize">
               <Minimize2 size={20} />
             </button>
@@ -324,9 +420,14 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     <div className="ai-chat-fullscreen-page">
       <div className="ai-chat-header">
         <h2>DEVCON Kids AI Assistant</h2>
-        <button onClick={onClose} className="icon-btn">
-          <X size={20} />
-        </button>
+        <div className="ai-header-actions">
+          <button onClick={handleClearChat} className="icon-btn" title="Clear conversation">
+            <Trash2 size={20} />
+          </button>
+          <button onClick={onClose} className="icon-btn">
+            <X size={20} />
+          </button>
+        </div>
       </div>
 
       {renderConversation()}

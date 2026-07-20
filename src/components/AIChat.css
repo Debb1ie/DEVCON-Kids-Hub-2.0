@@ -467,3 +467,46 @@ body.dark-mode .message-citations {
     padding: 12px;
   }
 }
+
+/* Message action buttons (copy, thumbs up/down) */
+.message-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.message:hover .message-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: #8B5CF6;
+  border-color: #8B5CF6;
+}
+
+.action-btn.active {
+  color: #8B5CF6;
+  border-color: #8B5CF6;
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.action-btn:disabled {
+  cursor: default;
+}
