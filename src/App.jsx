@@ -14,6 +14,7 @@ import KnowledgeBase from './pages/KnowledgeBase';
 import AISettings from './pages/AISettings';
 import Settings from './pages/Settings';
 import SocialMediaCMS from './pages/SocialMediaCMS';
+import EventChecklist from './pages/EventChecklist';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -89,6 +90,7 @@ function AppRoutes() {
           <Route path="knowledge-base" element={<KnowledgeBase />} />
           <Route path="ai-settings" element={<SuperadminRoute><AISettings /></SuperadminRoute>} />
           <Route path="social-media" element={<SocialMediaCMS />} />
+          <Route path="event-checklist" element={<EventChecklist />} />
           <Route path="settings" element={<SuperadminRoute><Settings /></SuperadminRoute>} />
         </Route>
 

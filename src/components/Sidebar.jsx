@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays, Brain, Database, Share2 } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays, Brain, Database, Share2, ClipboardList } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import './Sidebar.css';
 
@@ -13,6 +13,7 @@ export default function Sidebar() {
     { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
     { name: 'Events & CodeCamps', path: '/dashboard/events', icon: <CalendarDays size={20} /> },
     { name: 'Social Media', path: '/dashboard/social-media', icon: <Share2 size={20} /> },
+    { name: 'Event Checklist', path: '/dashboard/event-checklist', icon: <ClipboardList size={20} /> },
     { name: 'Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
     ...(isSuperadmin ? [
       { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Settings size={20} /> },
