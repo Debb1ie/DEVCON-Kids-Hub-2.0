@@ -137,20 +137,27 @@ export async function semanticSearch(query, limit = 5) {
     }
 
     // Generate embedding for the user's query
+    console.log('[ragService] Generating query embedding for:', query.substring(0, 50));
     const queryEmbedding = await generateEmbedding(query);
 
     if (!queryEmbedding.length) {
+      console.warn('[ragService] Query embedding returned empty — cannot search.');
       return [];
     }
 
+    console.log('[ragService] Query embedding generated, searching knowledge base...');
+
     // Search in Supabase using pgvector cosine similarity
+    // Note: supabase-js handles array → vector conversion automatically
     const { data, error } = await supabase.rpc('search_knowledge_base', {
       query_embedding: queryEmbedding,
-      similarity_threshold: 0.7,
+      similarity_threshold: 0.3,
       match_count: limit
     });
 
     if (error) throw error;
+
+    console.log(`[ragService] Search returned ${data?.length || 0} results`);
 
     return (data || []).map(item => ({
       content: item.content,
