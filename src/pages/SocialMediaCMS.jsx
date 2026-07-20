@@ -1,7 +1,55 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppState';
-import { Share2, Plus, Trash2, Image as ImageIcon, CheckCircle, Clock, PencilLine } from 'lucide-react';
+import { Share2, Plus, Trash2, Image as ImageIcon, CheckCircle, Clock, PencilLine, Sparkles, Loader } from 'lucide-react';
 import './SocialMediaCMS.css';
+
+// Groq API for caption generation (same key as chatService)
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+/**
+ * Generate 3 platform-specific captions using AI.
+ * Takes a campaign title, optional description context, and target platform.
+ */
+async function generateCaptions(title, context, platform) {
+  if (!GROQ_API_KEY || !title.trim()) return [];
+
+  const platformGuide = {
+    Facebook: 'Conversational, medium-length (2-3 sentences), use emojis sparingly, include a call-to-action.',
+    Instagram: 'Engaging, use emojis and hashtags generously, casual tone, end with relevant hashtags (5-8).',
+    LinkedIn: 'Professional, informative, 2-3 short paragraphs, no excessive emojis, include a call-to-action.',
+    Twitter: 'Short and punchy (under 280 chars), witty, 1-2 hashtags max, create urgency.'
+  };
+
+  const prompt = `Generate exactly 3 social media caption options for ${platform}.
+
+Campaign/Event: "${title}"
+${context ? `Additional context: "${context}"` : ''}
+Organization: DEVCON Kids — a nonprofit teaching Filipino kids to code through workshops and events.
+
+Platform style guide: ${platformGuide[platform] || platformGuide.Facebook}
+
+Return ONLY a JSON array of 3 strings. No explanation, no markdown, just the JSON array.
+Example format: ["Caption 1 here", "Caption 2 here", "Caption 3 here"]`;
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({ model: GROQ_MODEL, messages: [{ role: 'user', content: prompt }], temperature: 0.8, max_tokens: 500 })
+    });
+    if (!res.ok) throw new Error(`Groq error ${res.status}`);
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content?.trim() || '';
+    // Parse JSON array from response (handle markdown code blocks if present)
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.error('[SocialMediaCMS] Caption generation failed:', err);
+    return [];
+  }
+}
 
 export default function SocialMediaCMS() {
   const { socialPosts, addSocialPost, updateSocialPost, deleteSocialPost } = useApp();
@@ -13,6 +61,8 @@ export default function SocialMediaCMS() {
   const [imageUrl, setImageUrl] = useState('');
   const [platform, setPlatform] = useState('Facebook');
   const [status, setStatus] = useState('Draft');
+  const [generatingCaptions, setGeneratingCaptions] = useState(false);
+  const [captionOptions, setCaptionOptions] = useState([]);
 
   const openCreateForm = () => {
     setEditingId(null);
@@ -115,6 +165,43 @@ export default function SocialMediaCMS() {
                 placeholder="Write your engaging caption here..." 
                 value={description} onChange={(e) => setDescription(e.target.value)} required 
               />
+              {/* AI Caption Generator */}
+              <button
+                type="button"
+                className="btn-secondary ai-caption-btn"
+                disabled={!title.trim() || generatingCaptions}
+                onClick={async () => {
+                  setGeneratingCaptions(true);
+                  setCaptionOptions([]);
+                  const captions = await generateCaptions(title, description, platform);
+                  setCaptionOptions(captions);
+                  setGeneratingCaptions(false);
+                }}
+              >
+                {generatingCaptions ? (
+                  <><Loader size={14} className="spinner" /> Generating...</>
+                ) : (
+                  <><Sparkles size={14} /> AI Generate Captions</>
+                )}
+              </button>
+              {!title.trim() && <small className="text-muted">Enter a campaign title first to generate captions.</small>}
+              {/* Caption options */}
+              {captionOptions.length > 0 && (
+                <div className="caption-options">
+                  <small className="text-muted">Click a caption to use it:</small>
+                  {captionOptions.map((caption, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="caption-option"
+                      onClick={() => { setDescription(caption); setCaptionOptions([]); }}
+                    >
+                      <span className="caption-option-num">{idx + 1}</span>
+                      <span className="caption-option-text">{caption}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button type="submit" className="btn-primary">{editingId ? 'Update Post' : 'Save Draft'}</button>
           </form>
