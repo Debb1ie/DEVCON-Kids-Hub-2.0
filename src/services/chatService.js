@@ -52,6 +52,7 @@ const DEVCON_KNOWLEDGE = {
 
 // --- Default AI Settings (overridden by admin config) ---
 const defaultSettings = {
+  aiName: 'DEVCON Kids Assistant',
   aiPersonality: 'Professional, warm, and encouraging. Patient with newcomers.',
   temperatureLevel: 0.7,
   maxContextChunks: 5
@@ -59,13 +60,18 @@ const defaultSettings = {
 
 
 /**
- * Load AI settings from Supabase, falling back to localStorage, then defaults.
+ * Load AI settings from Supabase ai_settings table, falling back to localStorage, then defaults.
+ * The ai_settings table is a single-row table (id=1) with all config as columns.
  */
 async function loadAISettings() {
   try {
-    const { data } = await supabase.from('ai_settings').select('*').single();
-    if (data) return { ...defaultSettings, ...data };
-  } catch { /* Supabase unavailable */ }
+    const { data, error } = await supabase.from('ai_settings').select('*').eq('id', 1).single();
+    if (!error && data) {
+      // Cache in localStorage for offline/fast access
+      localStorage.setItem('aiSettings', JSON.stringify(data));
+      return { ...defaultSettings, ...data };
+    }
+  } catch { /* Supabase unavailable — fall through to localStorage */ }
   try {
     const raw = localStorage.getItem('aiSettings');
     if (raw) return { ...defaultSettings, ...JSON.parse(raw) };
@@ -187,7 +193,7 @@ export async function generateSessionSummary(messages) {
 // ============================================================
 
 function buildSystemPrompt(context, settings) {
-  let prompt = `You are the DEVCON Kids AI Assistant.
+  let prompt = `You are ${settings.aiName || 'the DEVCON Kids AI Assistant'}.
 
 Persona: ${settings.aiPersonality || defaultSettings.aiPersonality}
 You speak like a knowledgeable program coordinator who understands education, events, and volunteer operations.

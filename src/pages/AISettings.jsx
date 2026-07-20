@@ -305,23 +305,23 @@ export default function AISettings() {
             <div className="status-indicator success"></div>
             <div>
               <strong>Supabase</strong>
-              <p>Connected - knowledge base storage ready.</p>
-            </div>
-          </div>
-
-          <div className="status-item">
-            <div className="status-indicator warning"></div>
-            <div>
-              <strong>Google Gemini API</strong>
-              <p>Configure API key in .env (VITE_GEMINI_API_KEY).</p>
+              <p>Connected — knowledge base storage and vector search active.</p>
             </div>
           </div>
 
           <div className="status-item">
             <div className="status-indicator success"></div>
             <div>
-              <strong>Vector Embeddings</strong>
-              <p>Configured with Google Gemini embedding model.</p>
+              <strong>Groq (Chat — Llama 3.3 70B)</strong>
+              <p>Active — powers chatbot responses with streaming.</p>
+            </div>
+          </div>
+
+          <div className="status-item">
+            <div className="status-indicator success"></div>
+            <div>
+              <strong>Mistral (Embeddings — 1024-dim)</strong>
+              <p>Active — generates document embeddings for semantic search.</p>
             </div>
           </div>
         </div>
