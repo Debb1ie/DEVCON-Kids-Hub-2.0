@@ -510,3 +510,61 @@ body.dark-mode .message-citations {
 .action-btn:disabled {
   cursor: default;
 }
+
+/* Smart Doc Suggestion Banner */
+.doc-suggestion-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  max-width: 85%;
+  animation: fadeIn 0.3s ease;
+}
+
+.doc-suggestion-banner.mild {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.doc-suggestion-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.doc-suggestion-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+
+.doc-suggestion-text strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.doc-suggestion-text p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.doc-suggestion-text em {
+  color: #8B5CF6;
+  font-style: normal;
+  font-weight: 600;
+}
+
+body.dark-mode .doc-suggestion-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+body.dark-mode .doc-suggestion-banner.mild {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+}

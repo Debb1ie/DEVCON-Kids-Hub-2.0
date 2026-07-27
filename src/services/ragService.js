@@ -175,19 +175,119 @@ export async function semanticSearch(query, limit = 5) {
 }
 
 /**
- * Retrieve relevant context for RAG
+ * Confidence thresholds for Smart Doc Suggestions
+ * - HIGH: similarity >= 0.55 → confident answer, no suggestion needed
+ * - MEDIUM: 0.4 <= similarity < 0.55 → partial match, mild suggestion
+ * - LOW: similarity < 0.4 or no results → weak/no match, strong suggestion
+ */
+const CONFIDENCE_HIGH = 0.55;
+const CONFIDENCE_MEDIUM = 0.4;
+
+/**
+ * Analyze search results and determine confidence level.
+ * Returns metadata about how well the knowledge base covers the query.
+ * 
+ * Uses TWO signals:
+ * 1. Max similarity score from vector search
+ * 2. Relevance check — are results actually about the query topic?
+ *    (low similarity + results = KB has docs but none match the question)
+ */
+function analyzeConfidence(results, userQuery) {
+  if (!results || results.length === 0) {
+    return {
+      level: 'none',
+      avgSimilarity: 0,
+      maxSimilarity: 0,
+      resultCount: 0,
+      suggestion: extractTopicFromQuery(userQuery)
+    };
+  }
+
+  const similarities = results.map(r => r.similarity);
+  const maxSimilarity = Math.max(...similarities);
+  const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+
+  // If all results have very similar scores (low variance), the KB probably
+  // doesn't have targeted content — it's just returning "closest noise"
+  const variance = similarities.length > 1
+    ? similarities.reduce((sum, s) => sum + Math.pow(s - avgSimilarity, 2), 0) / similarities.length
+    : 0;
+  const isLowVariance = variance < 0.003;
+
+  // All results from same document = likely just returning best-of-one-doc noise
+  const uniqueDocs = new Set(results.map(r => r.metadata?.documentId || r.metadata?.title)).size;
+  const isSingleSource = uniqueDocs <= 1 && results.length > 1;
+
+  // Combined: if low variance OR single source with mediocre similarity → noise
+  const isGenericMatch = (isLowVariance && maxSimilarity < 0.65) || (isSingleSource && maxSimilarity < 0.5);
+
+  if (maxSimilarity >= CONFIDENCE_HIGH && !isGenericMatch) {
+    return { level: 'high', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: null };
+  }
+
+  if (maxSimilarity >= CONFIDENCE_MEDIUM && !isGenericMatch) {
+    return {
+      level: 'medium',
+      avgSimilarity,
+      maxSimilarity,
+      resultCount: results.length,
+      suggestion: extractTopicFromQuery(userQuery)
+    };
+  }
+
+  return {
+    level: 'low',
+    avgSimilarity,
+    maxSimilarity,
+    resultCount: results.length,
+    suggestion: extractTopicFromQuery(userQuery)
+  };
+}
+
+/**
+ * Extract a human-readable topic from the user's query for doc suggestions.
+ * Strips common filler words and returns a concise topic phrase.
+ */
+function extractTopicFromQuery(query) {
+  if (!query || typeof query !== 'string') return 'this topic';
+  const stopWords = ['what', 'is', 'the', 'how', 'do', 'i', 'can', 'you', 'tell', 'me', 'about',
+    'please', 'explain', 'describe', 'a', 'an', 'to', 'of', 'for', 'in', 'on', 'with', 'are', 'does',
+    'did', 'will', 'would', 'could', 'should', 'there', 'their', 'they', 'this', 'that', 'where', 'when',
+    'who', 'which', 'why', 'have', 'has', 'had', 'been', 'being', 'was', 'were', 'get', 'got'];
+  const words = query.toLowerCase().replace(/[?!.,;:'"]/g, '').split(/\s+/);
+  const meaningful = words.filter(w => !stopWords.includes(w) && w.length > 2);
+  if (meaningful.length === 0) return query.substring(0, 40).trim();
+  return meaningful.slice(0, 5).join(' ');
+}
+
+/**
+ * Retrieve relevant context for RAG.
+ * Returns context chunks AND confidence metadata for Smart Doc Suggestions.
+ * 
+ * @param {string} userQuery - The user's question
+ * @returns {Object} { chunks: Array, confidence: Object }
  */
 export async function retrieveContext(userQuery) {
   try {
     const results = await semanticSearch(userQuery, 5);
-    return results.map(r => ({
+    const chunks = results.map(r => ({
       content: r.content,
       metadata: r.metadata,
       similarity: r.similarity
     }));
+    const confidence = analyzeConfidence(results, userQuery);
+
+    console.log(`[ragService] Smart Doc Suggestions — confidence: ${confidence.level}, max: ${confidence.maxSimilarity?.toFixed(3)}, avg: ${confidence.avgSimilarity?.toFixed(3)}, results: ${confidence.resultCount}${confidence.suggestion ? `, topic: "${confidence.suggestion}"` : ''}`);
+
+    // Attach confidence as a property on the array for backward compatibility
+    // (chatService expects an array, but AIChat.jsx can read the extra metadata)
+    chunks._confidence = confidence;
+    return chunks;
   } catch (error) {
     console.error('Context retrieval error:', error);
-    return [];
+    const empty = [];
+    empty._confidence = { level: 'none', avgSimilarity: 0, maxSimilarity: 0, resultCount: 0, suggestion: extractTopicFromQuery(userQuery) };
+    return empty;
   }
 }
 

@@ -93,7 +93,8 @@ async function loadAISettings() {
  */
 export async function callChatWithContext(userMessage, context = [], chatHistory = [], options = {}) {
   const settings = await loadAISettings();
-  const systemPrompt = buildSystemPrompt(context, settings);
+  const confidence = context._confidence || null;
+  const systemPrompt = buildSystemPrompt(context, settings, confidence);
   const conversationMessages = prepareConversationMessages(chatHistory, userMessage);
   const cacheKey = buildCacheKey(userMessage, context, GROQ_MODEL);
 
@@ -192,7 +193,7 @@ export async function generateSessionSummary(messages) {
 // SYSTEM PROMPT BUILDER
 // ============================================================
 
-function buildSystemPrompt(context, settings) {
+function buildSystemPrompt(context, settings, confidence) {
   let prompt = `You are ${settings.aiName || 'the DEVCON Kids AI Assistant'}.
 
 Persona: ${settings.aiPersonality || defaultSettings.aiPersonality}
@@ -212,6 +213,14 @@ Mission: ${DEVCON_KNOWLEDGE.mission}
     });
     prompt += `Prioritize this context over general knowledge. Mention sources naturally.`;
   }
+
+  // Smart Doc Suggestions: instruct the AI about confidence level
+  if (confidence && (confidence.level === 'low' || confidence.level === 'none')) {
+    prompt += `\n\nIMPORTANT: The knowledge base has very little or no relevant information for this question. Be transparent — let the user know your answer is based on general knowledge, not uploaded documents. Keep your answer helpful but brief.`;
+  } else if (confidence && confidence.level === 'medium') {
+    prompt += `\n\nNote: The knowledge base has partial information on this topic. Answer using what's available, but mention if there are gaps in the documentation.`;
+  }
+
   return prompt;
 }
 

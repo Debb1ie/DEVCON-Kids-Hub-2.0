@@ -140,6 +140,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
     try {
       const context = await retrieveContext(text);
+      const confidence = context._confidence || { level: 'high', suggestion: null };
 
       let streamedText = '';
       let firstTokenSeen = false;
@@ -174,6 +175,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
               citations: result.sources,
               isStreaming: false,
               timestamp: new Date(),
+              confidence,
               meta: {
                 label: `${responseTimeMs} ms`,
                 responseTimeMs,
@@ -268,14 +270,34 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           <span className="plain-message">{msg.content}</span>
         )}
       </div>
-      {msg.citations && msg.citations.length > 0 && (
+      {/* Show sources only when confidence is not 'none' or 'low' and there are citations */}
+      {msg.citations && msg.citations.length > 0 && (!msg.confidence || msg.confidence.level === 'high' || msg.confidence.level === 'medium') && (
         <div className="message-citations">
           <strong>Sources:</strong>
-          {msg.citations.map((c) => (
-            <div key={c.id} className="citation">
-              [{c.id}] {c.title}
+          {[...new Map(msg.citations.map(c => [c.title, c])).values()].map((c, idx) => (
+            <div key={c.documentId || idx} className="citation">
+              [{idx + 1}] {c.title}
             </div>
           ))}
+        </div>
+      )}
+      {/* Smart Doc Suggestion — shown when confidence is low/none */}
+      {msg.confidence && (msg.confidence.level === 'low' || msg.confidence.level === 'none') && msg.confidence.suggestion && (
+        <div className="doc-suggestion-banner">
+          <div className="doc-suggestion-icon">📄</div>
+          <div className="doc-suggestion-text">
+            <strong>Knowledge gap detected</strong>
+            <p>I couldn't find strong matches in the Knowledge Base. Consider uploading a document about: <em>{msg.confidence.suggestion}</em></p>
+          </div>
+        </div>
+      )}
+      {msg.confidence && msg.confidence.level === 'medium' && msg.confidence.suggestion && (
+        <div className="doc-suggestion-banner mild">
+          <div className="doc-suggestion-icon">💡</div>
+          <div className="doc-suggestion-text">
+            <strong>Partial match</strong>
+            <p>I found some related info, but more docs about <em>{msg.confidence.suggestion}</em> would improve my answers.</p>
+          </div>
         </div>
       )}
       {/* Action buttons for assistant messages (not welcome, not streaming) */}
