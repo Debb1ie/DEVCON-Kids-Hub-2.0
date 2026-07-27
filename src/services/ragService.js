@@ -219,7 +219,7 @@ function analyzeConfidence(results, userQuery) {
   const isSingleSource = uniqueDocs <= 1 && results.length > 1;
 
   // Combined: if low variance OR single source with mediocre similarity → noise
-  const isGenericMatch = (isLowVariance && maxSimilarity < 0.65) || (isSingleSource && maxSimilarity < 0.5);
+  const isGenericMatch = (isLowVariance && maxSimilarity < 0.65) || (isSingleSource && maxSimilarity < 0.7);
 
   if (maxSimilarity >= CONFIDENCE_HIGH && !isGenericMatch) {
     return { level: 'high', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: null };

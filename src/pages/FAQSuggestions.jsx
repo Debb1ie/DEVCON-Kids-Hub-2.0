@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Trash2, Loader, HelpCircle, TrendingUp, AlertTriangle } from 'lucide-react';
-import { getFAQSuggestions, updateSuggestionStatus, deleteSuggestion, getQuestionStats } from '../services/faqService';
+import { CheckCircle, XCircle, Trash2, Loader, HelpCircle, TrendingUp, AlertTriangle, Sparkles, Database } from 'lucide-react';
+import { getFAQSuggestions, updateSuggestionStatus, updateSuggestionAnswer, deleteSuggestion, getQuestionStats, generateFAQAnswer, addFAQToKnowledgeBase } from '../services/faqService';
 import { useApp } from '../context/AppState';
 import './FAQSuggestions.css';
 
@@ -11,6 +11,9 @@ export default function FAQSuggestions() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const [actionLoading, setActionLoading] = useState(null);
+  const [generatingId, setGeneratingId] = useState(null);
+  const [editingAnswer, setEditingAnswer] = useState({});
+  const [addingToKB, setAddingToKB] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -33,12 +36,46 @@ export default function FAQSuggestions() {
   };
 
   const handleApprove = async (id) => {
-    setActionLoading(id);
-    const success = await updateSuggestionStatus(id, 'approved', user?.id);
-    if (success) {
+    const suggestion = suggestions.find(s => s.id === id);
+    if (!suggestion) return;
+
+    // Step 1: Generate an answer using AI
+    setGeneratingId(id);
+    const answer = await generateFAQAnswer(suggestion.topic, suggestion.sample_questions || []);
+    setGeneratingId(null);
+
+    if (answer) {
+      // Save the answer and show it for editing
+      await updateSuggestionAnswer(id, answer);
+      setEditingAnswer(prev => ({ ...prev, [id]: answer }));
+      setSuggestions(prev => prev.map(s => s.id === id ? { ...s, suggested_answer: answer, status: 'approved' } : s));
+      await updateSuggestionStatus(id, 'approved', user?.id);
+    } else {
+      // If generation failed, still approve but with empty answer for manual entry
+      setEditingAnswer(prev => ({ ...prev, [id]: '' }));
       setSuggestions(prev => prev.map(s => s.id === id ? { ...s, status: 'approved' } : s));
+      await updateSuggestionStatus(id, 'approved', user?.id);
     }
-    setActionLoading(null);
+  };
+
+  const handleAddToKB = async (id) => {
+    const suggestion = suggestions.find(s => s.id === id);
+    const answer = editingAnswer[id] || suggestion?.suggested_answer;
+    if (!suggestion || !answer) return;
+
+    setAddingToKB(id);
+    const success = await addFAQToKnowledgeBase(suggestion.topic, answer, suggestion.sample_questions || []);
+    setAddingToKB(null);
+
+    if (success) {
+      // Remove from list — it's now in the KB
+      setSuggestions(prev => prev.filter(s => s.id !== id));
+      setEditingAnswer(prev => { const copy = { ...prev }; delete copy[id]; return copy; });
+    }
+  };
+
+  const handleAnswerChange = (id, value) => {
+    setEditingAnswer(prev => ({ ...prev, [id]: value }));
   };
 
   const handleDismiss = async (id) => {
@@ -156,7 +193,37 @@ export default function FAQSuggestions() {
               {suggestion.suggested_answer && (
                 <div className="faq-answer">
                   <span className="answer-label">Suggested answer:</span>
-                  <p>{suggestion.suggested_answer}</p>
+                  {editingAnswer[suggestion.id] !== undefined ? (
+                    <textarea
+                      className="faq-answer-editor"
+                      value={editingAnswer[suggestion.id]}
+                      onChange={(e) => handleAnswerChange(suggestion.id, e.target.value)}
+                      rows={6}
+                    />
+                  ) : (
+                    <p>{suggestion.suggested_answer}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Show editor for newly approved items without a saved answer */}
+              {!suggestion.suggested_answer && editingAnswer[suggestion.id] !== undefined && (
+                <div className="faq-answer">
+                  <span className="answer-label">Write an answer:</span>
+                  <textarea
+                    className="faq-answer-editor"
+                    value={editingAnswer[suggestion.id]}
+                    onChange={(e) => handleAnswerChange(suggestion.id, e.target.value)}
+                    rows={6}
+                    placeholder="Type or paste an answer for this FAQ..."
+                  />
+                </div>
+              )}
+
+              {generatingId === suggestion.id && (
+                <div className="faq-generating">
+                  <Loader size={16} className="spinner" />
+                  <span>Generating answer with AI...</span>
                 </div>
               )}
 
@@ -166,11 +233,11 @@ export default function FAQSuggestions() {
                     <button
                       className="faq-action-btn approve"
                       onClick={() => handleApprove(suggestion.id)}
-                      disabled={actionLoading === suggestion.id}
-                      title="Approve — add to Knowledge Base"
+                      disabled={actionLoading === suggestion.id || generatingId === suggestion.id}
+                      title="Approve — generate answer with AI"
                     >
-                      <CheckCircle size={16} />
-                      <span>Approve</span>
+                      <Sparkles size={16} />
+                      <span>Approve & Generate</span>
                     </button>
                     <button
                       className="faq-action-btn dismiss"
@@ -182,6 +249,17 @@ export default function FAQSuggestions() {
                       <span>Dismiss</span>
                     </button>
                   </>
+                )}
+                {(editingAnswer[suggestion.id] || suggestion.suggested_answer) && suggestion.status === 'approved' && (
+                  <button
+                    className="faq-action-btn add-kb"
+                    onClick={() => handleAddToKB(suggestion.id)}
+                    disabled={addingToKB === suggestion.id || !(editingAnswer[suggestion.id] || suggestion.suggested_answer)}
+                    title="Add this FAQ to the Knowledge Base"
+                  >
+                    {addingToKB === suggestion.id ? <Loader size={16} className="spinner" /> : <Database size={16} />}
+                    <span>{addingToKB === suggestion.id ? 'Adding...' : 'Add to Knowledge Base'}</span>
+                  </button>
                 )}
                 <button
                   className="faq-action-btn delete"
