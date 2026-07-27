@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X, Send, MessageSquare, Minimize2, Loader, Trash2, Copy, ThumbsUp, ThumbsDown, Check } from 'lucide-react';
 import { callChatWithContext } from '../services/chatService';
 import { retrieveContext } from '../services/ragService';
+import { logQuestion } from '../services/faqService';
 import { supabase } from '../lib/supabase';
 import './AIChat.css';
 
@@ -186,6 +187,9 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
             }
           : msg
       )));
+
+      // FAQ Auto-Builder: log the question with confidence (non-blocking)
+      logQuestion(text, confidence.level).catch(() => {});
     } catch (error) {
       console.error('Chat error:', error);
       setMessages((prev) => prev.map((msg) => (

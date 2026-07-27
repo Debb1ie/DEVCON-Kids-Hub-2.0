@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays, Brain, Database, Share2, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays, Brain, Database, Share2, ClipboardList, HelpCircle } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import './Sidebar.css';
 
@@ -17,6 +17,7 @@ export default function Sidebar() {
     { name: 'Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
     ...(isSuperadmin ? [
       { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Settings size={20} /> },
+      { name: 'FAQ Builder', path: '/dashboard/faq-suggestions', icon: <HelpCircle size={20} /> },
       { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
       { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
     ] : []),
