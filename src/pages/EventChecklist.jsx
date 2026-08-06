@@ -8,12 +8,13 @@
 import { useEffect, useState } from 'react';
 import { ClipboardList, Sparkles, Loader, Check, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useApp } from '../context/AppState';
 import './Events.css';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 export default function EventChecklist() {
-  const [events, setEvents] = useState([]);
+  const { eventsList } = useApp();
   const [selectedEventId, setSelectedEventId] = useState('');
   const [tasks, setTasks] = useState([]);
   const [generating, setGenerating] = useState(false);
@@ -21,39 +22,31 @@ export default function EventChecklist() {
   const [newTask, setNewTask] = useState('');
   const [error, setError] = useState(null);
 
-  // Load events on mount
-  useEffect(() => {
-    loadEvents();
-  }, []);
-
   // Load tasks when event changes
   useEffect(() => {
     if (selectedEventId) loadTasks(selectedEventId);
     else setTasks([]);
   }, [selectedEventId]);
 
-  async function loadEvents() {
-    const { data, error } = await supabase
-      .from('events')
-      .select('id, title, type, chapter, event_date, status')
-      .order('event_date', { ascending: false });
-    if (!error && data) setEvents(data);
-  }
-
   async function loadTasks(eventId) {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('event_tasks')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('sort_order', { ascending: true });
-    if (!error) setTasks(data || []);
+    // Only load from DB if eventId looks like a UUID (real DB event)
+    if (typeof eventId === 'string' && eventId.length > 10) {
+      const { data, error } = await supabase
+        .from('event_tasks')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('sort_order', { ascending: true });
+      if (!error) { setTasks(data || []); setLoading(false); return; }
+    }
+    // Fallback events (numeric IDs) have no DB tasks
+    setTasks([]);
     setLoading(false);
   }
 
   async function handleGenerate() {
     if (!selectedEventId) return;
-    const event = events.find(e => e.id === selectedEventId);
+    const event = eventsList.find(e => String(e.id) === String(selectedEventId));
     if (!event) return;
 
     setGenerating(true);
@@ -81,23 +74,42 @@ export default function EventChecklist() {
       const { tasks: generated, source } = await res.json();
       if (!generated?.length) throw new Error('No tasks generated');
 
-      // Persist to database
-      const rows = generated.map((item, idx) => ({
+      // Try to persist to database (only works for real UUID events)
+      const isRealEvent = typeof selectedEventId === 'string' && selectedEventId.length > 10;
+
+      if (isRealEvent) {
+        const rows = generated.map((item, idx) => ({
+          event_id: selectedEventId,
+          task: item.task,
+          phase: item.phase || 'General',
+          status: 'todo',
+          sort_order: tasks.length + idx,
+          generated_by: source === 'ai' ? 'ai' : 'template',
+        }));
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from('event_tasks')
+          .insert(rows)
+          .select();
+
+        if (!insertErr && inserted) {
+          setTasks(prev => [...prev, ...inserted]);
+          return;
+        }
+      }
+
+      // Fallback: store in local state only (for fallback events or DB errors)
+      const localTasks = generated.map((item, idx) => ({
+        id: `local-${Date.now()}-${idx}`,
         event_id: selectedEventId,
         task: item.task,
         phase: item.phase || 'General',
         status: 'todo',
         sort_order: tasks.length + idx,
         generated_by: source === 'ai' ? 'ai' : 'template',
+        _local: true,
       }));
-
-      const { data: inserted, error: insertErr } = await supabase
-        .from('event_tasks')
-        .insert(rows)
-        .select();
-
-      if (insertErr) throw insertErr;
-      setTasks(prev => [...prev, ...(inserted || [])]);
+      setTasks(prev => [...prev, ...localTasks]);
     } catch (err) {
       console.error('[EventChecklist]', err);
       setError(err.message || 'Failed to generate checklist');
@@ -110,44 +122,66 @@ export default function EventChecklist() {
     const next = task.status === 'done' ? 'todo' : 'done';
     const completedAt = next === 'done' ? new Date().toISOString() : null;
 
-    const { error } = await supabase
-      .from('event_tasks')
-      .update({ status: next, completed_at: completedAt })
-      .eq('id', task.id);
-
-    if (!error) {
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: next, completed_at: completedAt } : t));
+    if (!task._local) {
+      const { error } = await supabase
+        .from('event_tasks')
+        .update({ status: next, completed_at: completedAt })
+        .eq('id', task.id);
+      if (error) return;
     }
+
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: next, completed_at: completedAt } : t));
   }
 
   async function addManualTask() {
     if (!newTask.trim() || !selectedEventId) return;
+    const isRealEvent = typeof selectedEventId === 'string' && selectedEventId.length > 10;
 
-    const { data, error } = await supabase
-      .from('event_tasks')
-      .insert({
-        event_id: selectedEventId,
-        task: newTask.trim(),
-        phase: 'General',
-        status: 'todo',
-        sort_order: tasks.length,
-        generated_by: 'manual',
-      })
-      .select()
-      .single();
+    if (isRealEvent) {
+      const { data, error } = await supabase
+        .from('event_tasks')
+        .insert({
+          event_id: selectedEventId,
+          task: newTask.trim(),
+          phase: 'General',
+          status: 'todo',
+          sort_order: tasks.length,
+          generated_by: 'manual',
+        })
+        .select()
+        .single();
 
-    if (!error && data) {
-      setTasks(prev => [...prev, data]);
-      setNewTask('');
+      if (!error && data) {
+        setTasks(prev => [...prev, data]);
+        setNewTask('');
+        return;
+      }
     }
+
+    // Local-only fallback
+    setTasks(prev => [...prev, {
+      id: `local-${Date.now()}`,
+      event_id: selectedEventId,
+      task: newTask.trim(),
+      phase: 'General',
+      status: 'todo',
+      sort_order: tasks.length,
+      generated_by: 'manual',
+      _local: true,
+    }]);
+    setNewTask('');
   }
 
   async function deleteTask(taskId) {
-    const { error } = await supabase.from('event_tasks').delete().eq('id', taskId);
-    if (!error) setTasks(prev => prev.filter(t => t.id !== taskId));
+    const task = tasks.find(t => t.id === taskId);
+    if (task && !task._local) {
+      const { error } = await supabase.from('event_tasks').delete().eq('id', taskId);
+      if (error) return;
+    }
+    setTasks(prev => prev.filter(t => t.id !== taskId));
   }
 
-  const selectedEvent = events.find(e => e.id === selectedEventId);
+  const selectedEvent = eventsList.find(e => e.id === selectedEventId);
   const completedCount = tasks.filter(t => t.status === 'done').length;
 
   // Group tasks by phase
@@ -182,8 +216,8 @@ export default function EventChecklist() {
           onChange={(e) => setSelectedEventId(e.target.value)}
         >
           <option value="">-- Choose an event --</option>
-          {events.map(ev => (
-            <option key={ev.id} value={ev.id}>
+          {eventsList.map(ev => (
+            <option key={ev.id} value={String(ev.id)}>
               {ev.title} ({ev.type || 'Event'}) — {ev.event_date || 'No date'} — {ev.chapter || 'No chapter'}
             </option>
           ))}
