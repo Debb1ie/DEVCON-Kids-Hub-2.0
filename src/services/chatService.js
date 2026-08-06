@@ -120,13 +120,17 @@ export const callGeminiWithContext = callChatWithContext;
 async function callGroqAPI({ systemPrompt, messages, context, temperature, onDelta, onFirstToken }) {
   const apiMessages = [{ role: 'system', content: systemPrompt }, ...messages];
 
+  // Dynamic max_tokens based on query complexity
+  const lastUserMsg = messages[messages.length - 1]?.content || '';
+  const maxTokens = estimateResponseLength(lastUserMsg, context);
+
   const response = await fetch(GROQ_BASE_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${GROQ_API_KEY}`
     },
-    body: JSON.stringify({ model: GROQ_MODEL, messages: apiMessages, temperature, max_tokens: 1024, stream: true })
+    body: JSON.stringify({ model: GROQ_MODEL, messages: apiMessages, temperature, max_tokens: maxTokens, stream: true })
   });
 
   if (!response.ok) {
@@ -212,11 +216,16 @@ App modules: ${DEVCON_KNOWLEDGE.modules.join(', ')}
 Mission: ${DEVCON_KNOWLEDGE.mission}
 `;
   if (context.length > 0) {
-    prompt += `\nKnowledge base context:\n`;
+    // Context summary — helps the LLM understand what's available before reading raw chunks
+    const uniqueSources = [...new Set(context.map(d => d.metadata?.title || 'Document'))];
+    const avgSim = (context.reduce((sum, d) => sum + (d.similarity || 0), 0) / context.length).toFixed(2);
+    prompt += `\nContext summary: ${context.length} relevant chunks found from ${uniqueSources.length} source(s): ${uniqueSources.join(', ')}. Average relevance: ${avgSim}.\n\n`;
+    
+    prompt += `Knowledge base context:\n`;
     context.forEach((doc, idx) => {
-      prompt += `[Source ${idx + 1}: ${doc.metadata?.title || 'Document'}]\n${doc.content}\n\n`;
+      prompt += `[Source ${idx + 1}: ${doc.metadata?.title || 'Document'} | relevance: ${(doc.similarity || 0).toFixed(2)}]\n${doc.content}\n\n`;
     });
-    prompt += `Prioritize this context over general knowledge. Mention sources naturally.`;
+    prompt += `Prioritize this context over general knowledge. Cite sources by name when answering. If the context partially answers the question, say what you found and what's missing.`;
   }
 
   // Smart Doc Suggestions: instruct the AI about confidence level
@@ -277,6 +286,45 @@ function writeCache(key, promise) {
     value: null, expiresAt
   };
   responseCache.set(key, entry);
+}
+
+// ============================================================
+// DYNAMIC RESPONSE LENGTH
+// ============================================================
+
+/**
+ * Estimate optimal max_tokens based on query type and available context.
+ * Short factual questions get shorter limits; complex explanations get more room.
+ */
+function estimateResponseLength(query, context) {
+  const q = query.toLowerCase();
+  const contextLen = (context || []).length;
+
+  // Very short factual questions → short response
+  if (q.length < 30 && /^(when|where|who|what is|how many|how much|is there|does|did)/.test(q)) {
+    return 256;
+  }
+
+  // Yes/no questions
+  if (/^(is|are|can|do|does|did|will|would|should|has|have)\b/.test(q) && q.length < 50) {
+    return 256;
+  }
+
+  // List/explain requests → medium
+  if (/\b(list|explain|describe|tell me about|what are|summarize|overview)\b/.test(q)) {
+    return 768;
+  }
+
+  // Multi-part or complex questions (contains "and", multiple question marks, long)
+  if (q.length > 80 || (q.match(/\?/g) || []).length > 1 || /\b(and also|additionally|furthermore)\b/.test(q)) {
+    return 1024;
+  }
+
+  // Rich context available → allow more room to cite sources
+  if (contextLen >= 4) return 768;
+
+  // Default
+  return 512;
 }
 
 // ============================================================

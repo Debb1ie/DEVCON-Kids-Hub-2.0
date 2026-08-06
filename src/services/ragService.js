@@ -270,26 +270,38 @@ function extractTopicFromQuery(query) {
 
 /**
  * Retrieve relevant context for RAG.
- * Returns context chunks AND confidence metadata for Smart Doc Suggestions.
+ * Includes query enhancement for follow-up questions and context filtering.
  * 
  * @param {string} userQuery - The user's question
+ * @param {Array} chatHistory - Previous messages for follow-up detection
  * @returns {Object} { chunks: Array, confidence: Object }
  */
-export async function retrieveContext(userQuery) {
+export async function retrieveContext(userQuery, chatHistory = []) {
   try {
-    const results = await semanticSearch(userQuery, 5);
-    const chunks = results.map(r => ({
+    // Step 1: Enhance the query if it's a follow-up
+    const enhancedQuery = enhanceQuery(userQuery, chatHistory);
+
+    // Step 2: Semantic search with enhanced query
+    const results = await semanticSearch(enhancedQuery, 7); // Fetch 7, filter to best
+
+    // Step 3: Filter out low-relevance chunks (below 0.5 = noise)
+    const filtered = results.filter(r => r.similarity >= 0.5);
+    
+    // If filtering removed everything, fall back to top 3 unfiltered results
+    const finalResults = filtered.length > 0 ? filtered.slice(0, 5) : results.slice(0, 3);
+
+    const chunks = finalResults.map(r => ({
       content: r.content,
       metadata: r.metadata,
       similarity: r.similarity
     }));
-    const confidence = analyzeConfidence(results, userQuery);
+    const confidence = analyzeConfidence(finalResults, userQuery);
 
-    console.log(`[ragService] Smart Doc Suggestions — confidence: ${confidence.level}, max: ${confidence.maxSimilarity?.toFixed(3)}, avg: ${confidence.avgSimilarity?.toFixed(3)}, results: ${confidence.resultCount}${confidence.suggestion ? `, topic: "${confidence.suggestion}"` : ''}`);
+    console.log(`[ragService] Smart Doc Suggestions — confidence: ${confidence.level}, max: ${confidence.maxSimilarity?.toFixed(3)}, avg: ${confidence.avgSimilarity?.toFixed(3)}, results: ${confidence.resultCount}${confidence.suggestion ? `, topic: "${confidence.suggestion}"` : ''}${enhancedQuery !== userQuery ? ` (enhanced from: "${userQuery.substring(0, 30)}")` : ''}`);
 
     // Attach confidence as a property on the array for backward compatibility
-    // (chatService expects an array, but AIChat.jsx can read the extra metadata)
     chunks._confidence = confidence;
+    chunks._enhancedQuery = enhancedQuery;
     return chunks;
   } catch (error) {
     console.error('Context retrieval error:', error);
@@ -297,6 +309,51 @@ export async function retrieveContext(userQuery) {
     empty._confidence = { level: 'none', avgSimilarity: 0, maxSimilarity: 0, resultCount: 0, suggestion: extractTopicFromQuery(userQuery) };
     return empty;
   }
+}
+
+/**
+ * Enhance a query for better retrieval.
+ * Detects follow-up questions and resolves them using conversation history.
+ * 
+ * Examples:
+ * - "Tell me more" + previous topic "DEVCON Kids chapters" → "Tell me more about DEVCON Kids chapters"
+ * - "What about Cebu?" + previous "What chapters does DEVCON Kids have?" → "What about Cebu chapter in DEVCON Kids?"
+ * - "How do I volunteer?" → unchanged (complete question)
+ */
+function enhanceQuery(query, chatHistory = []) {
+  if (!query || chatHistory.length === 0) return query;
+
+  const lowerQuery = query.toLowerCase().trim();
+  
+  // Detect follow-up patterns
+  const isFollowUp = (
+    lowerQuery.length < 40 && (
+      /^(tell me more|more details|explain more|go on|continue|elaborate)/.test(lowerQuery) ||
+      /^(what about|how about|and |also |what else)/.test(lowerQuery) ||
+      /^(why|when|where|who|how)\??$/.test(lowerQuery) ||
+      /^(it|that|this|they|them|those|these)\b/.test(lowerQuery) ||
+      /^(can you|could you) (explain|tell|describe) (it|that|this|more)/.test(lowerQuery)
+    )
+  );
+
+  if (!isFollowUp) return query;
+
+  // Find the last user message that was a complete question (not a follow-up itself)
+  const previousUserMessages = chatHistory
+    .filter(m => m.role === 'user' && m.content && m.content.length > 15)
+    .slice(-3);
+
+  if (previousUserMessages.length === 0) return query;
+
+  const lastFullQuestion = previousUserMessages[previousUserMessages.length - 1].content;
+  
+  // Extract the core topic from the previous exchange
+  const topicFromQuestion = extractTopicFromQuery(lastFullQuestion);
+  
+  // Combine: append the topic context to the follow-up query
+  const enhanced = `${query} (regarding: ${topicFromQuestion}, context: ${lastFullQuestion.substring(0, 100)})`;
+  
+  return enhanced;
 }
 
 /**

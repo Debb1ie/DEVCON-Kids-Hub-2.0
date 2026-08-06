@@ -140,7 +140,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     const history = [...messages, userMessage].slice(-10);
 
     try {
-      const context = await retrieveContext(text);
+      const context = await retrieveContext(text, history);
       const confidence = context._confidence || { level: 'high', suggestion: null };
 
       let streamedText = '';
