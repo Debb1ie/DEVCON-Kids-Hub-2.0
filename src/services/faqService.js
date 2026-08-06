@@ -1,7 +1,7 @@
 /**
  * FAQ Auto-Builder Service
  * 
- * Tracks questions asked to the chatbot, identifies patterns,
+ * Tracks questions asked to the chatbot, identifies patterns via embeddings,
  * and generates FAQ suggestions for admins to review.
  * 
  * Tables used:
@@ -17,82 +17,17 @@ const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
-// --- Topic Extraction ---
-// Extracts normalized keywords from questions for FAQ grouping.
-// The goal: different phrasings of the same question should produce overlapping keywords.
-const STOP_WORDS = new Set([
-  // Question words
-  'what', 'whats', 'how', 'why', 'when', 'where', 'who', 'which', 'whom',
-  // Pronouns & determiners
-  'i', 'me', 'my', 'you', 'your', 'we', 'our', 'us', 'they', 'them', 'their',
-  'he', 'she', 'it', 'his', 'her', 'its', 'this', 'that', 'these', 'those',
-  'a', 'an', 'the', 'some', 'any', 'all', 'each', 'every',
-  // Verbs (generic)
-  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am',
-  'do', 'does', 'did', 'have', 'has', 'had', 'having',
-  'will', 'would', 'could', 'should', 'can', 'may', 'might', 'shall',
-  'get', 'got', 'make', 'made', 'let', 'take', 'give', 'go', 'come',
-  'know', 'think', 'want', 'need', 'use', 'try', 'find', 'tell', 'ask',
-  'work', 'works', 'help', 'start', 'keep', 'put', 'set', 'run', 'say',
-  // Prepositions & conjunctions
-  'to', 'of', 'for', 'in', 'on', 'at', 'by', 'with', 'from', 'up', 'out',
-  'about', 'into', 'through', 'after', 'before', 'between', 'under', 'over',
-  'and', 'but', 'or', 'nor', 'so', 'yet', 'if', 'then', 'than',
-  // Adverbs & fillers
-  'not', 'no', 'yes', 'just', 'also', 'very', 'really', 'much', 'more',
-  'like', 'well', 'still', 'already', 'even', 'only', 'again', 'here', 'there',
-  // Common question filler
-  'please', 'explain', 'describe', 'way', 'thing', 'something', 'anything',
-  'new', 'different', 'possible', 'able', 'sure', 'right',
-  'step', 'steps', 'process', 'procedure', 'method', 'approach'
-]);
-
 /**
- * Basic stemmer — reduces words to a root form for grouping.
- * Not perfect, but good enough to group volunteer/volunteers/volunteering.
- */
-function stemWord(w) {
-  if (w.length <= 3) return w;
-  if (w.endsWith('ation') && w.length > 6) return w.slice(0, -5);
-  if (w.endsWith('tion') && w.length > 6) return w.slice(0, -4);
-  if (w.endsWith('ment') && w.length > 6) return w.slice(0, -4);
-  if (w.endsWith('ness') && w.length > 6) return w.slice(0, -4);
-  if (w.endsWith('ling') && w.length > 5) return w.slice(0, -4);
-  if (w.endsWith('ing') && w.length > 5) return w.slice(0, -3);
-  if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
-  if (w.endsWith('ers') && w.length > 5) return w.slice(0, -1);
-  if (w.endsWith('ed') && w.length > 4) return w.slice(0, -2);
-  if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
-  if (w.endsWith('s') && !w.endsWith('ss') && !w.endsWith('us') && w.length > 4) return w.slice(0, -1);
-  return w;
-}
-
-/**
- * Extract normalized keywords from a question.
- * Returns sorted array of stemmed meaningful words.
- */
-function extractKeywords(question) {
-  if (!question || typeof question !== 'string') return [];
-  // Strip punctuation including smart quotes and contractions
-  const cleaned = question.toLowerCase()
-    .replace(/['']/g, '') // remove apostrophes (what's → whats)
-    .replace(/[?!.,;:'"()""\-–—]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const words = cleaned.split(' ');
-  const meaningful = words.filter(w => !STOP_WORDS.has(w) && w.length > 2);
-  const stemmed = meaningful.map(stemWord);
-  return [...new Set(stemmed)].sort();
-}
-
-/**
- * Extract a normalized topic string from a question for storage.
- * Takes the top 3 keywords sorted alphabetically.
+ * Extract a normalized topic label from a question for display/storage.
+ * Takes first 3 meaningful words (>3 chars, not common fillers).
  */
 function extractTopic(question) {
-  const keywords = extractKeywords(question);
-  if (keywords.length === 0) return 'general';
-  return keywords.slice(0, 3).join(' ');
+  if (!question || typeof question !== 'string') return 'general';
+  const fillers = new Set(['what', 'how', 'why', 'when', 'where', 'who', 'the', 'is', 'are', 'can', 'do', 'does', 'will', 'would', 'could', 'should', 'about', 'this', 'that', 'please', 'tell', 'explain']);
+  const words = question.toLowerCase().replace(/[?!.,;:'"]/g, '').split(/\s+/);
+  const meaningful = words.filter(w => w.length > 3 && !fillers.has(w));
+  if (meaningful.length === 0) return 'general';
+  return meaningful.slice(0, 3).join(' ');
 }
 
 /**
@@ -100,20 +35,15 @@ function extractTopic(question) {
  * Called after every user message in the chatbot.
  * Non-blocking — errors are swallowed to never disrupt chat.
  * 
- * Uses Mistral embeddings to find semantically similar questions for grouping.
- * Falls back to keyword-based topic matching if embedding fails.
- * 
  * @param {string} question - The user's question text
  * @param {string} confidenceLevel - 'high', 'medium', 'low', or 'none'
  * @param {string|null} userId - Current user's ID (optional)
  */
 export async function logQuestion(question, confidenceLevel = 'high', userId = null) {
   try {
-    if (!question || question.trim().length < 5) return; // Skip very short messages
+    if (!question || question.trim().length < 5) return;
 
     const topic = extractTopic(question);
-    
-    // Generate embedding for semantic grouping
     const embedding = await generateEmbedding(question);
 
     await supabase.from('ai_faq_questions').insert({
@@ -124,15 +54,11 @@ export async function logQuestion(question, confidenceLevel = 'high', userId = n
       embedding: embedding.length > 0 ? embedding : null
     });
 
-    // After logging, check if this question clusters with others
+    // Only cluster via embeddings — if no embedding, skip clustering
     if (embedding.length > 0) {
       await maybeCreateSuggestionByEmbedding(embedding, topic, question);
-    } else {
-      // Fallback: keyword-based matching
-      await maybeCreateSuggestionByKeyword(topic, question);
     }
   } catch (error) {
-    // Never crash the chat — logging is best-effort
     console.warn('[faqService] Failed to log question:', error.message);
   }
 }
@@ -144,7 +70,6 @@ export async function logQuestion(question, confidenceLevel = 'high', userId = n
  */
 async function maybeCreateSuggestionByEmbedding(embedding, topic, latestQuestion) {
   try {
-    // Find similar questions using pgvector cosine similarity
     const { data: similar, error } = await supabase.rpc('find_similar_faq_questions', {
       query_embedding: embedding,
       similarity_threshold: 0.75,
@@ -152,8 +77,8 @@ async function maybeCreateSuggestionByEmbedding(embedding, topic, latestQuestion
     });
 
     if (error) {
-      console.warn('[faqService] Similarity search failed, falling back to keyword:', error.message);
-      return await maybeCreateSuggestionByKeyword(topic, latestQuestion);
+      console.warn('[faqService] Similarity search failed:', error.message);
+      return;
     }
 
     const count = (similar || []).length;
@@ -205,61 +130,6 @@ async function maybeCreateSuggestionByEmbedding(embedding, topic, latestQuestion
     }
   } catch (error) {
     console.warn('[faqService] Embedding-based suggestion failed:', error.message);
-  }
-}
-
-/**
- * Keyword-based fallback for suggestion creation.
- * Used when embedding generation fails (no API key, network error, etc.)
- */
-async function maybeCreateSuggestionByKeyword(topic, latestQuestion) {
-  try {
-    const keywords = topic.split(' ');
-    if (keywords.length === 0 || topic === 'general') return;
-
-    const { count, error: countError } = await supabase
-      .from('ai_faq_questions')
-      .select('*', { count: 'exact', head: true })
-      .like('topic', `%${keywords[0]}%`);
-
-    if (countError || !count || count < 3) return;
-
-    const { data: existing } = await supabase
-      .from('ai_faq_suggestions')
-      .select('id, topic, question_count, sample_questions')
-      .like('topic', `%${keywords[0]}%`)
-      .in('status', ['pending', 'approved'])
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      const suggestion = existing[0];
-      const samples = Array.isArray(suggestion.sample_questions) ? suggestion.sample_questions : [];
-      if (samples.length < 5 && !samples.includes(latestQuestion.trim())) {
-        samples.push(latestQuestion.trim().substring(0, 200));
-      }
-      await supabase
-        .from('ai_faq_suggestions')
-        .update({ question_count: count, sample_questions: samples })
-        .eq('id', suggestion.id);
-    } else {
-      const { data: sampleRows } = await supabase
-        .from('ai_faq_questions')
-        .select('question')
-        .like('topic', `%${keywords[0]}%`)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      const samples = (sampleRows || []).map(r => r.question.substring(0, 200));
-
-      await supabase.from('ai_faq_suggestions').insert({
-        topic,
-        sample_questions: samples,
-        question_count: count,
-        status: 'pending'
-      });
-    }
-  } catch (error) {
-    console.warn('[faqService] Keyword-based suggestion failed:', error.message);
   }
 }
 

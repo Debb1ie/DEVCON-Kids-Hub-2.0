@@ -15,6 +15,9 @@ dist-ssr
 # Environment files
 .env
 .env.local
+
+# Eval reports (generated, may contain API responses)
+tests/eval/report.json
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

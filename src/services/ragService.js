@@ -1,39 +1,62 @@
 /**
  * Vector Embedding & RAG Service
- * Handles document embeddings, storage, and semantic search using Supabase pgvector.
+ * Routes through Supabase Edge Function (ai-embed) for embeddings and search.
+ * Falls back to direct Mistral call if Edge Function is unavailable (transitional).
  * 
- * Embedding provider: Mistral AI (mistral-embed, 1024 dimensions)
- * Free tier: 1M tokens/month — more than enough for a knowledge base.
- * Docs: https://docs.mistral.ai/capabilities/embeddings/
+ * A06: Server-side Mistral via Edge Function.
  */
 
 import { supabase } from '../lib/supabase';
 
-// --- Mistral Embedding Config ---
+// --- Mistral Embedding Config (fallback only, remove after A06 verified) ---
 const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY;
 const MISTRAL_EMBED_MODEL = 'mistral-embed';
 const MISTRAL_EMBED_URL = 'https://api.mistral.ai/v1/embeddings';
 
+// Edge Function URL
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const EDGE_EMBED_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/ai-embed` : null;
+
 /**
- * Generate a 1024-dim embedding vector using Mistral's embedding API.
- * Returns [] if the API key is missing or the call fails (graceful degradation).
- * 
- * @param {string} text - Text to embed (max ~8k tokens per chunk is fine)
- * @returns {Array<number>} 1024-dim embedding vector, or [] on failure
+ * Generate a 1024-dim embedding vector.
+ * Tries Edge Function first, falls back to direct Mistral.
+ * Returns [] on any failure (graceful degradation).
  */
 export async function generateEmbedding(text) {
-  if (!MISTRAL_API_KEY) {
-    console.warn('[ragService] No VITE_MISTRAL_API_KEY set — skipping embedding generation.');
-    return [];
+  if (!text || text.trim().length === 0) return [];
+
+  // Try Edge Function first (requires real Supabase session)
+  if (EDGE_EMBED_URL) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const res = await fetch(EDGE_EMBED_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ action: 'embed', text }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.embedding?.length > 0) return data.embedding;
+        }
+      }
+    } catch (e) {
+      console.warn('[ragService] Edge Function embed failed, falling back:', e.message);
+    }
   }
 
-  if (!text || text.trim().length === 0) {
+  // Fallback: direct Mistral call (used when no Supabase session or Edge Function unavailable)
+  if (!MISTRAL_API_KEY) {
+    console.warn('[ragService] No embedding source available — need either a Supabase session (for Edge Function) or VITE_MISTRAL_API_KEY.');
     return [];
   }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const response = await fetch(MISTRAL_EMBED_URL, {
       method: 'POST',
@@ -41,10 +64,7 @@ export async function generateEmbedding(text) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${MISTRAL_API_KEY}`
       },
-      body: JSON.stringify({
-        model: MISTRAL_EMBED_MODEL,
-        input: [text]  // Mistral expects an array of strings
-      }),
+      body: JSON.stringify({ model: MISTRAL_EMBED_MODEL, input: [text] }),
       signal: controller.signal
     });
 
@@ -52,20 +72,12 @@ export async function generateEmbedding(text) {
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
-      throw new Error(
-        `Mistral embedding error (${response.status}): ${errorBody?.message || errorBody?.detail || 'Unknown'}`
-      );
+      throw new Error(`Mistral embedding error (${response.status}): ${errorBody?.message || 'Unknown'}`);
     }
 
     const data = await response.json();
     const embedding = data?.data?.[0]?.embedding;
-
-    if (!embedding || embedding.length === 0) {
-      console.warn('[ragService] Mistral returned empty embedding.');
-      return [];
-    }
-
-    return embedding; // 1024-dim float array
+    return embedding?.length > 0 ? embedding : [];
   } catch (error) {
     if (error.name === 'AbortError') {
       console.warn('[ragService] Mistral embedding request timed out.');
@@ -132,25 +144,16 @@ export async function storeDocumentChunks(documentId, documentTitle, chunks) {
 
 /**
  * Semantic search in knowledge base using vector similarity.
- * Requires VITE_MISTRAL_API_KEY to generate the query embedding.
+ * Uses Edge Function or direct Mistral via generateEmbedding().
  */
 export async function semanticSearch(query, limit = 5) {
   try {
-    if (!MISTRAL_API_KEY) {
-      console.warn('[ragService] No Mistral API key — semantic search disabled.');
-      return [];
-    }
-
-    // Generate embedding for the user's query
-    console.log('[ragService] Generating query embedding for:', query.substring(0, 50));
     const queryEmbedding = await generateEmbedding(query);
 
     if (!queryEmbedding.length) {
       console.warn('[ragService] Query embedding returned empty — cannot search.');
       return [];
     }
-
-    console.log('[ragService] Query embedding generated, searching knowledge base...');
 
     // Search in Supabase using pgvector cosine similarity
     // Note: supabase-js handles array → vector conversion automatically
@@ -181,75 +184,30 @@ export async function semanticSearch(query, limit = 5) {
 
 /**
  * Confidence thresholds for Smart Doc Suggestions
- * - HIGH: similarity >= 0.55 → confident answer, no suggestion needed
- * - MEDIUM: 0.4 <= similarity < 0.55 → partial match, mild suggestion
- * - LOW: similarity < 0.4 or no results → weak/no match, strong suggestion
  */
 const CONFIDENCE_HIGH = 0.55;
 const CONFIDENCE_MEDIUM = 0.4;
 
 /**
  * Analyze search results and determine confidence level.
- * Returns metadata about how well the knowledge base covers the query.
- * 
- * Uses TWO signals:
- * 1. Max similarity score from vector search
- * 2. Relevance check — are results actually about the query topic?
- *    (low similarity + results = KB has docs but none match the question)
+ * Simple threshold-based: high/medium/low based on max similarity.
  */
 function analyzeConfidence(results, userQuery) {
   if (!results || results.length === 0) {
-    return {
-      level: 'none',
-      avgSimilarity: 0,
-      maxSimilarity: 0,
-      resultCount: 0,
-      suggestion: extractTopicFromQuery(userQuery)
-    };
+    return { level: 'none', avgSimilarity: 0, maxSimilarity: 0, resultCount: 0, suggestion: extractTopicFromQuery(userQuery) };
   }
 
   const similarities = results.map(r => r.similarity);
   const maxSimilarity = Math.max(...similarities);
   const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
 
-  // Signal 1: If all results have very similar scores (low variance) AND max is below
-  // the high-confidence threshold, the KB probably doesn't have targeted content
-  const variance = similarities.length > 1
-    ? similarities.reduce((sum, s) => sum + Math.pow(s - avgSimilarity, 2), 0) / similarities.length
-    : 0;
-  const isLowVariance = variance < 0.003;
-
-  // Signal 2: All results from same document with LOW similarity
-  // This catches the "only a resume in KB" case where everything matches at ~0.35-0.5
-  // But does NOT fire when similarity is high (document IS relevant even if it's the only one)
-  const uniqueDocs = new Set(results.map(r => r.metadata?.documentId || r.metadata?.title)).size;
-  const isSingleSource = uniqueDocs <= 1 && results.length > 1;
-
-  // Only consider it noise if similarity is BELOW the high threshold
-  // If maxSimilarity >= CONFIDENCE_HIGH, the content is relevant — don't second-guess it
-  const isGenericMatch = maxSimilarity < CONFIDENCE_HIGH && (isLowVariance || isSingleSource);
-
-  if (maxSimilarity >= CONFIDENCE_HIGH && !isGenericMatch) {
+  if (maxSimilarity >= CONFIDENCE_HIGH) {
     return { level: 'high', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: null };
   }
-
-  if (maxSimilarity >= CONFIDENCE_MEDIUM && !isGenericMatch) {
-    return {
-      level: 'medium',
-      avgSimilarity,
-      maxSimilarity,
-      resultCount: results.length,
-      suggestion: extractTopicFromQuery(userQuery)
-    };
+  if (maxSimilarity >= CONFIDENCE_MEDIUM) {
+    return { level: 'medium', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: extractTopicFromQuery(userQuery) };
   }
-
-  return {
-    level: 'low',
-    avgSimilarity,
-    maxSimilarity,
-    resultCount: results.length,
-    suggestion: extractTopicFromQuery(userQuery)
-  };
+  return { level: 'low', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: extractTopicFromQuery(userQuery) };
 }
 
 /**
@@ -270,25 +228,17 @@ function extractTopicFromQuery(query) {
 
 /**
  * Retrieve relevant context for RAG.
- * Includes query enhancement for follow-up questions and context filtering.
- * 
  * @param {string} userQuery - The user's question
- * @param {Array} chatHistory - Previous messages for follow-up detection
- * @returns {Object} { chunks: Array, confidence: Object }
+ * @param {Array} chatHistory - Previous messages (unused for now, reserved for A09)
+ * @returns {Array} chunks with _confidence property attached
  */
 export async function retrieveContext(userQuery, chatHistory = []) {
   try {
-    // Step 1: Enhance the query if it's a follow-up
-    const enhancedQuery = enhanceQuery(userQuery, chatHistory);
+    const results = await semanticSearch(userQuery, 5);
 
-    // Step 2: Semantic search with enhanced query
-    const results = await semanticSearch(enhancedQuery, 7); // Fetch 7, filter to best
-
-    // Step 3: Filter out low-relevance chunks (below 0.5 = noise)
+    // Filter out low-relevance chunks (below 0.5 = noise)
     const filtered = results.filter(r => r.similarity >= 0.5);
-    
-    // If filtering removed everything, fall back to top 3 unfiltered results
-    const finalResults = filtered.length > 0 ? filtered.slice(0, 5) : results.slice(0, 3);
+    const finalResults = filtered.length > 0 ? filtered : results.slice(0, 3);
 
     const chunks = finalResults.map(r => ({
       content: r.content,
@@ -297,11 +247,9 @@ export async function retrieveContext(userQuery, chatHistory = []) {
     }));
     const confidence = analyzeConfidence(finalResults, userQuery);
 
-    console.log(`[ragService] Smart Doc Suggestions — confidence: ${confidence.level}, max: ${confidence.maxSimilarity?.toFixed(3)}, avg: ${confidence.avgSimilarity?.toFixed(3)}, results: ${confidence.resultCount}${confidence.suggestion ? `, topic: "${confidence.suggestion}"` : ''}${enhancedQuery !== userQuery ? ` (enhanced from: "${userQuery.substring(0, 30)}")` : ''}`);
-
     // Attach confidence as a property on the array for backward compatibility
+    // ponytail: monkey-patching arrays is ugly; refactor to {chunks, confidence} in A09
     chunks._confidence = confidence;
-    chunks._enhancedQuery = enhancedQuery;
     return chunks;
   } catch (error) {
     console.error('Context retrieval error:', error);
@@ -309,51 +257,6 @@ export async function retrieveContext(userQuery, chatHistory = []) {
     empty._confidence = { level: 'none', avgSimilarity: 0, maxSimilarity: 0, resultCount: 0, suggestion: extractTopicFromQuery(userQuery) };
     return empty;
   }
-}
-
-/**
- * Enhance a query for better retrieval.
- * Detects follow-up questions and resolves them using conversation history.
- * 
- * Examples:
- * - "Tell me more" + previous topic "DEVCON Kids chapters" → "Tell me more about DEVCON Kids chapters"
- * - "What about Cebu?" + previous "What chapters does DEVCON Kids have?" → "What about Cebu chapter in DEVCON Kids?"
- * - "How do I volunteer?" → unchanged (complete question)
- */
-function enhanceQuery(query, chatHistory = []) {
-  if (!query || chatHistory.length === 0) return query;
-
-  const lowerQuery = query.toLowerCase().trim();
-  
-  // Detect follow-up patterns
-  const isFollowUp = (
-    lowerQuery.length < 40 && (
-      /^(tell me more|more details|explain more|go on|continue|elaborate)/.test(lowerQuery) ||
-      /^(what about|how about|and |also |what else)/.test(lowerQuery) ||
-      /^(why|when|where|who|how)\??$/.test(lowerQuery) ||
-      /^(it|that|this|they|them|those|these)\b/.test(lowerQuery) ||
-      /^(can you|could you) (explain|tell|describe) (it|that|this|more)/.test(lowerQuery)
-    )
-  );
-
-  if (!isFollowUp) return query;
-
-  // Find the last user message that was a complete question (not a follow-up itself)
-  const previousUserMessages = chatHistory
-    .filter(m => m.role === 'user' && m.content && m.content.length > 15)
-    .slice(-3);
-
-  if (previousUserMessages.length === 0) return query;
-
-  const lastFullQuestion = previousUserMessages[previousUserMessages.length - 1].content;
-  
-  // Extract the core topic from the previous exchange
-  const topicFromQuestion = extractTopicFromQuery(lastFullQuestion);
-  
-  // Combine: append the topic context to the follow-up query
-  const enhanced = `${query} (regarding: ${topicFromQuestion}, context: ${lastFullQuestion.substring(0, 100)})`;
-  
-  return enhanced;
 }
 
 /**

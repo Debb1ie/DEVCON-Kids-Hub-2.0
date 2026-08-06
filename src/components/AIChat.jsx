@@ -137,7 +137,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     setLoading(true);
 
     const requestStartedAt = performance.now();
-    const history = [...messages, userMessage].slice(-10);
+    const history = messages.slice(-10);
 
     try {
       const context = await retrieveContext(text, history);

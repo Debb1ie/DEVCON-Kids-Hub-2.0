@@ -10,13 +10,11 @@ export callChatWithContext(userMessage, context=[], chatHistory=[], options={})
 → { response: string, citations: [], sources: [], apiUsed: string, model: string, metrics: {inputTokens, outputTokens} }
 
 export callGeminiWithContext = callChatWithContext  // alias, keep for backward compat
-
-export generateSessionSummary(messages) → string
 ```
 - Phase 1 (current): Calls Groq API directly (VITE_GROQ_API_KEY in frontend)
-- Phase 2 (planned): Call Edge Function `ai-chat` instead
-- Load settings from Supabase `ai_config` table before each call (temperature, personality, maxContextChunks)
-- Keep: caching (5min TTL), retries (3x), fallback responses, streaming via options.onDelta/onFirstToken
+- Phase 2 (planned, A05): Call Edge Function `ai-chat` instead
+- Load settings from Supabase `ai_settings` table before each call (temperature, personality)
+- Keep: retries (3x), fallback responses, streaming via options.onDelta/onFirstToken
 
 ## ragService.js
 ```
