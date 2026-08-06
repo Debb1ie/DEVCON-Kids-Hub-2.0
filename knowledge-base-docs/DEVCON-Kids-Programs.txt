@@ -1,0 +1,63 @@
+# DEVCON Kids — Programs and Activities
+
+## Core Programme Formats
+
+### Code Camps
+Children aged 9-15 explore the fundamentals of computer science through activities such as coding a robot, animating a cartoon, or building their own games and mobile apps. Camps are designed to align with K-12 computer science standards and are led by trained and experienced Lead Learners.
+
+### Discovery Expos
+A three-hour hands-on festival for K-12 children together with their parents and friends, run in the style of a science fair. Each activity station a visitor completes earns them participation stamps, which are then used in a grand prize drawing.
+
+### Competitions
+Virtual and in-person competitions that let children test their computer science knowledge and skills. Children team up with friends and compete against other chapters around the world, building confidence and problem-solving skills transferable to other areas of life.
+
+### Lead Learner Workshops
+Lead Learners are the educators who guide children through DEVCON Kids courses. To become one, community members undergo dedicated training that gives them the knowledge, tools, and teaching methodologies needed to deliver the curriculum.
+
+## Campaign and Special Programmes
+
+### Hour of Code
+DEVCON Kids partners with Code.org for the Hour of Code. In December 2024, DEVCON Kids announced a partnership with Code.org to run what it described as the most significant Hour of Code celebration in the Philippines.
+
+### Hour of AI
+The Hour of AI is a global initiative developed by Code.org in collaboration with CSforALL, announced in October 2025 and timed for Computer Science Education Week (8-12 December 2025). DEVCON Kids presented the first-ever Hour of AI Philippines.
+
+Key delivery: Hour of AI Iloilo (4 December 2025) at the Tiu Cho Teg-Ana Ros Foundation Integrated Farm School. Over 150 elementary and secondary students attended. Students learned how AI processes data, recognises patterns, and supports everyday digital tools through guided discussion, group activity, and hands-on exercises.
+
+Hour of AI 2026 was launched as a continuing campaign with a stated ambition framed around a "road to 10,000."
+
+### Creative Robotics
+DEVCON Kids runs a creative robotics strand built around cardboard construction and the micro:bit microcontroller. In 2026 this was branded within DEVCON's wider "Creative Robotics workshops" offering.
+
+### CreateAI
+Named by Pam Ros Damarillo in June 2026 as one of the core DEVCON Kids programmes alongside Hour of AI and cardboard robotics. Associated with Microsoft's/BBC micro:bit createai.microbit.org platform for AI activities on micro:bit hardware.
+
+### Coding Herstory
+A DEVCON Kids programme with the tagline "Creating future tech leaders, one girl at a time." Run with American Spaces Manila, it works with girls and teachers in public high schools in Metro Manila. Components: Code Camps, Working computing programs, Women in tech lunches, Project showcase event.
+
+### PromptWars — AI Hackathon
+PromptWars: AI-Powered, Student-Built (20 June 2026, Programmable Makati). 30 junior and senior high school students, formed into six teams, each paired with a facilitator, building for three and a half hours. Every team tied its project to a UN Sustainable Development Goal and pitched to judges. Run jointly by DEVCON Kids Philippines and Tutorials Dojo.
+
+### Teacher Training and CPD
+DEVCON Kids works with CSTA Philippines on Continuing Professional Development training for K-12 computer science teachers. Activities include micro:bit lending programme (2021), Learn Python with Pixel Art Crash Course, and teacher training in Bohol and Pangasinan. In 2025, DEVCON Kids reported training more than 100 teachers.
+
+## Tools, Hardware, and Curriculum
+
+### Hardware Used with Children
+- BBC micro:bit / micro:bit V2: Core hardware. Highly portable; used for physical computing, creative robotics, and AI activities.
+- TPBot Smart Car: Advanced AI hardware unit touring nationwide with DEVCON Kids as of 2026.
+- Hummingbird Bit Robotics Kit: Used in robotics workshops.
+- imagiCharm (imagiLabs): Used in LA chapter's Python camp and the pixel-art crash course.
+- AI-lensed robotics kits: Donated by the Sui Foundation in 2026.
+- Cardboard construction: Used as the low-cost body for micro:bit-driven "cardboard robotics."
+
+Note: The NVIDIA Jetson Orin Nano is used by DEVCON's Jumpstart AI Engineering interns, NOT in DEVCON Kids children's programming.
+
+### Software and Platforms
+Scratch (drag-and-drop coding, animation, storytelling), Code.org courses, MakeCode, Python, and — in the 2026 AI hackathon context — Google AI Studio and prompt-to-app builders such as Lovable, Bolt, and Replit.
+
+### Pedagogy
+- Camps are crafted to align with K-12 computer science standards
+- Sessions are led by trained Lead Learners
+- Drag-and-drop coding tools are used with children as young as nine
+- Project framework taught to students: define, plan, create, test and reflect

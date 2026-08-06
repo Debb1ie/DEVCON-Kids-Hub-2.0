@@ -116,26 +116,150 @@ export async function parseTXT(file) {
 }
 
 /**
- * Chunk text into smaller pieces for embedding
- * Uses semantic chunking with overlap
+ * Chunk text into smaller pieces for embedding.
+ * 
+ * Strategy (in priority order):
+ * 1. Split Q&A pairs (lines starting with **Q:) into individual chunks
+ * 2. Split on markdown headings (## or ###) to keep sections self-contained
+ * 3. Fall back to sentence-based chunking with overlap for plain text
+ * 
+ * This ensures structured documents (like the DEVCON Kids KB) get clean,
+ * focused embeddings per section rather than arbitrary character splits.
  */
 export function chunkText(text, chunkSize = 1000, overlap = 200) {
+  if (!text || text.trim().length === 0) return [];
+
+  // Strategy 1: Detect if document has Q&A pairs — extract each as its own chunk
+  const qaPairs = extractQAPairs(text);
+  
+  // If Q&A pairs were found, remove them from the main text to avoid duplication
+  let mainText = text;
+  if (qaPairs.length > 0) {
+    mainText = text.replace(/\*\*Q:\s*.+?\*\*\s*A:\s*[\s\S]*?(?=\*\*Q:|$)/g, '').trim();
+  }
+  
+  // Strategy 2: Detect if document has markdown headings — split by section
+  const hasHeadings = /^#{1,3}\s+/m.test(mainText);
+  
+  let chunks = [];
+  let chunkIndex = 0;
+
+  if (hasHeadings) {
+    // Split by headings, then chunk each section individually
+    const sections = splitByHeadings(mainText);
+    
+    for (const section of sections) {
+      if (section.content.trim().length < 20) continue; // Skip empty sections
+      
+      if (section.content.length <= chunkSize * 1.5) {
+        // Section fits in one chunk — keep it whole
+        chunks.push({
+          id: chunkIndex++,
+          content: (section.heading ? section.heading + '\n\n' : '') + section.content.trim(),
+          size: section.content.length
+        });
+      } else {
+        // Section is too long — use sentence-based sub-chunking
+        const subChunks = sentenceChunk(
+          (section.heading ? section.heading + '\n\n' : '') + section.content.trim(),
+          chunkSize,
+          overlap
+        );
+        for (const sub of subChunks) {
+          chunks.push({ id: chunkIndex++, content: sub, size: sub.length });
+        }
+      }
+    }
+  } else {
+    // No headings — use sentence-based chunking
+    const plainChunks = sentenceChunk(mainText, chunkSize, overlap);
+    for (const content of plainChunks) {
+      chunks.push({ id: chunkIndex++, content, size: content.length });
+    }
+  }
+
+  // Add Q&A pairs as separate focused chunks (on top of section chunks)
+  for (const qa of qaPairs) {
+    chunks.push({
+      id: chunkIndex++,
+      content: qa,
+      size: qa.length
+    });
+  }
+
+  return chunks;
+}
+
+/**
+ * Extract Q&A pairs from text (pattern: **Q: ... ** A: ...)
+ * Each pair becomes its own chunk for precise embedding matching.
+ */
+function extractQAPairs(text) {
+  const pairs = [];
+  // Match **Q: question** A: answer (until next **Q: or end of text)
+  const qaRegex = /\*\*Q:\s*(.+?)\*\*\s*A:\s*([\s\S]*?)(?=\*\*Q:|$)/g;
+  let match;
+  while ((match = qaRegex.exec(text)) !== null) {
+    const question = match[1].trim();
+    const answer = match[2].trim();
+    if (question && answer) {
+      pairs.push(`Q: ${question}\nA: ${answer}`);
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Split text by markdown headings (## or ###).
+ * Returns array of { heading, content } objects.
+ */
+function splitByHeadings(text) {
+  const sections = [];
+  const lines = text.split('\n');
+  let currentHeading = '';
+  let currentContent = [];
+
+  for (const line of lines) {
+    if (/^#{1,3}\s+/.test(line)) {
+      // Save previous section
+      if (currentContent.length > 0 || currentHeading) {
+        sections.push({
+          heading: currentHeading,
+          content: currentContent.join('\n')
+        });
+      }
+      currentHeading = line.trim();
+      currentContent = [];
+    } else {
+      currentContent.push(line);
+    }
+  }
+
+  // Don't forget the last section
+  if (currentContent.length > 0 || currentHeading) {
+    sections.push({
+      heading: currentHeading,
+      content: currentContent.join('\n')
+    });
+  }
+
+  return sections;
+}
+
+/**
+ * Sentence-based chunking with overlap (original algorithm).
+ * Used as fallback for plain text or oversized sections.
+ */
+function sentenceChunk(text, chunkSize = 1000, overlap = 200) {
   const chunks = [];
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
   
   let currentChunk = '';
-  let chunkIndex = 0;
 
   for (const sentence of sentences) {
     if ((currentChunk + sentence).length > chunkSize) {
       if (currentChunk.length > 0) {
-        chunks.push({
-          id: chunkIndex++,
-          content: currentChunk.trim(),
-          size: currentChunk.length
-        });
-
-        // Add overlap from previous chunk
+        chunks.push(currentChunk.trim());
         const overlapContent = currentChunk.substring(currentChunk.length - overlap);
         currentChunk = overlapContent + ' ' + sentence;
       } else {
@@ -146,12 +270,8 @@ export function chunkText(text, chunkSize = 1000, overlap = 200) {
     }
   }
 
-  if (currentChunk.length > 0) {
-    chunks.push({
-      id: chunkIndex++,
-      content: currentChunk.trim(),
-      size: currentChunk.length
-    });
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
   }
 
   return chunks;

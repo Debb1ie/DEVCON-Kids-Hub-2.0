@@ -1,0 +1,62 @@
+# DEVCON Kids — Social Media and Contact Directory
+
+## Official DEVCON Kids Channels
+
+- Facebook (main): https://www.facebook.com/DEVCONKids/ — The primary public channel. ~2,328 likes (as of mid-2026). DEVCON Kids directs volunteers and partners here for event and Hour of Code / Hour of AI updates.
+- Instagram: https://www.instagram.com/devconkids/
+- X / Twitter: https://twitter.com/devconkids
+- YouTube: https://www.youtube.com/@devconkidsinfo5643
+- Scratch: https://scratch.mit.edu/users/DEVCONKids — Teacher account with ~89 shared projects
+- Website: https://www.devconkids.org
+
+Tagline on Facebook page: "We are an international organization aiming to make computer science accessible and fun for kids."
+
+When someone asks where to find DEVCON Kids online or how to keep up with events, point them first to the Facebook page (facebook.com/DEVCONKids), then to Instagram, and to devcon.plus for a nationwide event list.
+
+## DEVCON Philippines (Parent Organisation) Channels
+
+- Facebook: https://www.facebook.com/DEVCONPH/ — ~44,309 likes. "Empowering a community of geeks for good."
+- X / Twitter: https://x.com/DEVCONPH
+- Linktree: https://linktr.ee/DEVCONPH
+- Community platform: https://devcon.plus
+- Website: https://devcon.ph
+
+## Chapter Facebook Pages
+
+These are DEVCON chapter pages (not dedicated kids' pages) where regional DEVCON Kids activity is announced:
+
+- Manila: https://www.facebook.com/devconmanila/ (~8,680 likes) — Hosts national DEVCON Kids activities
+- Davao: https://www.facebook.com/devcondavao/ (~5,459 likes) — Email: davao@devcon.ph
+- Cagayan de Oro: https://www.facebook.com/DEVCONCDO/ (~3,831 likes) — Email: cdo@devcon.ph
+- Cebu: https://www.facebook.com/DevConCebu/ (~3,296 likes)
+- Iloilo: https://www.facebook.com/DEVCONIloilo/ (~2,912 likes) — Very active in DEVCON Kids 2025-2026
+- Laguna: https://www.facebook.com/DEVCONLAGUNA/ (~977 likes)
+- Iligan: https://www.facebook.com/devconiligan/ (~567 likes) — Runs sessions at Digital Creatives Hub Iligan
+- Legazpi: https://www.facebook.com/devconlegazpi (~546 likes)
+- Bukidnon: https://www.facebook.com/devconbukidnon/ — Top chapter by 2025 reach
+- Pampanga: https://www.facebook.com/devconpampanga/ — DEVCON's 11th community chapter
+
+Note: DEVCON Kids doesn't run a separate page per city. Regional kids activity is posted on the local DEVCON chapter page and on the main DEVCON Kids page.
+
+## Contact Information
+
+- Website contact forms: Contact, Volunteer, Partner, and Open-a-Chapter forms on devconkids.org
+- Coding Herstory microsite: https://www.devconkids.org/coding-herstory
+- Child protection policy: https://devcon.ph/child-protection-policy/
+- Community platform: https://devcon.plus
+- Partnership enquiries: partnerships@devcon.ph
+- Chapter emails: davao@devcon.ph, cdo@devcon.ph (others available via chapter Facebook pages)
+
+Facebook is the primary channel for current event announcements and is the channel DEVCON Kids itself points people to for activity updates.
+
+**Q: What is the official DEVCON Kids Facebook page?** A: facebook.com/DEVCONKids. It is the main public channel and the place DEVCON Kids points volunteers and partners to for event and Hour of Code / Hour of AI updates.
+
+**Q: Where are DEVCON Kids events announced?** A: Primarily on the DEVCON Kids Facebook page (facebook.com/DEVCONKids), with regional activity also posted on the relevant chapter page. The DEVCON+ platform at devcon.plus lists nationwide events.
+
+**Q: Does DEVCON Kids have Instagram / Twitter / YouTube?** A: Yes — Instagram @devconkids, X/Twitter @devconkids, and a YouTube channel (@devconkidsinfo5643). It also maintains a Scratch teacher account at scratch.mit.edu/users/DEVCONKids.
+
+**Q: Is there a Facebook page for DEVCON Kids in my city?** A: DEVCON Kids doesn't run a separate page per city. Regional kids activity is posted on the local DEVCON chapter page — for example DEVCON Iligan, DEVCON Davao, DEVCON Iloilo, or DEVCON Cagayan de Oro — and on the main DEVCON Kids page.
+
+**Q: What's the difference between the DEVCON Kids page and the DEVCON Philippines page?** A: facebook.com/DEVCONKids is the children's-programme page. facebook.com/DEVCONPH is the parent organisation's national page ("Empowering a community of geeks for good"), which covers all DEVCON programmes, not just kids.
+
+**Q: How do I contact a DEVCON chapter about kids' activities?** A: Chapters publish email addresses on their pages — for example davao@devcon.ph and cdo@devcon.ph — and accept direct messages via Facebook. For partnerships, DEVCON uses partnerships@devcon.ph.

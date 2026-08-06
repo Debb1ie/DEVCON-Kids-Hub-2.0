@@ -1,0 +1,37 @@
+**Q: What is DEVCON Kids?** A: DEVCON Kids is an international non-profit programme of DEVCON Philippines that makes computer science accessible and fun for children, with a focus on kids from underserved communities. Its tagline is "Inspire, Enable, Empower" and it has been running since 2018.
+
+**Q: Who can join DEVCON Kids activities?** A: DEVCON Kids serves learners aged 17 and under. Code camps are designed for children aged 9 to 15. Discovery Expos are open to K-12 children along with their parents and friends.
+
+**Q: How much do DEVCON Kids events cost?** A: DEVCON Kids is a non-profit volunteer programme and its events are generally offered free of charge to participants. Check the specific event announcement on the DEVCON Kids Facebook page for details.
+
+**Q: Where is DEVCON Kids available?** A: DEVCON Kids lists ten chapters — Bukidnon, Cagayan de Oro, Cebu, Davao, Iligan, Laguna, Legazpi, Manila, and Iloilo in the Philippines, plus Los Angeles in the USA.
+
+**Q: Which was the first DEVCON Kids chapter outside Metro Manila?** A: Cagayan de Oro, which adopted the programme in 2018.
+
+**Q: Who leads DEVCON Kids?** A: Pam Ros Damarillo is the Founder and Programme Director of DEVCON Kids in both the Philippines and the USA. She is also President of CSTA Philippines. Joel Bautista co-founded DEVCON Kids Philippines. Megan Uyao serves as the DEVCON Kids Ambassador.
+
+**Q: What kinds of activities does DEVCON Kids run?** A: Four standing formats — Code Camps, Discovery Expos, Competitions, and Lead Learner Workshops — plus campaign programmes including Hour of Code, Hour of AI, Creative Robotics, CreateAI, and Coding Herstory.
+
+**Q: What is a Lead Learner?** A: A Lead Learner is a trained educator who guides children through DEVCON Kids courses. Community members become Lead Learners by completing a dedicated training workshop that provides the knowledge, tools, and teaching methodologies to deliver the curriculum.
+
+**Q: What is a Discovery Expo?** A: A three-hour hands-on festival for K-12 children and their families, run like a science fair. Visitors collect participation stamps at each activity station and use them in a grand prize drawing.
+
+**Q: What is Coding Herstory?** A: Coding Herstory is DEVCON Kids' programme for girls, with the tagline "Creating future tech leaders, one girl at a time." Run with American Spaces Manila, it works with girls and teachers in public high schools in Metro Manila through code camps, working computing programmes, women-in-tech lunches, and a project showcase event.
+
+**Q: What is the Hour of AI?** A: The Hour of AI is a global AI-literacy initiative from Code.org and CSforALL, extending the Hour of Code model. DEVCON Kids presented the first Hour of AI in the Philippines, with sessions during Computer Science Education Week in December 2025 and a continuing Hour of AI 2026 campaign.
+
+**Q: What hardware do kids use?** A: Mainly the BBC micro:bit and micro:bit V2, often with cardboard-built robot bodies. DEVCON Kids also uses the TPBot Smart Car, Hummingbird Bit robotics kits, and imagiCharm devices, plus AI-lensed robotics kits donated by the Sui Foundation. Software includes Scratch, Code.org courses, MakeCode, and Python.
+
+**Q: How many children has DEVCON Kids reached?** A: More than 10,000 children since 2018, as stated by Programme Director Pam Ros Damarillo in June 2026. In calendar year 2025 alone, DEVCON Kids reached 3,825 students across 29 events in 32 schools, working with 180 volunteers and training over 100 teachers.
+
+**Q: How do I volunteer for DEVCON Kids?** A: Sign up through the volunteer form linked from devconkids.org, and register on DEVCON+ at devcon.plus to find local events. Volunteers who work with children complete DEVCON's Child Protection Policy training. Those who want to teach train as Lead Learners.
+
+**Q: How do I bring DEVCON Kids to my city or school?** A: Use the "Open a Chapter" contact route on devconkids.org, or reach out through the DEVCON Kids Facebook page. Partnerships with schools and local government units are actively welcomed.
+
+**Q: How can I donate or sponsor?** A: You can sponsor a scholar through PayPal at paypal.me/DEVCONKids, or support Coding Herstory through its GoFundMe campaign. Donations fund scholarships and the learning tools used at events, including laptops, gadgets, and hardware kits. Corporate partners are specifically being sought to sponsor hardware kits for high-need communities.
+
+**Q: Is DEVCON Kids the same as DEVCON?** A: No. DEVCON Philippines is the parent organisation — the country's largest volunteer tech community, founded in 2009, with 11 chapters. DEVCON Kids is one of its programmes, focused specifically on children.
+
+**Q: Does DEVCON Kids have a child safety policy?** A: Yes. DEVCON Philippines maintains a Child Protection Policy written specifically around DEVCON Kids, covering safe recruitment and screening, mandatory safeguarding training, a code of conduct, supervision, online safety, and clear reporting procedures. It is published at devcon.ph/child-protection-policy.
+
+**Q: Where can I see upcoming DEVCON Kids events?** A: The DEVCON Kids Facebook page at facebook.com/DEVCONKids is the primary channel for event announcements. DEVCON+ at devcon.plus also lists nationwide events.

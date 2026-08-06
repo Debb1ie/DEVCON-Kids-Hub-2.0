@@ -89,37 +89,42 @@ export async function generateEmbedding(text) {
  */
 export async function storeDocumentChunks(documentId, documentTitle, chunks) {
   try {
-    const chunkRecords = [];
+    const BATCH_SIZE = 5; // Process 5 chunks at a time for parallel embedding
+    let storedCount = 0;
 
-    for (const chunk of chunks) {
-      // generateEmbedding already handles its own errors (returns [] on failure)
-      const embedding = await generateEmbedding(chunk.content);
+    // Process chunks in batches to balance speed and API rate limits
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
+      
+      // Generate embeddings in parallel within each batch
+      const embeddingPromises = batch.map(chunk => generateEmbedding(chunk.content));
+      const embeddings = await Promise.all(embeddingPromises);
 
-      chunkRecords.push({
+      const chunkRecords = batch.map((chunk, idx) => ({
         document_id: documentId,
         document_title: documentTitle,
         content: chunk.content,
-        embedding: embedding.length > 0 ? embedding : null,
+        embedding: embeddings[idx].length > 0 ? embeddings[idx] : null,
         page_number: chunk.pageNumber,
         created_at: new Date().toISOString()
-      });
+      }));
+
+      // Insert each batch separately — partial success is better than total failure
+      const { error } = await supabase
+        .from('knowledge_base')
+        .insert(chunkRecords);
+
+      if (error) {
+        console.error(`[ragService] Failed to store batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error);
+        // Continue with remaining batches — don't abort the whole upload
+      } else {
+        storedCount += chunkRecords.length;
+      }
     }
 
-    // Store in Supabase knowledge_base table
-    const { error } = await supabase
-      .from('knowledge_base')
-      .insert(chunkRecords);
-
-    if (error) {
-      // Log but don't crash — document metadata is already saved
-      console.error('[ragService] Failed to store chunks in knowledge_base:', error);
-      console.warn('[ragService] This usually means the knowledge_base table does not exist or RLS is blocking inserts. Run the migration: supabase/migrations/20260516_ai_knowledge_base.sql');
-      return 0;
-    }
-
-    return chunkRecords.length;
+    console.log(`[ragService] Stored ${storedCount}/${chunks.length} chunks for "${documentTitle}"`);
+    return storedCount;
   } catch (error) {
-    // Catch network errors, unexpected failures — don't crash the upload
     console.error('[ragService] Error storing document chunks:', error);
     return 0;
   }
@@ -207,19 +212,22 @@ function analyzeConfidence(results, userQuery) {
   const maxSimilarity = Math.max(...similarities);
   const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
 
-  // If all results have very similar scores (low variance), the KB probably
-  // doesn't have targeted content — it's just returning "closest noise"
+  // Signal 1: If all results have very similar scores (low variance) AND max is below
+  // the high-confidence threshold, the KB probably doesn't have targeted content
   const variance = similarities.length > 1
     ? similarities.reduce((sum, s) => sum + Math.pow(s - avgSimilarity, 2), 0) / similarities.length
     : 0;
   const isLowVariance = variance < 0.003;
 
-  // All results from same document = likely just returning best-of-one-doc noise
+  // Signal 2: All results from same document with LOW similarity
+  // This catches the "only a resume in KB" case where everything matches at ~0.35-0.5
+  // But does NOT fire when similarity is high (document IS relevant even if it's the only one)
   const uniqueDocs = new Set(results.map(r => r.metadata?.documentId || r.metadata?.title)).size;
   const isSingleSource = uniqueDocs <= 1 && results.length > 1;
 
-  // Combined: if low variance OR single source with mediocre similarity → noise
-  const isGenericMatch = (isLowVariance && maxSimilarity < 0.65) || (isSingleSource && maxSimilarity < 0.7);
+  // Only consider it noise if similarity is BELOW the high threshold
+  // If maxSimilarity >= CONFIDENCE_HIGH, the content is relevant — don't second-guess it
+  const isGenericMatch = maxSimilarity < CONFIDENCE_HIGH && (isLowVariance || isSingleSource);
 
   if (maxSimilarity >= CONFIDENCE_HIGH && !isGenericMatch) {
     return { level: 'high', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: null };

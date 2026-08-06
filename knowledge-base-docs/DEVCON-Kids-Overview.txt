@@ -1,0 +1,58 @@
+# DEVCON Kids — Overview
+
+## Quick Facts
+- Name: DEVCON Kids (also DEVCON Kids Philippines; DevCon Kids)
+- Type: Non-profit, volunteer-run programme; international non-profit organisation
+- Parent organisation: DEVCON Philippines (DEVCONNECT PHILIPPINES INC.)
+- Founded: 2018
+- Tagline: Inspire, Enable, Empower
+- Mission: To provide equitable access to foundational computer science education for children
+- Primary audience: Children and youth aged 17 and under; code camps target ages 9-15
+- Focus: Learners from underserved and underprivileged communities
+- Mascot: Codey
+- Programme Director / Founder: Pam Ros Damarillo
+- Website: https://www.devconkids.org
+- Chapters: 10 listed publicly — 9 in the Philippines, 1 in the USA
+- Reach since 2018: More than 10,000 children (stated by Pam Ros Damarillo, June 2026)
+
+## What DEVCON Kids Is
+
+DEVCON Kids is an international non-profit organisation whose stated aim is to make computer science accessible and fun for kids. It concentrates on children from underserved communities and teaches the skills it considers necessary for them to participate in — and thrive in — an increasingly digital future.
+
+DEVCON's own programme description frames it as a volunteer organisation of technology, teaching, and learning enthusiasts that engages young people in human-centred computer coding learning experiences, preparing them for a future that depends heavily on computers and critical thinking. Through an interdisciplinary approach it aims to inspire, enable, and empower today's youth to become "problem-solving superheroes."
+
+### Mission
+To provide equitable access to foundational computer science education for children, in order to:
+1. Build children's confidence in their ability to succeed in computer science
+2. Increase interest in STEM across subject areas
+3. Increase interest in pursuing STEM-related careers
+
+### Key Quotes
+- "Talent is universal, opportunity isn't" — Pam Damarillo
+- "Sometimes all it takes is just one hour for students to realize that their future could be something else, something better." — Megan Uyao, DEVCON Kids Ambassador
+
+## People
+
+### Pam Ros Damarillo — Founder and Programme Director
+- Programme Director for DEVCON Kids in both the Philippines and the USA
+- President and Chairperson of DEVCON Kids USA
+- President of CSTA Philippines (Computer Science Teachers Association Philippines)
+- More than two decades of leadership in non-profit organisations
+- Academic background in Learning Technology and Social Innovation
+
+### Joel Bautista — Co-founder
+Co-founded DEVCON Kids Philippines. Background in teaching, project leadership, and research grant management in educational technologies and blockchain.
+
+### Megan Uyao — DEVCON Kids Ambassador
+Joined DEVCON Kids at age 12 and serves as its Ambassador; she was 17 as of mid-2026. Has represented DEVCON Kids on stage at Campus DEVCON summits and at the DEVCON 17th anniversary launch.
+
+## Relationship to DEVCON Philippines
+
+DEVCON Kids is one of the flagship programmes of DEVCON Philippines:
+- DEVCON Philippines (legal entity: DEVCONNECT PHILIPPINES INC.) is the country's largest and longest-running SEC-registered, BIR-compliant non-profit volunteer tech community
+- Established in 2009; celebrated its 17th anniversary in 2026 under the theme "Engineering an AI-Ready Nation"
+- Operates 11 regional chapters
+- Community of over 70,000 active developers, IT professionals, students, and educators
+- Named partners include Microsoft, Sui Foundation, Chemonics International, ICP Hubs, Zoho, DOST, DTI-BOI, and DICT
+
+Sibling programmes: DEVCON Nationwide Chapters, DEVCON Summits, DEVCON Code Camps, Campus DEVCON, #SHEISDEVCON, DCTX, DEVCON for Educators, DEVCON CREST, DEVCON Jumpstart Internships, and the DEVCON+ community platform.
