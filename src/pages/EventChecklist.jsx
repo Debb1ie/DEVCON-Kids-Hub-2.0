@@ -30,7 +30,7 @@ export default function EventChecklist() {
 
   async function loadTasks(eventId) {
     setLoading(true);
-    // Only load from DB if eventId looks like a UUID (real DB event)
+    // Real DB events (UUID): load from Supabase
     if (typeof eventId === 'string' && eventId.length > 10) {
       const { data, error } = await supabase
         .from('event_tasks')
@@ -39,10 +39,23 @@ export default function EventChecklist() {
         .order('sort_order', { ascending: true });
       if (!error) { setTasks(data || []); setLoading(false); return; }
     }
-    // Fallback events (numeric IDs) have no DB tasks
+    // Fallback events: load from localStorage
+    try {
+      const saved = localStorage.getItem(`event_tasks_${eventId}`);
+      if (saved) { setTasks(JSON.parse(saved)); setLoading(false); return; }
+    } catch { /* ignore */ }
     setTasks([]);
     setLoading(false);
   }
+
+  // Save fallback event tasks to localStorage when they change
+  useEffect(() => {
+    if (!selectedEventId || !tasks.length) return;
+    const isRealEvent = typeof selectedEventId === 'string' && selectedEventId.length > 10;
+    if (!isRealEvent && tasks.some(t => t._local)) {
+      try { localStorage.setItem(`event_tasks_${selectedEventId}`, JSON.stringify(tasks)); } catch { /* full */ }
+    }
+  }, [tasks, selectedEventId]);
 
   async function handleGenerate() {
     if (!selectedEventId) return;
@@ -55,8 +68,12 @@ export default function EventChecklist() {
     try {
       // Get session for Edge Function auth
       const { data: { session } } = await supabase.auth.getSession();
-      const headers = { 'Content-Type': 'application/json' };
-      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': session?.access_token ? `Bearer ${session.access_token}` : `Bearer ${anonKey}`,
+        'apikey': anonKey,
+      };
 
       const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-generate`, {
         method: 'POST',
@@ -181,7 +198,7 @@ export default function EventChecklist() {
     setTasks(prev => prev.filter(t => t.id !== taskId));
   }
 
-  const selectedEvent = eventsList.find(e => e.id === selectedEventId);
+  const selectedEvent = eventsList.find(e => String(e.id) === String(selectedEventId));
   const completedCount = tasks.filter(t => t.status === 'done').length;
 
   // Group tasks by phase
@@ -223,14 +240,14 @@ export default function EventChecklist() {
           ))}
         </select>
 
-        {selectedEvent && tasks.length === 0 && !loading && (
+        {selectedEvent && !loading && (
           <button
             className="btn-primary"
             style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}
             onClick={handleGenerate}
             disabled={generating}
           >
-            {generating ? <><Loader size={16} className="spinner" /> Generating...</> : <><Sparkles size={16} /> Generate Checklist</>}
+            {generating ? <><Loader size={16} className="spinner" /> Generating...</> : <><Sparkles size={16} /> {tasks.length > 0 ? 'Generate More Tasks' : 'Generate Checklist'}</>}
           </button>
         )}
 
@@ -309,16 +326,6 @@ export default function EventChecklist() {
               <Plus size={14} /> Add
             </button>
           </div>
-
-          {/* Regenerate option */}
-          <button
-            className="btn-secondary"
-            style={{ marginTop: '1rem', fontSize: '0.85rem' }}
-            onClick={handleGenerate}
-            disabled={generating}
-          >
-            {generating ? 'Generating...' : '🔄 Regenerate checklist (adds new tasks)'}
-          </button>
         </div>
       )}
 
