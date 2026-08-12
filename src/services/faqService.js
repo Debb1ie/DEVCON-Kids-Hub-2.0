@@ -1,11 +1,20 @@
 /**
  * FAQ Auto-Builder Service
  * 
- * Tracks questions asked to the chatbot, identifies patterns via embeddings,
- * and generates FAQ suggestions for admins to review.
+ * ### What this does:
+ * Creates a feedback loop that automatically identifies knowledge gaps:
+ * 1. Every chatbot question is LOGGED with its embedding and confidence level
+ * 2. Questions are CLUSTERED by semantic similarity (embedding cosine distance)
+ * 3. When 3+ similar questions accumulate, a FAQ SUGGESTION is created for admin review
+ * 4. Admins can GENERATE an answer via AI, review it, and PUBLISH it to the knowledge base
  * 
- * Tables used:
- * - ai_faq_questions: logs every question with topic + confidence
+ * ### Why this matters:
+ * Without this, admins would never know what questions the chatbot struggles with.
+ * This service surfaces patterns ("people keep asking about X but we have no docs")
+ * so admins can proactively fill knowledge gaps — making the chatbot smarter over time.
+ * 
+ * ### Tables used:
+ * - ai_faq_questions: logs every question with topic + confidence + embedding
  * - ai_faq_suggestions: grouped suggestions (pending/approved/dismissed)
  */
 
@@ -34,6 +43,17 @@ function extractTopic(question) {
  * Log a question to the tracking table.
  * Called after every user message in the chatbot.
  * Non-blocking — errors are swallowed to never disrupt chat.
+ * 
+ * ### Why non-blocking?
+ * This is called via `.catch(() => {})` from AIChat.jsx. If logging fails
+ * (DB down, network issue), the user's chat experience is unaffected.
+ * FAQ tracking is a background enhancement, not a critical path.
+ * 
+ * ### Why embed the question here?
+ * The embedding allows semantic clustering later — we compare new questions
+ * against existing ones using vector similarity, not just keyword matching.
+ * "How do I volunteer?" and "What's the process for joining as a helper?"
+ * are different words but same meaning — embeddings catch that.
  * 
  * @param {string} question - The user's question text
  * @param {string} confidenceLevel - 'high', 'medium', 'low', or 'none'

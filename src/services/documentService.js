@@ -1,6 +1,16 @@
 /**
  * Document Processing Service
  * Handles PDF and DOCX parsing and chunking
+ * 
+ * ### How this fits in the RAG pipeline:
+ * This is the FIRST step when a user uploads a document. Before text can be embedded
+ * and searched, it must be:
+ * 1. PARSED — extracted from its binary format (PDF is a complex rendering format,
+ *    DOCX is a ZIP of XML files). We need raw text.
+ * 2. CHUNKED — split into smaller pieces (~1000 chars). LLMs have token limits, and
+ *    embeddings work best on focused, coherent passages — not entire documents.
+ * 
+ * After this service runs, ragService.js takes over to embed and store the chunks.
  */
 
 /**
@@ -118,13 +128,26 @@ export async function parseTXT(file) {
 /**
  * Chunk text into smaller pieces for embedding.
  * 
- * Strategy (in priority order):
- * 1. Split Q&A pairs (lines starting with **Q:) into individual chunks
- * 2. Split on markdown headings (## or ###) to keep sections self-contained
- * 3. Fall back to sentence-based chunking with overlap for plain text
+ * ### Why chunking matters:
+ * Embeddings work best on focused, coherent text passages (~500-1500 chars).
+ * A 20-page document embedded as one vector would produce a vague, diluted embedding.
+ * Smaller chunks = more precise embeddings = better search results.
  * 
- * This ensures structured documents (like the DEVCON Kids KB) get clean,
- * focused embeddings per section rather than arbitrary character splits.
+ * ### Strategy (in priority order):
+ * 1. Split Q&A pairs (lines starting with **Q:) into individual chunks.
+ *    WHY: Q&A pairs are self-contained — each is a perfect search target.
+ * 2. Split on markdown headings (## or ###) to keep sections self-contained.
+ *    WHY: Headings indicate topic boundaries. Splitting here means each chunk
+ *    is about ONE topic, producing focused embeddings.
+ * 3. Fall back to sentence-based chunking with overlap for plain text.
+ *    WHY: When text has no structure, we split by sentence boundaries (not mid-word)
+ *    and add overlap (200 chars) so context isn't lost at split points.
+ * 
+ * ### What is overlap?
+ * If chunk 1 ends with "...the event starts at 9am" and chunk 2 starts with
+ * "Volunteers should arrive by 8am...", the overlap includes the end of chunk 1
+ * at the start of chunk 2. This ensures the search can find info that spans
+ * a split boundary.
  */
 export function chunkText(text, chunkSize = 1000, overlap = 200) {
   if (!text || text.trim().length === 0) return [];

@@ -4,16 +4,38 @@
  * Falls back to direct Mistral call if Edge Function is unavailable (transitional).
  * 
  * A06: Server-side Mistral via Edge Function.
+ * 
+ * ### What is RAG (Retrieval-Augmented Generation)?
+ * Instead of asking an LLM to answer from its training data (which may be outdated
+ * or generic), we RETRIEVE relevant documents from our own database first, then
+ * AUGMENT the prompt with those documents, so the LLM GENERATES answers based on
+ * real, specific organizational content. This eliminates hallucination.
+ * 
+ * ### What are embeddings?
+ * An embedding is a list of numbers (a "vector") that represents the MEANING of text.
+ * Similar texts produce similar vectors. We can compare vectors using cosine similarity
+ * to find documents that are semantically related to a user's question — even if they
+ * don't share exact keywords.
+ * 
+ * ### How this service fits in the pipeline:
+ * 1. INGESTION: Upload → parse → chunk → this service embeds each chunk → store in DB
+ * 2. QUERY: User asks question → this service embeds it → searches DB for similar chunks
+ *    → returns the best matches → chatService uses them as context for the LLM
  */
 
 import { supabase } from '../lib/supabase';
 
 // --- Mistral Embedding Config (fallback only, remove after A06 verified) ---
+// WHAT: Mistral's embedding API converts text into 1024-dimensional vectors.
+// WHY fallback: The secure path goes through the Edge Function (server-side key).
+// This direct path exists only while we transition — once Edge Functions are verified,
+// VITE_MISTRAL_API_KEY will be removed from the client.
 const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY;
 const MISTRAL_EMBED_MODEL = 'mistral-embed';
 const MISTRAL_EMBED_URL = 'https://api.mistral.ai/v1/embeddings';
 
-// Edge Function URL
+// WHAT: Edge Function URL for server-side embedding.
+// WHY: Same pattern as chatService — derive from Supabase URL for env portability.
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const EDGE_EMBED_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/ai-embed` : null;
 
@@ -21,6 +43,16 @@ const EDGE_EMBED_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/ai-embed` : 
  * Generate a 1024-dim embedding vector.
  * Tries Edge Function first, falls back to direct Mistral.
  * Returns [] on any failure (graceful degradation).
+ * 
+ * ### What this does:
+ * Converts a piece of text into a list of 1024 numbers (a "vector") that captures
+ * the semantic meaning of that text. Two texts about the same topic will produce
+ * vectors that are mathematically close to each other (high cosine similarity).
+ * 
+ * ### Why return [] on failure instead of throwing?
+ * Embedding is used during both upload (non-critical — chunk can be stored without it)
+ * and search (degrades to no results). Crashing the whole flow for one failed embed
+ * would be worse than gracefully continuing with reduced functionality.
  */
 export async function generateEmbedding(text) {
   if (!text || text.trim().length === 0) return [];
@@ -90,9 +122,21 @@ export async function generateEmbedding(text) {
 
 /**
  * Store document chunks in vector database (Supabase pgvector).
- * If embedding generation fails, chunks are stored without embeddings (null).
- * If the database insert fails entirely, we log the error but DON'T crash
- * the upload — the document metadata is already saved in the documents table.
+ * 
+ * ### What this does:
+ * After a document is parsed and split into chunks, this function:
+ * 1. Generates an embedding (vector) for each chunk via Mistral
+ * 2. Inserts the chunk text + vector into the knowledge_base table
+ * 
+ * ### Why batch processing (5 at a time)?
+ * Generating embeddings requires API calls. Doing all chunks in parallel would
+ * hit rate limits. Doing them one-by-one would be slow. Batches of 5 balance
+ * speed and API friendliness.
+ * 
+ * ### Why store chunks with null embeddings?
+ * If embedding generation fails for a chunk, we still store the text (with null vector).
+ * The chunk won't appear in semantic search, but at least the document content isn't lost.
+ * A re-embedding job could fill in the nulls later.
  * 
  * @param {string} documentId - Unique document identifier
  * @param {string} documentTitle - Document filename/title
@@ -145,6 +189,15 @@ export async function storeDocumentChunks(documentId, documentTitle, chunks) {
 /**
  * Semantic search in knowledge base using vector similarity.
  * Uses Edge Function or direct Mistral via generateEmbedding().
+ * 
+ * ### What this does:
+ * Takes the user's question, converts it to a vector, then finds the most similar
+ * document chunks in the database using pgvector's cosine distance operator (<=>).
+ * 
+ * ### How cosine similarity works:
+ * Two vectors pointing in the same direction have similarity = 1 (identical meaning).
+ * Perpendicular vectors = 0 (unrelated). The DB computes 1 - distance for each chunk
+ * and returns the top matches above the threshold (0.3 = very loose, catches partial matches).
  */
 export async function semanticSearch(query, limit = 5) {
   try {
@@ -183,7 +236,20 @@ export async function semanticSearch(query, limit = 5) {
 }
 
 /**
- * Confidence thresholds for Smart Doc Suggestions
+ * Confidence thresholds for Smart Doc Suggestions.
+ * 
+ * ### What are these?
+ * After searching the knowledge base, we classify how confident we are in the results:
+ * - HIGH (≥0.55): Strong match — the KB has good content for this question
+ * - MEDIUM (≥0.4): Partial match — some relevant content but incomplete
+ * - LOW/NONE (<0.4): The KB doesn't cover this topic well
+ * 
+ * ### Why does this matter?
+ * The chatbot behaves differently based on confidence:
+ * - High: Answer confidently with citations
+ * - Medium: Answer with a note about gaps + suggest uploading more docs
+ * - Low/None: Tell the user "I don't have info on this" + suggest a doc topic
+ * This prevents the AI from guessing when it has no relevant context.
  */
 const CONFIDENCE_HIGH = 0.55;
 const CONFIDENCE_MEDIUM = 0.4;
@@ -228,6 +294,18 @@ function extractTopicFromQuery(query) {
 
 /**
  * Retrieve relevant context for RAG.
+ * 
+ * ### What this does:
+ * This is the main function called before every chat message. It searches the
+ * knowledge base for chunks related to the user's question and returns them
+ * with a confidence assessment attached.
+ * 
+ * ### Why filter to similarity ≥ 0.5?
+ * The DB search uses a loose threshold (0.3) to cast a wide net. But chunks below
+ * 0.5 similarity are often noise — they share a few keywords but aren't really about
+ * the same topic. We filter them out so the LLM gets clean, relevant context only.
+ * If all results are below 0.5, we still pass the top 3 (better than nothing).
+ * 
  * @param {string} userQuery - The user's question
  * @param {Array} chatHistory - Previous messages (unused for now, reserved for A09)
  * @returns {Array} chunks with _confidence property attached
