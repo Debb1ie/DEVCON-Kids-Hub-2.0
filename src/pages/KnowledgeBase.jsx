@@ -12,6 +12,13 @@ export default function KnowledgeBase() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Auto-clear success/error messages after 5 seconds
+  useEffect(() => {
+    if (!success && !error) return;
+    const timer = setTimeout(() => { setSuccess(''); setError(''); }, 5000);
+    return () => clearTimeout(timer);
+  }, [success, error]);
+
   // Ref to the hidden file input — we trigger it when the button is clicked
   const fileInputRef = useRef(null);
   useEffect(() => {
@@ -42,6 +49,14 @@ export default function KnowledgeBase() {
     try {
       // Validate file
       validateDocumentFile(file);
+
+      // Warn on duplicate filename (prevents polluting KB with repeat uploads)
+      const existingDoc = documents.find(d => d.title === file.name);
+      if (existingDoc && !confirm(`"${file.name}" already exists in the Knowledge Base. Upload again? This will create duplicate chunks.`)) {
+        setUploading(false);
+        e.target.value = '';
+        return;
+      }
 
       // Process document (parse + chunk)
       const processedDoc = await processDocument(file);

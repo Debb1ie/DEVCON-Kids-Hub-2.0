@@ -27,6 +27,8 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   const messageIdRef = useRef(1000);
   const activeAssistantMessageRef = useRef(null);
   const sessionIdRef = useRef(null);
+  // AbortController for cancelling in-flight streaming requests
+  const abortControllerRef = useRef(null);
 
   // Load chat history from localStorage on mount
   useEffect(() => {
@@ -121,10 +123,13 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   const handleSendMessage = async (text = input) => {
     if (!text.trim() || loading) return;
 
+    // Input length guard — prevent massive prompts that exceed TPM budget
+    const trimmedText = text.trim().slice(0, 500);
+
     const userMessage = {
       id: messageIdRef.current++,
       role: 'user',
-      content: text,
+      content: trimmedText,
       timestamp: new Date()
     };
 
@@ -148,17 +153,27 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     setInput('');
     setLoading(true);
 
+    // Create AbortController for this request (enables "Stop generating")
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const requestStartedAt = performance.now();
-    const history = messages.slice(-10);
+    // Fix #3: Filter history to exclude empty/streaming messages before sending to LLM
+    const history = messages
+      .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content && !m.isStreaming)
+      .slice(-10);
 
     try {
-      const context = await retrieveContext(text, history);
+      const context = await retrieveContext(trimmedText, history);
       const confidence = context._confidence || { level: 'high', suggestion: null };
+
+      // Check if user cancelled during retrieval
+      if (controller.signal.aborted) return;
 
       let streamedText = '';
       let firstTokenSeen = false;
 
-      const result = await callChatWithContext(text, context, history, {
+      const result = await callChatWithContext(trimmedText, context, history, {
         onFirstToken: () => {
           firstTokenSeen = true;
           setMessages((prev) => prev.map((msg) => (
@@ -168,6 +183,8 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           )));
         },
         onDelta: (delta) => {
+          // Stop updating if user cancelled
+          if (controller.signal.aborted) return;
           streamedText += delta;
           setMessages((prev) => prev.map((msg) => (
             msg.id === assistantMessageId
@@ -176,6 +193,9 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           )));
         }
       });
+
+      // Don't overwrite if user cancelled mid-stream
+      if (controller.signal.aborted) return;
 
       const responseTimeMs = Math.max(1, Math.round(performance.now() - requestStartedAt));
       const tokenCount = result.metrics?.outputTokens || Math.max(1, Math.ceil(result.response.length / 4));
@@ -201,11 +221,13 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
       )));
 
       // FAQ Auto-Builder: log the question with confidence (non-blocking)
-      logQuestion(text, confidence.level).catch(() => {});
+      logQuestion(trimmedText, confidence.level).catch(() => {});
     } catch (error) {
+      if (controller.signal.aborted) return; // User cancelled — not an error
       console.error('Chat error:', error);
+      // Fix #2: Use captured assistantMessageId, not the ref (prevents race condition)
       setMessages((prev) => prev.map((msg) => (
-        msg.id === activeAssistantMessageRef.current
+        msg.id === assistantMessageId
           ? {
               ...msg,
               content: 'Sorry, I ran into a problem generating that answer. Please try again in a moment.',
@@ -220,7 +242,23 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     } finally {
       setLoading(false);
       activeAssistantMessageRef.current = null;
+      abortControllerRef.current = null;
     }
+  };
+
+  /**
+   * Stop generating — aborts the current streaming request
+   */
+  const handleStopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLoading(false);
+    // Mark the streaming message as complete with whatever content it has
+    setMessages((prev) => prev.map((msg) => (
+      msg.isStreaming ? { ...msg, isStreaming: false, meta: { label: 'Stopped' } } : msg
+    )));
   };
 
   const handleQuickPrompt = (prompt) => {
@@ -388,15 +426,28 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
         placeholder="Ask me anything..."
         disabled={loading}
+        maxLength={500}
       />
-      <button
-        type="button"
-        onClick={() => handleSendMessage()}
-        disabled={loading || !input.trim()}
-        className="send-btn"
-      >
-        <Send size={20} />
-      </button>
+      {loading ? (
+        <button
+          type="button"
+          onClick={handleStopGenerating}
+          className="send-btn"
+          title="Stop generating"
+          style={{ background: 'var(--error, #ef4444)' }}
+        >
+          <X size={20} />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => handleSendMessage()}
+          disabled={!input.trim()}
+          className="send-btn"
+        >
+          <Send size={20} />
+        </button>
+      )}
     </div>
   );
 

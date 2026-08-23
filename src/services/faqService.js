@@ -289,6 +289,9 @@ export async function generateFAQAnswer(topic, sampleQuestions = []) {
 
     const questionsText = sampleQuestions.slice(0, 5).map((q, i) => `${i + 1}. ${q}`).join('\n');
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
     const response = await fetch(GROQ_BASE_URL, {
       method: 'POST',
       headers: {
@@ -309,8 +312,11 @@ export async function generateFAQAnswer(topic, sampleQuestions = []) {
         ],
         temperature: 0.4,
         max_tokens: 512
-      })
+      }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));

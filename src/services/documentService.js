@@ -54,7 +54,9 @@ export async function parsePDF(file) {
       });
     }
 
-    return pages;
+    // Filter out empty pages (e.g. scanned image pages with no OCR text)
+    // WHY: image-only pages produce empty strings that become useless zero-content chunks
+    return pages.filter(p => p.content.trim().length > 0);
   } catch (error) {
     console.error('[documentService] PDF parsing error:', error);
     throw new Error(`Failed to parse PDF: ${error.message}`, { cause: error });
@@ -89,11 +91,10 @@ export async function parseDOCX(file) {
 
     const text = (result.value || '').trim();
 
+    // Return empty array when no text — let processDocument handle the "no content" case
+    // WHY: embedding an error message as real content pollutes the vector store
     if (!text) {
-      return [{
-        pageNumber: 1,
-        content: 'DOCX content could not be extracted. The file may be empty or use unsupported formatting.'
-      }];
+      return [];
     }
 
     return [{
@@ -151,6 +152,11 @@ export async function parseTXT(file) {
  */
 export function chunkText(text, chunkSize = 1000, overlap = 200) {
   if (!text || text.trim().length === 0) return [];
+
+  // Guard: overlap must be smaller than chunkSize to avoid infinite loops in sentenceChunk
+  if (overlap >= chunkSize) {
+    overlap = Math.floor(chunkSize / 5);
+  }
 
   // Strategy 1: Detect if document has Q&A pairs — extract each as its own chunk
   const qaPairs = extractQAPairs(text);
@@ -318,6 +324,14 @@ export async function processDocument(file) {
       pages = await parseTXT(file);
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
+    }
+
+    // Fail early if parsing yielded no usable text (empty PDF, image-only scans, empty DOCX)
+    // WHY: silently producing zero chunks would leave the caller with a "successful" upload
+    // that has nothing searchable — better to surface the problem now
+    const hasContent = pages.length > 0 && pages.some(p => p.content.trim().length > 0);
+    if (!hasContent) {
+      throw new Error('No text content could be extracted from this file');
     }
 
     // Chunk all pages
