@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings, Save, RotateCcw, Sparkles, ShieldCheck, Bot, BrainCircuit, Database, GraduationCap } from 'lucide-react';
+import { Settings, Save, RotateCcw, Sparkles, ShieldCheck, Bot, BrainCircuit, Database } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import './AISettings.css';
 
@@ -12,7 +12,7 @@ const defaultSettings = {
   enableAnalytics: true,
   maxContextChunks: 5,
   temperatureLevel: 0.7,
-  rateLimit: 100
+  rateLimit: 30
 };
 
 const loadSettings = () => {
@@ -255,13 +255,13 @@ export default function AISettings() {
                 <input
                   type="range"
                   min="1"
-                  max="10"
+                  max="5"
                   value={settings.maxContextChunks}
                   onChange={(e) => handleChange('maxContextChunks', Number(e.target.value))}
                 />
                 <span className="value">{settings.maxContextChunks}</span>
               </div>
-              <small>Number of knowledge base chunks used for RAG context.</small>
+              <small>Number of knowledge base chunks used for RAG context (max 5 for TPM budget).</small>
             </div>
           </div>
 
@@ -293,7 +293,7 @@ export default function AISettings() {
                 min="10"
                 max="1000"
               />
-              <small>Prevent abuse by limiting requests per user per hour.</small>
+              <small>Planned feature — not enforced yet. Will limit requests per user per hour.</small>
             </div>
           </div>
         </div>
@@ -312,8 +312,8 @@ export default function AISettings() {
           <div className="status-item">
             <div className="status-indicator success"></div>
             <div>
-              <strong>Groq (Chat — Llama 3.3 70B)</strong>
-              <p>Active — powers chatbot responses with streaming.</p>
+              <strong>Groq (Chat — GPT-OSS 120B)</strong>
+              <p>Active — powers chatbot responses with real-time streaming (openai/gpt-oss-120b).</p>
             </div>
           </div>
 
@@ -333,10 +333,13 @@ export default function AISettings() {
               <BrainCircuit size={16} />
               Active system prompt
             </div>
-            <p>{settings.aiPersonality}</p>
+            <p><strong>Name:</strong> {settings.aiName}</p>
+            <p><strong>Personality:</strong> {settings.aiPersonality}</p>
+            <p><strong>Scope:</strong> DEVCON Kids, Hour of AI, chapters, volunteers, workshops, events only.</p>
+            <p><strong>Safety:</strong> Child protection escalation, PII refusal, injection resistance, admin action refusal.</p>
             <div className="prompt-preview-meta">
-              <span><GraduationCap size={14} /> {settings.aiName}</span>
-              <span><Database size={14} /> {settings.maxContextChunks} chunk context</span>
+              <span><Database size={14} /> {settings.maxContextChunks} chunks</span>
+              <span><BrainCircuit size={14} /> Temp {settings.temperatureLevel.toFixed(1)}</span>
             </div>
           </div>
         </div>

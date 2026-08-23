@@ -63,6 +63,12 @@ export async function logQuestion(question, confidenceLevel = 'high', userId = n
   try {
     if (!question || question.trim().length < 5) return;
 
+    // Respect the enableFAQ toggle from AI settings (check localStorage cache)
+    try {
+      const settings = JSON.parse(localStorage.getItem('aiSettings') || '{}');
+      if (settings.enableFAQ === false) return; // FAQ tracking disabled by admin
+    } catch { /* proceed if localStorage unavailable */ }
+
     const topic = extractTopic(question);
     const embedding = await generateEmbedding(question);
 
