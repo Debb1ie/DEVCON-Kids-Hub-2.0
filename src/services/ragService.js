@@ -310,7 +310,7 @@ function extractTopicFromQuery(query) {
  * @param {Array} chatHistory - Previous messages (unused for now, reserved for A09)
  * @returns {Array} chunks with _confidence property attached
  */
-export async function retrieveContext(userQuery, chatHistory = []) {
+export async function retrieveContext(userQuery, chatHistory = []) { // eslint-disable-line no-unused-vars
   try {
     const results = await semanticSearch(userQuery, 3);
 
