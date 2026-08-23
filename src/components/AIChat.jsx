@@ -419,22 +419,27 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
   const renderComposer = () => (
     <div className="chat-input-form">
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-        placeholder="Ask me anything..."
-        disabled={loading}
-        maxLength={500}
-      />
+      <div className="chat-input-wrapper">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+          placeholder="Ask me anything..."
+          disabled={loading}
+          maxLength={500}
+        />
+        <span className={`char-counter ${input.length > 400 ? 'visible' : ''} ${input.length >= 500 ? 'limit' : input.length > 400 ? 'warning' : ''}`}>
+          {input.length}/500
+        </span>
+      </div>
       {loading ? (
         <button
           type="button"
           onClick={handleStopGenerating}
           className="send-btn"
           title="Stop generating"
-          style={{ background: 'var(--error, #ef4444)' }}
+          style={{ background: '#ef4444' }}
         >
           <X size={20} />
         </button>

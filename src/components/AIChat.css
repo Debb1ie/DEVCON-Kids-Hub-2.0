@@ -40,22 +40,37 @@
   position: fixed;
   bottom: 0;
   right: 0;
-  width: 100%;
-  height: 100%;
+  width: 420px;
+  height: 85vh;
+  max-height: 700px;
   background: var(--bg-main);
   z-index: 1401;
   display: flex;
   flex-direction: column;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+  border-radius: 16px 0 0 0;
+  border: 1px solid var(--border-subtle);
+  border-right: none;
+  border-bottom: none;
+}
+
+.ai-chat-fullscreen-page {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  border: none;
 }
 
 @media (max-width: 768px) {
   .ai-chat-fullscreen {
     width: 100%;
     height: 100vh;
+    max-height: none;
     bottom: 0;
     right: 0;
     border-radius: 0;
+    border: none;
   }
 }
 
@@ -64,10 +79,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-subtle);
   background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
   color: white;
+  border-radius: 16px 0 0 0;
+}
+
+.ai-chat-fullscreen-page .ai-chat-header {
+  border-radius: 0;
 }
 
 .ai-chat-header h2 {
@@ -293,9 +313,15 @@
   align-items: center;
 }
 
-.chat-input-form input {
+.chat-input-wrapper {
   flex: 1;
+  position: relative;
+}
+
+.chat-input-wrapper input {
+  width: 100%;
   padding: 12px 14px;
+  padding-right: 50px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   font-size: 14px;
@@ -305,15 +331,39 @@
   transition: border-color 0.2s;
 }
 
-.chat-input-form input:focus {
+.chat-input-wrapper input:focus {
   outline: none;
   border-color: #8B5CF6;
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
-.chat-input-form input:disabled {
+.chat-input-wrapper input:disabled {
   background: var(--bg-surface);
   color: var(--text-muted);
+}
+
+.char-counter {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.char-counter.visible {
+  opacity: 1;
+}
+
+.char-counter.warning {
+  color: #f59e0b;
+}
+
+.char-counter.limit {
+  color: #ef4444;
 }
 
 .send-btn {
