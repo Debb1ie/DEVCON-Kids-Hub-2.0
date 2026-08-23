@@ -25,7 +25,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 const MISTRAL_API_KEY = process.env.VITE_MISTRAL_API_KEY;
 const GROQ_API_KEY = process.env.VITE_GROQ_API_KEY;
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env');

@@ -23,7 +23,7 @@ import { generateEmbedding } from './ragService';
 
 // --- Groq config (same as chatService) ---
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**

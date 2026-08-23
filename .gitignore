@@ -28,3 +28,4 @@ tests/eval/report.json
 *.njsproj
 *.sln
 *.sw?
+.vercel
