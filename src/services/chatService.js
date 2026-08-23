@@ -155,8 +155,8 @@ async function callEdgeChat(userMessage, context, chatHistory, settings, options
     },
     body: JSON.stringify({
       message: userMessage,
-      // Send only top 5 context chunks to keep payload small and within token limits
-      context: context.slice(0, 5).map(c => ({ content: c.content, metadata: c.metadata, similarity: c.similarity })),
+      // Send only top 3 context chunks to stay within 8000 TPM budget
+      context: context.slice(0, 3).map(c => ({ content: c.content, metadata: c.metadata, similarity: c.similarity })),
       // Send recent history so the AI knows what was discussed (conversation memory)
       // Truncated to 2000 chars per message to prevent prompt bloat
       history: chatHistory.filter(m => m.role === 'user' || m.role === 'assistant').slice(-10).map(m => ({ role: m.role, content: String(m.content || '').slice(0, 2000) })),

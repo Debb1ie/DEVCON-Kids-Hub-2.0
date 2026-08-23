@@ -312,7 +312,7 @@ function extractTopicFromQuery(query) {
  */
 export async function retrieveContext(userQuery, chatHistory = []) {
   try {
-    const results = await semanticSearch(userQuery, 5);
+    const results = await semanticSearch(userQuery, 3);
 
     // Filter out low-relevance chunks (below 0.5 = noise)
     const filtered = results.filter(r => r.similarity >= 0.5);

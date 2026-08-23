@@ -83,10 +83,22 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   };
 
   /**
-   * Submit feedback (👍/👎) for a message
+   * Submit feedback (👍/👎) for a message.
+   * Persists to Supabase ai_chat_feedback (non-blocking, best-effort).
+   * Falls back to local state only if DB write fails.
    */
-  const handleFeedback = (msgId, isPositive) => {
+  const handleFeedback = async (msgId, isPositive) => {
     setFeedbackGiven(prev => ({ ...prev, [msgId]: isPositive ? 'up' : 'down' }));
+
+    // Best-effort persist to Supabase — don't block UI or show errors
+    try {
+      const msg = messages.find(m => m.id === msgId);
+      await supabase.from('ai_chat_feedback').insert({
+        message_content: (msg?.content || '').substring(0, 500),
+        feedback: isPositive ? 'positive' : 'negative',
+        created_at: new Date().toISOString()
+      });
+    } catch { /* non-blocking — local state is sufficient fallback */ }
   };
 
   // Suggested prompts based on context

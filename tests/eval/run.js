@@ -88,7 +88,8 @@ function hasRetrieval(results) {
 
 function looksGrounded(response, chunks) {
   if (!response || chunks.length === 0) return false;
-  const chunkWords = chunks.map(c => c.content.toLowerCase().split(/\s+/).slice(0, 20)).flat();
+  // Use more of each chunk (first 60 words) for better overlap detection
+  const chunkWords = chunks.map(c => c.content.toLowerCase().split(/\s+/).slice(0, 60)).flat();
   const responseWords = response.toLowerCase().split(/\s+/);
   const overlap = responseWords.filter(w => w.length > 4 && chunkWords.includes(w));
   return overlap.length >= 3;
