@@ -1,4 +1,3 @@
-import React from 'react';
 import { useApp } from '../context/AppState';
 import { Palette, Sparkles, BellRing, RefreshCcw, MoonStar, SunMedium, PanelTop } from 'lucide-react';
 import './Settings.css';
@@ -92,6 +91,7 @@ export default function Settings() {
                 <span>Reduce card padding for denser views.</span>
               </div>
               <input
+                id="setting-compact-cards"
                 type="checkbox"
                 checked={dashboardSettings.compactCards}
                 onChange={(e) => updateDashboardSetting('compactCards', e.target.checked)}
@@ -104,6 +104,7 @@ export default function Settings() {
                 <span>Keep the impact chart visible on the dashboard.</span>
               </div>
               <input
+                id="setting-growth-chart"
                 type="checkbox"
                 checked={dashboardSettings.showGrowthChart}
                 onChange={(e) => updateDashboardSetting('showGrowthChart', e.target.checked)}
@@ -116,6 +117,7 @@ export default function Settings() {
                 <span>Display the chapter performance list.</span>
               </div>
               <input
+                id="setting-chapter-overview"
                 type="checkbox"
                 checked={dashboardSettings.showChapterOverview}
                 onChange={(e) => updateDashboardSetting('showChapterOverview', e.target.checked)}
@@ -128,6 +130,7 @@ export default function Settings() {
                 <span>Keep the Hour of AI spotlight visible.</span>
               </div>
               <input
+                id="setting-course-spotlight"
                 type="checkbox"
                 checked={dashboardSettings.showCourseSpotlight}
                 onChange={(e) => updateDashboardSetting('showCourseSpotlight', e.target.checked)}
@@ -140,6 +143,7 @@ export default function Settings() {
                 <span>Keep the dashboard action buttons visible.</span>
               </div>
               <input
+                id="setting-quick-actions"
                 type="checkbox"
                 checked={dashboardSettings.showQuickActions}
                 onChange={(e) => updateDashboardSetting('showQuickActions', e.target.checked)}

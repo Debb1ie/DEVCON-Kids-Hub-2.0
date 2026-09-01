@@ -68,11 +68,12 @@
 }
 
 .theme-chip {
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.9rem 1rem;
+  padding: 0.625rem 1rem;
   border-radius: 16px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-main);
@@ -150,6 +151,12 @@
   width: 100%;
   margin-top: 1rem;
   min-width: 0;
+  gap: 0.65rem;
+  white-space: normal;
+}
+
+.reset-dashboard-btn svg {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 1100px) {

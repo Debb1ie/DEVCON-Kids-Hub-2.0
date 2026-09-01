@@ -3,8 +3,8 @@
 /* Floating Chat Widget */
 .ai-chat-widget {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  right: max(24px, env(safe-area-inset-right));
   z-index: 1400;
   pointer-events: auto;
 }
@@ -57,6 +57,11 @@
     right: 0;
     border-radius: 0;
   }
+
+  .chat-toggle-btn {
+    width: 52px;
+    height: 52px;
+  }
 }
 
 /* Chat Header */
@@ -81,7 +86,7 @@
   gap: 8px;
 }
 
-.icon-btn {
+.ai-chat-header .icon-btn {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: white;
@@ -95,7 +100,7 @@
   transition: background 0.2s;
 }
 
-.icon-btn:hover {
+.ai-chat-header .icon-btn:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 
@@ -264,6 +269,7 @@
 }
 
 .quick-prompt-btn {
+  min-height: 36px;
   padding: 8px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);

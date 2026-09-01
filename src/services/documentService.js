@@ -1,3 +1,5 @@
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
 /**
  * Document Processing Service
  * Handles PDF and DOCX parsing and chunking
@@ -9,29 +11,35 @@
  */
 export async function parsePDF(file) {
   try {
-    // Dynamic import using computed string to avoid Vite static analysis
-    const pdfModule = 'pdfjs-dist';
     let pdfjs;
-    
+
     try {
-      // Use dynamic require-like pattern
-      pdfjs = await import(/* @vite-ignore */ pdfModule);
-    } catch {
-      throw new Error('PDF parsing library not available. Please install pdfjs-dist: npm install pdfjs-dist');
+      pdfjs = await import('pdfjs-dist');
+    } catch (error) {
+      try {
+        pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      } catch {
+        throw new Error('PDF parsing library not available. Please install pdfjs-dist: npm install pdfjs-dist');
+      }
     }
 
     if (pdfjs.GlobalWorkerOptions) {
-      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+      pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
     }
 
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-    
+
     const pages = [];
     for (let i = 0; i < pdf.numPages; i++) {
       const page = await pdf.getPage(i + 1);
       const textContent = await page.getTextContent();
-      const text = textContent.items.map(item => item.str).join(' ');
+      const text = textContent.items
+        .map(item => (typeof item.str === 'string' ? item.str : ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
       pages.push({
         pageNumber: i + 1,
         content: text
@@ -41,7 +49,7 @@ export async function parsePDF(file) {
     return pages;
   } catch (error) {
     console.error('PDF parsing error:', error);
-    throw new Error(`Failed to parse PDF: ${error.message}`);
+    throw new Error(`Failed to parse PDF: ${error.message || 'Unknown PDF parsing error'}`);
   }
 }
 

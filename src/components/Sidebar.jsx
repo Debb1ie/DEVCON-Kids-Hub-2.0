@@ -1,57 +1,108 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, MapPin, Package, Settings, CalendarDays, Brain, Database } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Users,
+  MapPin,
+  Package,
+  Settings,
+  CalendarDays,
+  Brain,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import { useApp } from '../context/AppState';
 import './Sidebar.css';
 
 export default function Sidebar() {
   const { user, isSuperadmin } = useApp();
+  const [collapsed, setCollapsed] = useState(false);
 
-  const links = [
+  const workspaceLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'Chapters', path: '/dashboard/chapters', icon: <MapPin size={20} /> },
     { name: 'Volunteers', path: '/dashboard/volunteers', icon: <Users size={20} /> },
     { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
     { name: 'Events & CodeCamps', path: '/dashboard/events', icon: <CalendarDays size={20} /> },
-    { name: 'AI', path: '/dashboard/knowledge-base', icon: <Brain size={20} /> },
-    { name: 'Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
-    ...(isSuperadmin ? [
-      { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Settings size={20} /> },
-      { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
-      { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
-    ] : []),
+    { name: 'AI Knowledge Base', path: '/dashboard/knowledge-base', icon: <Brain size={20} /> },
   ];
 
+  const adminLinks = isSuperadmin
+    ? [
+        { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Settings size={20} /> },
+        { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
+        { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
+      ]
+    : [];
+
+  const displayName = user?.name || user?.email || 'Visitor';
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-container">
           <div className="logo-icon">{'</>'}</div>
           <h2>DEVCON <span>Kids</span></h2>
         </div>
+
+        <button
+          type="button"
+          className="sidebar-toggle"
+          onClick={() => setCollapsed(!collapsed)}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        </button>
       </div>
-      
-      <nav className="sidebar-nav">
-        {links.map((link) => (
-          <NavLink 
-            key={link.path} 
-            to={link.path} 
-            end={link.path === '/dashboard'}
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-          >
-            <span className="nav-icon">{link.icon}</span>
-            <span className="nav-text">{link.name}</span>
-          </NavLink>
-        ))}
+
+      <nav className="sidebar-nav" aria-label="Main navigation">
+        <NavSection label="Workspace" links={workspaceLinks} collapsed={collapsed} />
+
+        {adminLinks.length > 0 && (
+          <NavSection
+            label="Administration"
+            links={adminLinks}
+            collapsed={collapsed}
+          />
+        )}
       </nav>
-      
-<div className="sidebar-footer">
+
+      <div className="sidebar-footer">
         <div className="user-profile">
-          <div className="avatar">A</div>
+          <div className="avatar">{displayName.charAt(0).toUpperCase()}</div>
+
           <div className="user-info">
-            <span className="user-name">{user?.name || user?.email || 'Visitor'}</span>
+            <span className="user-name">{displayName}</span>
+            <span className="user-role">{user?.role || 'Visitor'}</span>
           </div>
         </div>
       </div>
     </aside>
+  );
+}
+
+function NavSection({ label, links, collapsed }) {
+  return (
+    <div className="nav-section">
+      <p className="nav-section-label">{label}</p>
+
+      <div className="nav-section-links">
+        {links.map((link) => (
+          <NavLink
+            key={link.path}
+            to={link.path}
+            end={link.path === '/dashboard'}
+            title={collapsed ? link.name : undefined}
+            className={({ isActive }) =>
+              `nav-item ${isActive ? 'active' : ''}`
+            }
+          >
+            <span className="nav-icon" aria-hidden="true">{link.icon}</span>
+            <span className="nav-text">{link.name}</span>
+            <span className="nav-active-dot" aria-hidden="true" />
+          </NavLink>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppState';
 import { Share2, Plus, Trash2, Image as ImageIcon, CheckCircle, Clock, PencilLine } from 'lucide-react';
 import './SocialMediaCMS.css';
@@ -65,7 +65,7 @@ export default function SocialMediaCMS() {
             <p className="text-muted">Manage captions, descriptions, and images for marketing campaigns.</p>
           </div>
         </div>
-        <button className="btn-primary" onClick={openCreateForm}>
+        <button type="button" className="btn-primary" onClick={openCreateForm}>
           <Plus size={20} />
           Create New Post
         </button>
@@ -76,16 +76,17 @@ export default function SocialMediaCMS() {
           <h3>{editingId ? 'Edit Marketing Post' : 'Draft New Post'}</h3>
           <form onSubmit={handleAdd} className="cms-form">
             <div className="form-group">
-              <label>Campaign Title</label>
+              <label htmlFor="post-title">Campaign Title</label>
               <input 
+                id="post-title"
                 className="border-input" 
                 placeholder="e.g. Hour of AI Launch" 
                 value={title} onChange={(e) => setTitle(e.target.value)} required 
               />
             </div>
             <div className="form-group">
-              <label>Platform</label>
-              <select className="border-input" value={platform} onChange={(e) => setPlatform(e.target.value)}>
+              <label htmlFor="post-platform">Platform</label>
+              <select id="post-platform" className="border-input" value={platform} onChange={(e) => setPlatform(e.target.value)}>
                 <option>Facebook</option>
                 <option>Instagram</option>
                 <option>LinkedIn</option>
@@ -93,23 +94,26 @@ export default function SocialMediaCMS() {
               </select>
             </div>
             <div className="form-group">
-              <label>Status</label>
-              <select className="border-input" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <label htmlFor="post-status">Status</label>
+              <select id="post-status" className="border-input" value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option>Draft</option>
                 <option>Published</option>
               </select>
             </div>
             <div className="form-group full-width">
-              <label>Image URL</label>
+              <label htmlFor="post-image-url">Image URL</label>
               <input 
+                id="post-image-url"
+                type="url"
                 className="border-input" 
                 placeholder="https://example.com/image.png" 
                 value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} required
               />
             </div>
             <div className="form-group full-width">
-              <label>Caption / Description</label>
+              <label htmlFor="post-description">Caption / Description</label>
               <textarea 
+                id="post-description"
                 className="border-input" 
                 rows="4"
                 placeholder="Write your engaging caption here..." 
@@ -143,14 +147,14 @@ export default function SocialMediaCMS() {
                   {post.status}
                 </span>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <button className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }} onClick={() => updateSocialPost(post.id, { ...post, status: 'Published' })}>
+                  <button type="button" className="btn-secondary cms-action-btn" onClick={() => updateSocialPost(post.id, { ...post, status: 'Published' })}>
                     Publish
                   </button>
-                  <button className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }} onClick={() => openEditForm(post)}>
+                  <button type="button" className="btn-secondary cms-action-btn" onClick={() => openEditForm(post)}>
                     <PencilLine size={14} />
                     Edit
                   </button>
-                  <button className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', borderColor: '#DC2626', color: '#DC2626' }} onClick={() => deleteSocialPost(post.id)}>
+                  <button type="button" className="btn-secondary cms-action-btn" style={{ borderColor: '#DC2626', color: '#DC2626' }} onClick={() => deleteSocialPost(post.id)}>
                     <Trash2 size={14} />
                     Delete
                   </button>

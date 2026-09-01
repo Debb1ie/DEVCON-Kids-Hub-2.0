@@ -502,11 +502,13 @@ export const AppProvider = ({ children }) => {
       if (error) throw error;
       if (data?.[0]) upsertRecord(setVolunteersList, data[0]);
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
+      return { persisted: true };
     } catch (error) {
       // Fallback local update if Supabase fails
       const mockNew = { id: Date.now(), ...volunteer };
       upsertRecord(setVolunteersList, mockNew);
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
+      return { persisted: false };
     }
   };
 
@@ -517,8 +519,10 @@ export const AppProvider = ({ children }) => {
       if (data?.[0]) {
         upsertRecord(setVolunteersList, data[0]);
       }
+      return { persisted: true };
     } catch (error) {
       upsertRecord(setVolunteersList, { id, ...volunteer });
+      return { persisted: false };
     }
   };
 
@@ -526,10 +530,13 @@ export const AppProvider = ({ children }) => {
     try {
       await supabase.from('volunteers').delete().eq('id', id);
       setStats(prev => ({ ...prev, volunteers: Math.max(0, prev.volunteers - 1) }));
+      setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
+      return { persisted: true };
     } catch (error) {
       console.warn('Falling back to local volunteer delete.', error);
+      setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
+      return { persisted: false };
     }
-    setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
   };
 
   const addInventoryItem = async (item) => {

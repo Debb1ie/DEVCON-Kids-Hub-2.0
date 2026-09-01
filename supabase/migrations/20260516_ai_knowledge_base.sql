@@ -105,20 +105,42 @@ ALTER TABLE ai_config ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies for authenticated users
 CREATE POLICY "Users can view documents" ON documents
-  FOR SELECT USING (auth.role() = 'authenticated_user');
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Admin users can insert documents" ON documents
+  FOR INSERT WITH CHECK (
+    auth.role() = 'authenticated' AND (
+      uploaded_by = auth.uid() OR
+      (auth.jwt() ->> 'email') = 'pmanucom@devcon.ph'
+    )
+  );
+
+CREATE POLICY "Admins or owners can delete documents" ON documents
+  FOR DELETE USING (
+    auth.role() = 'authenticated' AND (
+      uploaded_by = auth.uid() OR
+      (auth.jwt() ->> 'email') = 'pmanucom@devcon.ph'
+    )
+  );
 
 CREATE POLICY "Users can view knowledge base" ON knowledge_base
-  FOR SELECT USING (auth.role() = 'authenticated_user');
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Users can insert knowledge base chunks" ON knowledge_base
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Users can delete knowledge base chunks" ON knowledge_base
+  FOR DELETE USING (auth.role() = 'authenticated');
 
 CREATE POLICY "Users can view their own chat sessions" ON ai_chat_sessions
-  FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'authenticated_user');
+  FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'authenticated');
 
 CREATE POLICY "Users can insert chat sessions" ON ai_chat_sessions
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Grant permissions to authenticated users
-GRANT SELECT ON documents TO authenticated;
-GRANT SELECT ON knowledge_base TO authenticated;
+GRANT SELECT, INSERT, DELETE ON documents TO authenticated;
+GRANT SELECT, INSERT, DELETE ON knowledge_base TO authenticated;
 GRANT SELECT, INSERT ON ai_chat_sessions TO authenticated;
 GRANT SELECT, INSERT ON ai_chat_messages TO authenticated;
 GRANT SELECT ON ai_config TO authenticated;

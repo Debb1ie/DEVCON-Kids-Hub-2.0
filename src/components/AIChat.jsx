@@ -251,11 +251,12 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   const renderComposer = () => (
     <div className="chat-input-form">
       <input
+        aria-label="Message the DEVCON Kids AI assistant"
         type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-        placeholder="Ask me anything..."
+        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+        placeholder="Type a message or ask for help..."
         disabled={loading}
       />
       <button
@@ -263,6 +264,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
         onClick={() => handleSendMessage()}
         disabled={loading || !input.trim()}
         className="send-btn"
+        aria-label="Send message"
       >
         <Send size={20} />
       </button>
