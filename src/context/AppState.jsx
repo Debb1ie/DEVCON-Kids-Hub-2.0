@@ -457,14 +457,31 @@ export const AppProvider = ({ children }) => {
   };
 
   // Supabase CRUD Actions
+  
+  const logAuditAction = async (action, targetTable, targetId = null, metadata = {}) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const actorId = session?.user?.id || null;
+      await supabase.from('audit_logs').insert([{
+        actor_id: actorId,
+        action,
+        target_table: targetTable,
+        target_id: targetId,
+        metadata
+      }]);
+    } catch (e) {
+      console.warn("Audit log failed", e);
+    }
+  };
+
   const addChapter = async (chapter) => {
     const payload = { ...chapter };
-
     try {
       const { data, error } = await supabase.from('chapters').insert([payload]).select();
       if (error) throw error;
       if (data?.[0]) {
         upsertRecord(setChapters, data[0]);
+        logAuditAction('INSERT', 'chapters', data[0].id, { name: data[0].name });
       }
     } catch (error) {
       const mockNew = { id: Date.now(), ...payload };
@@ -474,12 +491,12 @@ export const AppProvider = ({ children }) => {
 
   const updateChapter = async (id, chapter) => {
     const payload = { ...chapter };
-
     try {
       const { data, error } = await supabase.from('chapters').update(payload).eq('id', id).select();
       if (error) throw error;
       if (data?.[0]) {
         upsertRecord(setChapters, data[0]);
+        logAuditAction('UPDATE', 'chapters', id, { name: data[0].name });
       }
     } catch (error) {
       upsertRecord(setChapters, { id, ...payload });
@@ -489,6 +506,7 @@ export const AppProvider = ({ children }) => {
   const deleteChapter = async (id) => {
     try {
       await supabase.from('chapters').delete().eq('id', id);
+      logAuditAction('DELETE', 'chapters', id);
     } catch (error) {
       console.warn('Falling back to local chapter delete.', error);
     } finally {
@@ -500,10 +518,12 @@ export const AppProvider = ({ children }) => {
     try {
       const { data, error } = await supabase.from('volunteers').insert([volunteer]).select();
       if (error) throw error;
-      if (data?.[0]) upsertRecord(setVolunteersList, data[0]);
+      if (data?.[0]) {
+        upsertRecord(setVolunteersList, data[0]);
+        logAuditAction('INSERT', 'volunteers', data[0].id, { name: data[0].name });
+      }
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
     } catch (error) {
-      // Fallback local update if Supabase fails
       const mockNew = { id: Date.now(), ...volunteer };
       upsertRecord(setVolunteersList, mockNew);
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
@@ -516,6 +536,7 @@ export const AppProvider = ({ children }) => {
       if (error) throw error;
       if (data?.[0]) {
         upsertRecord(setVolunteersList, data[0]);
+        logAuditAction('UPDATE', 'volunteers', id, { name: data[0].name });
       }
     } catch (error) {
       upsertRecord(setVolunteersList, { id, ...volunteer });
@@ -526,6 +547,7 @@ export const AppProvider = ({ children }) => {
     try {
       await supabase.from('volunteers').delete().eq('id', id);
       setStats(prev => ({ ...prev, volunteers: Math.max(0, prev.volunteers - 1) }));
+      logAuditAction('DELETE', 'volunteers', id);
     } catch (error) {
       console.warn('Falling back to local volunteer delete.', error);
     }
@@ -536,7 +558,10 @@ export const AppProvider = ({ children }) => {
     try {
       const { data, error } = await supabase.from('inventory').insert([item]).select();
       if (error) throw error;
-      if (data?.[0]) upsertRecord(setInventoryList, data[0]);
+      if (data?.[0]) {
+        upsertRecord(setInventoryList, data[0]);
+        logAuditAction('INSERT', 'inventory', data[0].id, { item: data[0].name });
+      }
     } catch (error) {
       const mockNew = { id: Date.now(), ...item };
       upsertRecord(setInventoryList, mockNew);
@@ -549,6 +574,7 @@ export const AppProvider = ({ children }) => {
       if (error) throw error;
       if (data?.[0]) {
         upsertRecord(setInventoryList, data[0]);
+        logAuditAction('UPDATE', 'inventory', id, { item: data[0].name });
       }
     } catch (error) {
       upsertRecord(setInventoryList, { id, ...item });
@@ -558,6 +584,7 @@ export const AppProvider = ({ children }) => {
   const deleteInventoryItem = async (id) => {
     try {
       await supabase.from('inventory').delete().eq('id', id);
+      logAuditAction('DELETE', 'inventory', id);
     } catch (error) {
       console.warn('Falling back to local inventory delete.', error);
     }
@@ -568,7 +595,10 @@ export const AppProvider = ({ children }) => {
     try {
       const { data, error } = await supabase.from('social_media_posts').insert([post]).select();
       if (error) throw error;
-      if (data?.[0]) upsertRecord(setSocialPosts, data[0]);
+      if (data?.[0]) {
+        upsertRecord(setSocialPosts, data[0]);
+        logAuditAction('INSERT', 'social_media_posts', data[0].id);
+      }
     } catch (error) {
       const mockNew = { id: Date.now(), ...post };
       upsertRecord(setSocialPosts, mockNew);
@@ -581,6 +611,7 @@ export const AppProvider = ({ children }) => {
       if (error) throw error;
       if (data?.[0]) {
         upsertRecord(setSocialPosts, data[0]);
+        logAuditAction('UPDATE', 'social_media_posts', id);
       }
     } catch (error) {
       upsertRecord(setSocialPosts, { id, ...post });
@@ -590,6 +621,7 @@ export const AppProvider = ({ children }) => {
   const deleteSocialPost = async (id) => {
     try {
       await supabase.from('social_media_posts').delete().eq('id', id);
+      logAuditAction('DELETE', 'social_media_posts', id);
     } catch (error) {
       console.warn('Falling back to local post delete.', error);
     }
@@ -598,11 +630,13 @@ export const AppProvider = ({ children }) => {
 
   const addEvent = async (event) => {
     const payload = buildEventFolderMetadata(event);
-
     try {
       const { data, error } = await supabase.from('events').insert([payload]).select();
       if (error) throw error;
-      if (data?.[0]) upsertRecord(setEventsList, data[0]);
+      if (data?.[0]) {
+        upsertRecord(setEventsList, data[0]);
+        logAuditAction('INSERT', 'events', data[0].id, { title: data[0].title });
+      }
     } catch (error) {
       const mockNew = { id: Date.now(), ...payload };
       upsertRecord(setEventsList, mockNew);
@@ -611,11 +645,13 @@ export const AppProvider = ({ children }) => {
 
   const updateEvent = async (id, event) => {
     const payload = buildEventFolderMetadata(event);
-
     try {
       const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
       if (error) throw error;
-      if (data?.[0]) upsertRecord(setEventsList, data[0]);
+      if (data?.[0]) {
+        upsertRecord(setEventsList, data[0]);
+        logAuditAction('UPDATE', 'events', id, { title: data[0].title });
+      }
     } catch (error) {
       upsertRecord(setEventsList, { id, ...payload });
     }
@@ -624,6 +660,7 @@ export const AppProvider = ({ children }) => {
   const deleteEvent = async (id) => {
     try {
       await supabase.from('events').delete().eq('id', id);
+      logAuditAction('DELETE', 'events', id);
     } catch (error) {
       console.warn('Falling back to local event delete.', error);
     }

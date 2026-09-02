@@ -13,6 +13,7 @@ import Admin from './pages/Admin';
 import KnowledgeBase from './pages/KnowledgeBase';
 import AISettings from './pages/AISettings';
 import Settings from './pages/Settings';
+// Kenneth's AI automation pages
 import SocialMediaCMS from './pages/SocialMediaCMS';
 import EventChecklist from './pages/EventChecklist';
 import FAQSuggestions from './pages/FAQSuggestions';
@@ -20,80 +21,182 @@ import './index.css';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, authLoading } = useApp();
-  
+
   // Check if OAuth is in progress (temporary flag set by AuthCallback)
-  const isOAuthInProgress = typeof sessionStorage !== 'undefined' 
-    ? sessionStorage.getItem('oauth_in_progress') === 'true'
-    : false;
-  
-  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authentication…</div>;
-  
+  const isOAuthInProgress =
+    typeof sessionStorage !== 'undefined'
+      ? sessionStorage.getItem('oauth_in_progress') === 'true'
+      : false;
+
+  if (authLoading)
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+        }}
+      >
+        Loading authentication…
+      </div>
+    );
+
   // Allow access if authenticated OR if OAuth is in progress
   if (!isAuthenticated && !isOAuthInProgress) {
     return <Navigate to="/login" replace />;
   }
-  
+
   // Clear the OAuth flag once user is authenticated
   if (isAuthenticated && isOAuthInProgress) {
-    try { sessionStorage.removeItem('oauth_in_progress'); } catch { /* ignore */ }
+    try {
+      sessionStorage.removeItem('oauth_in_progress');
+    } catch {
+      /* ignore */
+    }
   }
-  
+
   return children;
 }
 
 function SuperadminRoute({ children }) {
   const { isSuperadmin, authLoading, isAuthenticated } = useApp();
-  
-  const isOAuthInProgress = typeof sessionStorage !== 'undefined' 
-    ? sessionStorage.getItem('oauth_in_progress') === 'true'
-    : false;
-  
-  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authentication…</div>;
+
+  const isOAuthInProgress =
+    typeof sessionStorage !== 'undefined'
+      ? sessionStorage.getItem('oauth_in_progress') === 'true'
+      : false;
+
+  if (authLoading)
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+        }}
+      >
+        Loading authentication…
+      </div>
+    );
+
   if (!isAuthenticated && !isOAuthInProgress) {
     return <Navigate to="/login" replace />;
   }
+
   if (!isOAuthInProgress && !isSuperadmin) {
     return (
-      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center'}}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          padding: '2rem',
+          textAlign: 'center',
+        }}
+      >
         <div>
-          <h2 style={{marginBottom: '0.5rem'}}>Access restricted</h2>
-          <p style={{margin: 0, color: 'var(--text-muted)'}}>This section is for Superadmin users only.</p>
+          <h2 style={{ marginBottom: '0.5rem' }}>Access restricted</h2>
+          <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+            This section is for Superadmin users only.
+          </p>
         </div>
       </div>
     );
   }
+
   return children;
 }
 
 function AppRoutes() {
   const { isAuthenticated, authLoading } = useApp();
 
-  if (authLoading) return <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>Loading authentication…</div>;
+  if (authLoading)
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+        }}
+      >
+        Loading authentication…
+      </div>
+    );
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
-        <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <LandingPage />
+            )
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
+          }
+        />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }>
+
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
           <Route path="chapters" element={<Chapters />} />
           <Route path="volunteers" element={<Volunteers />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="events" element={<Events />} />
-          <Route path="admin" element={<SuperadminRoute><Admin /></SuperadminRoute>} />
+          <Route
+            path="admin"
+            element={
+              <SuperadminRoute>
+                <Admin />
+              </SuperadminRoute>
+            }
+          />
           <Route path="knowledge-base" element={<KnowledgeBase />} />
-          <Route path="ai-settings" element={<SuperadminRoute><AISettings /></SuperadminRoute>} />
+          <Route
+            path="ai-settings"
+            element={
+              <SuperadminRoute>
+                <AISettings />
+              </SuperadminRoute>
+            }
+          />
+          {/* Kenneth's AI automation routes */}
           <Route path="social-media" element={<SocialMediaCMS />} />
           <Route path="event-checklist" element={<EventChecklist />} />
-          <Route path="faq-suggestions" element={<SuperadminRoute><FAQSuggestions /></SuperadminRoute>} />
-          <Route path="settings" element={<SuperadminRoute><Settings /></SuperadminRoute>} />
+          <Route
+            path="faq-suggestions"
+            element={
+              <SuperadminRoute>
+                <FAQSuggestions />
+              </SuperadminRoute>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <SuperadminRoute>
+                <Settings />
+              </SuperadminRoute>
+            }
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
