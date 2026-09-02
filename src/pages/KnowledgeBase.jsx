@@ -1,9 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload, Trash2, FileText, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { processDocument, validateDocumentFile } from '../services/documentService';
 import { storeDocumentChunks, listDocuments, deleteDocument } from '../services/ragService';
 import './KnowledgeBase.css';
+
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 KB';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const size = bytes / (1024 ** index);
+  return `${size >= 10 || index === 0 ? Math.round(size) : size.toFixed(1)} ${units[index]}`;
+};
+
+const getFileTypeLabel = (file) => file.name.split('.').pop()?.toUpperCase() || 'FILE';
 
 export default function KnowledgeBase() {
   const [documents, setDocuments] = useState([]);
@@ -11,6 +21,8 @@ export default function KnowledgeBase() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const fileInputRef = useRef(null);
 
   // Auto-clear success/error messages after 5 seconds
   useEffect(() => {
@@ -20,12 +32,11 @@ export default function KnowledgeBase() {
   }, [success, error]);
 
   // Ref to the hidden file input — we trigger it when the button is clicked
-  const fileInputRef = useRef(null);
   useEffect(() => {
     loadDocuments();
   }, []);
 
-  const loadDocuments = async () => {
+  async function loadDocuments() {
     setLoading(true);
     try {
       const docs = await listDocuments();
@@ -38,9 +49,18 @@ export default function KnowledgeBase() {
     }
   };
 
-  const handleFileUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setSelectedFile(file);
+    setError('');
+    setSuccess('');
+  }
+
+  const handleFileUpload = async () => {
+    if (!selectedFile || uploading) return;
+    const file = selectedFile;
 
     setError('');
     setSuccess('');
@@ -64,6 +84,10 @@ export default function KnowledgeBase() {
       // Generate document ID
       const docId = `doc_${Date.now()}`;
 
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('You must be signed in to upload knowledge base documents.');
+
       // Store in Supabase documents table
       const { error: docError } = await supabase
         .from('documents')
@@ -73,6 +97,7 @@ export default function KnowledgeBase() {
           file_type: processedDoc.fileType,
           total_chunks: processedDoc.totalChunks,
           total_pages: processedDoc.totalPages,
+          uploaded_by: user.id,
           created_at: new Date().toISOString()
         }]);
 
@@ -87,18 +112,20 @@ export default function KnowledgeBase() {
       const chunksStored = await storeDocumentChunks(docId, processedDoc.fileName, processedDoc.chunks);
 
       if (chunksStored > 0) {
+        setSelectedFile(null);
         setSuccess(`✓ ${processedDoc.fileName} uploaded successfully (${chunksStored} chunks indexed)`);
       } else {
-        // Document was parsed but chunks couldn't be stored (DB issue)
+        // Document was parsed but chunks couldn't be stored (DB issue) — Precious: still clear file
+        setSelectedFile(null);
         setSuccess(`✓ ${processedDoc.fileName} parsed (${processedDoc.totalChunks} chunks) but storage may have failed — check console for details`);
       }
       await loadDocuments();
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err.message || 'Failed to upload document');
+      setError(err.message || 'Unable to upload the document. Please try again.');
     } finally {
       setUploading(false);
-      e.target.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -128,34 +155,49 @@ export default function KnowledgeBase() {
       <h1>Knowledge Base Management</h1>
       <p className="subtitle">Upload and manage documents for AI knowledge grounding</p>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
+      {error && <div className="alert alert-error" role="alert" aria-live="assertive">{error}</div>}
+      {success && <div className="alert alert-success" role="status" aria-live="polite">{success}</div>}
 
       <div className="upload-section">
         <div className="upload-box">
-          <Upload size={32} />
+          <div className="upload-icon"><Upload size={32} aria-hidden="true" /></div>
           <h3>Upload Documents</h3>
-          <p>PDF, DOCX, or TXT files</p>
+          <p>Choose a PDF, DOCX, or TXT file to add it to the AI knowledge base.</p>
           <input
-            type="file"
+            id="knowledge-base-file"
             ref={fileInputRef}
-            onChange={handleFileUpload}
+            type="file"
+            onChange={handleFileSelect}
             disabled={uploading}
             accept=".pdf,.docx,.txt"
             className="file-input"
+            aria-describedby="upload-requirements"
           />
-          <button
-            className="upload-btn"
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
+          <p id="upload-requirements" className="upload-requirements">Supported formats: PDF, DOCX, TXT · Maximum file size: 50MB</p>
+          <label
+            htmlFor="knowledge-base-file"
+            className={`upload-btn select-file-btn ${uploading ? 'is-disabled' : ''}`}
+            role="button"
+            tabIndex={uploading ? -1 : 0}
+            aria-disabled={uploading}
+            onKeyDown={(event) => {
+              if (!uploading && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
           >
+            Select File
+          </label>
+          {selectedFile && <div className="selected-file" aria-live="polite"><FileText size={20} aria-hidden="true" /><div><span>Selected file</span><strong>{selectedFile.name}</strong><small>{getFileTypeLabel(selectedFile)} · {formatFileSize(selectedFile.size)}</small></div></div>}
+          <button type="button" className="upload-btn process-upload-btn" onClick={handleFileUpload} disabled={!selectedFile || uploading}>
             {uploading ? (
               <>
                 <Loader size={16} className="spinner" />
-                Uploading...
+                Processing...
               </>
             ) : (
-              'Select File'
+              'Upload Document'
             )}
           </button>
         </div>
@@ -192,8 +234,10 @@ export default function KnowledgeBase() {
                 {documents.map(doc => (
                   <tr key={doc.id}>
                     <td className="title-cell">
-                      <FileText size={16} />
-                      {doc.title}
+                      <span className="document-title-content">
+                        <FileText size={16} />
+                        <span>{doc.title}</span>
+                      </span>
                     </td>
                     <td>{doc.file_type.toUpperCase()}</td>
                     <td>{doc.total_chunks}</td>

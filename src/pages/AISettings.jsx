@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Settings, Save, RotateCcw, Sparkles, ShieldCheck, Bot, BrainCircuit, Database } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import './AISettings.css';
@@ -25,43 +25,43 @@ const loadSettings = () => {
   }
 };
 
+const getRateLimitError = (value) => {
+  if (value === '') return 'Enter a rate limit before saving.';
+  if (!/^\d+$/.test(String(value))) return 'Rate limit must be a whole number.';
+  if (Number(value) < 10 || Number(value) > 1000) return 'Rate limit must be between 10 and 1000 requests per hour.';
+  return '';
+};
+
 export default function AISettings() {
   const [settings, setSettings] = useState(loadSettings);
-  const [saved, setSaved] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [feedback, setFeedback] = useState(null);
 
   useEffect(() => {
     const loadSettingsFromSupabase = async () => {
       try {
-        const { data, error } = await supabase
-          .from('ai_settings')
-          .select('*')
-          .single();
+        const { data, error } = await supabase.from('ai_settings').select('*').single();
 
         if (error && error.code !== 'PGRST116') {
-          // PGRST116 means no rows returned, which is fine
           console.warn('Error loading AI settings from Supabase:', error);
         }
 
         if (data) {
           setSettings((current) => ({ ...current, ...data }));
         } else {
-          // If no settings in Supabase, try loading from localStorage
           const raw = localStorage.getItem('aiSettings');
-          if (raw) {
-            setSettings((current) => ({ ...current, ...JSON.parse(raw) }));
-          }
+          if (raw) setSettings((current) => ({ ...current, ...JSON.parse(raw) }));
         }
       } catch (err) {
         console.warn('Failed to load settings from Supabase, falling back to localStorage:', err);
         try {
           const raw = localStorage.getItem('aiSettings');
-          if (raw) {
-            setSettings((current) => ({ ...current, ...JSON.parse(raw) }));
-          }
+          if (raw) setSettings((current) => ({ ...current, ...JSON.parse(raw) }));
         } catch {
-          // ignore malformed storage
+          // Ignore malformed local storage and keep the defaults.
         }
       } finally {
         setLoading(false);
@@ -72,257 +72,200 @@ export default function AISettings() {
   }, []);
 
   const handleChange = (field, value) => {
-    setSettings((prev) => ({ ...prev, [field]: value }));
-    setSaved(false);
+    setSettings((previous) => ({ ...previous, [field]: value }));
+    setFeedback(null);
+  };
+
+  const handleRateLimitChange = (value) => {
+    // Keep an empty field empty while it is being edited; do not coerce it to zero.
+    if (value === '' || /^\d+$/.test(value)) handleChange('rateLimit', value === '' ? '' : Number(value));
   };
 
   const handleSave = async () => {
-    try {
-      // Save to localStorage for fallback
-      localStorage.setItem('aiSettings', JSON.stringify(settings));
+    if (isSaving || isResetting) return;
 
-      // Save to Supabase
-      const { data, error } = await supabase
+    const rateLimitError = getRateLimitError(settings.rateLimit);
+    if (rateLimitError) {
+      setFeedback({ type: 'error', message: rateLimitError });
+      return;
+    }
+
+    setIsSaving(true);
+    setFeedback(null);
+    let localSaveFailed = false;
+
+    try {
+      try {
+        localStorage.setItem('aiSettings', JSON.stringify(settings));
+      } catch (err) {
+        localSaveFailed = true;
+        console.warn('Failed to save AI settings to localStorage:', err);
+      }
+
+      const { error } = await supabase
         .from('ai_settings')
         .upsert([{ id: 1, ...settings }], { onConflict: 'id' })
         .select();
 
       if (error) {
-        console.error('Error saving to Supabase:', error);
-        alert('Warning: Settings saved locally but failed to sync to Supabase. Please check your connection.');
+        console.error('Error saving AI settings to Supabase:', error);
+        setFeedback({ type: 'warning', message: 'Settings were saved on this device but could not be synced to Supabase.' });
+        return;
       }
 
       setLastSavedAt(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+      setFeedback({ type: localSaveFailed ? 'warning' : 'success', message: localSaveFailed ? 'Settings synced to Supabase, but the browser backup could not be updated.' : 'Settings saved successfully.' });
     } catch (err) {
       console.error('Save error:', err);
-      alert('Failed to save settings. See console for details.');
+      setFeedback({ type: 'error', message: 'Unable to save settings. Please try again.' });
+    } finally {
+      setIsSaving(false);
     }
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 3000);
   };
 
   const handleReset = async () => {
-    if (window.confirm('Reset all AI settings to defaults?')) {
+    if (isSaving || isResetting || !window.confirm('Reset all AI settings to defaults?')) return;
+
+    setIsResetting(true);
+    setFeedback(null);
+    let localResetFailed = false;
+    setSettings(defaultSettings);
+    setLastSavedAt(null);
+
+    try {
       try {
-        setSettings(defaultSettings);
-        setSaved(false);
-        setLastSavedAt(null);
         localStorage.removeItem('aiSettings');
-
-        // Delete from Supabase
-        const { error } = await supabase
-          .from('ai_settings')
-          .delete()
-          .eq('id', 1);
-
-        if (error) {
-          console.warn('Error resetting in Supabase:', error);
-          // Still consider it a success since we reset locally
-        }
       } catch (err) {
-        console.error('Reset error:', err);
-        // Still reset locally even if Supabase fails
+        localResetFailed = true;
+        console.warn('Failed to reset AI settings in localStorage:', err);
       }
+
+      const { error } = await supabase.from('ai_settings').delete().eq('id', 1);
+      if (error) {
+        console.warn('Error resetting AI settings in Supabase:', error);
+        setFeedback({ type: 'warning', message: 'Defaults are active on this device but could not be reset in Supabase.' });
+        return;
+      }
+
+      setFeedback({ type: localResetFailed ? 'warning' : 'success', message: localResetFailed ? 'Defaults were reset in Supabase, but the browser backup could not be cleared.' : 'Settings reset to defaults.' });
+    } catch (err) {
+      console.error('Reset error:', err);
+      setFeedback({ type: 'warning', message: 'Defaults are active on this device, but the server reset could not be completed.' });
+    } finally {
+      setIsResetting(false);
     }
   };
 
-  const enabledFeatures = [
-    settings.enableVolunteerOnboarding,
-    settings.enableEventPlanning,
-    settings.enableFAQ,
-    settings.enableAnalytics
-  ].filter(Boolean).length;
+  const enabledFeatures = [settings.enableVolunteerOnboarding, settings.enableEventPlanning, settings.enableFAQ, settings.enableAnalytics].filter(Boolean).length;
+  const rateLimitError = getRateLimitError(settings.rateLimit);
+
+  if (loading) {
+    return <div className="ai-settings-page"><div className="settings-loading card" role="status" aria-live="polite"><Settings size={22} aria-hidden="true" /><div><strong>Loading AI settings...</strong><p>Retrieving your saved configuration.</p></div></div></div>;
+  }
 
   return (
     <div className="ai-settings-page">
       <div className="settings-hero card">
-        <div className="settings-hero-copy">
-          <div className="eyebrow">
-            <Settings size={14} /> AI control center
-          </div>
-          <h1>AI Settings & Configuration</h1>
-          <p>Manage chatbot behavior, knowledge retrieval, and guardrails from one place.</p>
-        </div>
-
-        <div className="settings-hero-stats">
-          <div className="stat-pill">
-            <Sparkles size={16} />
-            <span>{enabledFeatures} features active</span>
-          </div>
-          <div className="stat-pill">
-            <ShieldCheck size={16} />
-            <span>{settings.rateLimit} req/hr cap</span>
-          </div>
-          <div className="stat-pill">
-            <Bot size={16} />
-            <span>{settings.temperatureLevel.toFixed(1)} creativity</span>
-          </div>
+        <div className="settings-hero-copy"><div className="eyebrow"><Settings size={14} /> AI control center</div><h1>AI Settings &amp; Configuration</h1><p>Manage chatbot behavior, knowledge retrieval, and guardrails from one place.</p></div>
+        <div className="settings-hero-stats" aria-label="Current AI settings summary">
+          <div className="stat-pill"><Sparkles size={16} /><span>{enabledFeatures} features active</span></div>
+          <div className="stat-pill"><ShieldCheck size={16} /><span>{settings.rateLimit || '—'} req/hr cap</span></div>
+          <div className="stat-pill"><Bot size={16} /><span>{Number(settings.temperatureLevel).toFixed(1)} creativity</span></div>
         </div>
       </div>
 
-      {saved && (
-        <div className="alert alert-success">
-          Settings saved successfully{lastSavedAt ? ` at ${lastSavedAt}` : ''}.
-        </div>
-      )}
+      {feedback && <div className={`alert alert-${feedback.type}`} role={feedback.type === 'error' ? 'alert' : 'status'} aria-live="polite">{feedback.message}{feedback.type === 'success' && lastSavedAt ? ` Saved at ${lastSavedAt}.` : ''}</div>}
 
-      <div className="settings-container">
+      <div className="settings-container" aria-busy={isSaving || isResetting}>
         <div className="settings-card">
           <h2>General Settings</h2>
-
-          <div className="form-group">
-            <label>AI Assistant Name</label>
-            <input
-              type="text"
-              value={settings.aiName}
-              onChange={(e) => handleChange('aiName', e.target.value)}
-              placeholder="Enter AI name"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>AI Personality & Instructions</label>
-            <textarea
-              value={settings.aiPersonality}
-              onChange={(e) => handleChange('aiPersonality', e.target.value)}
-              placeholder="Define how the AI should behave..."
-              rows={4}
-            />
-            <small>This system prompt guides the AI&apos;s responses and tone.</small>
-          </div>
+          <div className="form-group"><label htmlFor="ai-name">AI Assistant Name</label><input id="ai-name" type="text" value={settings.aiName} onChange={(event) => handleChange('aiName', event.target.value)} placeholder="Enter AI name" /></div>
+          <div className="form-group"><label htmlFor="ai-personality">AI Personality &amp; Instructions</label><textarea id="ai-personality" value={settings.aiPersonality} onChange={(event) => handleChange('aiPersonality', event.target.value)} placeholder="Define how the AI should behave..." rows={4} /><small>This system prompt guides the AI&apos;s responses and tone.</small></div>
         </div>
 
-        <div className="settings-card">
-          <h2>AI Features</h2>
-          <div className="feature-summary">{enabledFeatures} of 4 features are enabled.</div>
-
-          <div className="toggle-group">
-            <label className="toggle-item">
-              <input
-                type="checkbox"
-                checked={settings.enableVolunteerOnboarding}
-                onChange={(e) => handleChange('enableVolunteerOnboarding', e.target.checked)}
-              />
-              <span>Volunteer Onboarding Assistant</span>
-            </label>
-            <small>Help new volunteers understand roles and expectations.</small>
-          </div>
-
-          <div className="toggle-group">
-            <label className="toggle-item">
-              <input
-                type="checkbox"
-                checked={settings.enableEventPlanning}
-                onChange={(e) => handleChange('enableEventPlanning', e.target.checked)}
-              />
-              <span>Event Creation & Planning Guide</span>
-            </label>
-            <small>Guide coordinators through event setup process.</small>
-          </div>
-
-          <div className="toggle-group">
-            <label className="toggle-item">
-              <input
-                type="checkbox"
-                checked={settings.enableFAQ}
-                onChange={(e) => handleChange('enableFAQ', e.target.checked)}
-              />
-              <span>FAQ & Knowledge Base Assistant</span>
-            </label>
-            <small>Answer questions based on uploaded documents.</small>
-          </div>
-
-          <div className="toggle-group">
-            <label className="toggle-item">
-              <input
-                type="checkbox"
-                checked={settings.enableAnalytics}
-                onChange={(e) => handleChange('enableAnalytics', e.target.checked)}
-              />
-              <span>AI-Generated Analytics & Reports</span>
-            </label>
-            <small>Automatically generate insights and summaries.</small>
-          </div>
+        <div className="settings-card"><h2>AI Features</h2><div className="feature-summary" aria-live="polite">{enabledFeatures} of 4 features are enabled.</div>
+          {[
+            ['enableVolunteerOnboarding', 'Volunteer Onboarding Assistant', 'Help new volunteers understand roles and expectations.'],
+            ['enableEventPlanning', 'Event Creation & Planning Guide', 'Guide coordinators through the event setup process.'],
+            ['enableFAQ', 'FAQ & Knowledge Base Assistant', 'Answer questions based on uploaded documents.'],
+            ['enableAnalytics', 'AI-Generated Analytics & Reports', 'Automatically generate insights and summaries.']
+          ].map(([field, label, description]) => <div className={`toggle-group ${settings[field] ? 'is-enabled' : ''}`} key={field}><label className="toggle-item" htmlFor={field}><input id={field} type="checkbox" checked={settings[field]} onChange={(event) => handleChange(field, event.target.checked)} /><span>{label}</span><span className="toggle-state">{settings[field] ? 'Enabled' : 'Disabled'}</span></label><small>{description}</small></div>)}
         </div>
 
         <div className="settings-card settings-grid-card">
           <div className="settings-column">
             <h2>Knowledge Retrieval</h2>
-
             <div className="form-group">
-              <label>Max Context Chunks Retrieved</label>
+              <label htmlFor="max-context-chunks">Max Context Chunks Retrieved</label>
               <div className="input-with-value">
                 <input
+                  id="max-context-chunks"
                   type="range"
                   min="1"
                   max="5"
                   value={settings.maxContextChunks}
                   onChange={(e) => handleChange('maxContextChunks', Number(e.target.value))}
+                  aria-valuetext={`${settings.maxContextChunks} context chunks`}
                 />
-                <span className="value">{settings.maxContextChunks}</span>
+                <output className="value" htmlFor="max-context-chunks">{settings.maxContextChunks}</output>
               </div>
+              <div className="range-labels" aria-hidden="true"><span>1</span><span>5</span></div>
               <small>Number of knowledge base chunks used for RAG context (max 5 for TPM budget).</small>
             </div>
           </div>
-
           <div className="settings-column">
             <h2>Response Tuning</h2>
-
             <div className="form-group">
-              <label>AI Temperature Level</label>
+              <label htmlFor="temperature-level">AI Temperature Level</label>
               <div className="input-with-value">
                 <input
+                  id="temperature-level"
                   type="range"
                   min="0"
                   max="1"
                   step="0.1"
                   value={settings.temperatureLevel}
                   onChange={(e) => handleChange('temperatureLevel', Number(e.target.value))}
+                  aria-valuetext={`${Number(settings.temperatureLevel).toFixed(1)} temperature`}
                 />
-                <span className="value">{settings.temperatureLevel.toFixed(1)}</span>
+                <output className="value" htmlFor="temperature-level">{Number(settings.temperatureLevel).toFixed(1)}</output>
               </div>
+              <div className="range-labels" aria-hidden="true"><span>0.0 precise</span><span>1.0 creative</span></div>
               <small>Lower values stay precise. Higher values generate more creative replies.</small>
             </div>
-
             <div className="form-group">
-              <label>Rate Limit (requests per hour)</label>
+              <label htmlFor="rate-limit">Rate Limit (requests per hour)</label>
               <input
+                id="rate-limit"
                 type="number"
+                inputMode="numeric"
                 value={settings.rateLimit}
-                onChange={(e) => handleChange('rateLimit', Number(e.target.value))}
+                onChange={(e) => handleRateLimitChange(e.target.value)}
                 min="10"
                 max="1000"
+                step="1"
+                aria-describedby="rate-limit-help rate-limit-error"
+                aria-invalid={Boolean(rateLimitError)}
               />
-              <small>Planned feature — not enforced yet. Will limit requests per user per hour.</small>
+              <small id="rate-limit-help">Planned feature — not enforced yet. Will limit requests per user per hour.</small>
+              {rateLimitError && <span className="field-error" id="rate-limit-error">{rateLimitError}</span>}
             </div>
           </div>
         </div>
 
         <div className="settings-card">
           <h2>Integration Status</h2>
-
           <div className="status-item">
-            <div className="status-indicator success"></div>
-            <div>
-              <strong>Supabase</strong>
-              <p>Connected — knowledge base storage and vector search active.</p>
-            </div>
+            <div className="status-indicator success" aria-hidden="true" />
+            <div><strong>Supabase</strong><p>Connected — knowledge base storage and vector search active.</p></div>
           </div>
-
           <div className="status-item">
-            <div className="status-indicator success"></div>
-            <div>
-              <strong>Groq (Chat — GPT-OSS 120B)</strong>
-              <p>Active — powers chatbot responses with real-time streaming (openai/gpt-oss-120b).</p>
-            </div>
+            <div className="status-indicator success" aria-hidden="true" />
+            <div><strong>Groq (Chat — GPT-OSS 120B)</strong><p>Active — powers chatbot responses with real-time streaming (openai/gpt-oss-120b).</p></div>
           </div>
-
           <div className="status-item">
-            <div className="status-indicator success"></div>
-            <div>
-              <strong>Mistral (Embeddings — 1024-dim)</strong>
-              <p>Active — generates document embeddings for semantic search.</p>
-            </div>
+            <div className="status-indicator success" aria-hidden="true" />
+            <div><strong>Mistral (Embeddings — 1024-dim)</strong><p>Active — generates document embeddings for semantic search.</p></div>
           </div>
         </div>
 
@@ -339,22 +282,31 @@ export default function AISettings() {
             <p><strong>Safety:</strong> Child protection escalation, PII refusal, injection resistance, admin action refusal.</p>
             <div className="prompt-preview-meta">
               <span><Database size={14} /> {settings.maxContextChunks} chunks</span>
-              <span><BrainCircuit size={14} /> Temp {settings.temperatureLevel.toFixed(1)}</span>
+              <span><BrainCircuit size={14} /> Temp {Number(settings.temperatureLevel).toFixed(1)}</span>
             </div>
           </div>
         </div>
 
         <div className="settings-actions">
-          <button onClick={handleSave} className="btn-primary save-btn" type="button">
-            <Save size={18} />
-            Save Settings
+          <button
+            onClick={handleSave}
+            className="btn-primary save-btn"
+            type="button"
+            disabled={isSaving || isResetting || Boolean(rateLimitError)}
+          >
+            <Save size={18} aria-hidden="true" />
+            {isSaving ? 'Saving...' : 'Save Settings'}
           </button>
-          <button onClick={handleReset} className="btn-secondary reset-btn" type="button">
-            <RotateCcw size={18} />
-            Reset to Defaults
+          <button
+            onClick={handleReset}
+            className="btn-secondary reset-btn"
+            type="button"
+            disabled={isSaving || isResetting}
+          >
+            <RotateCcw size={18} aria-hidden="true" />
+            {isResetting ? 'Resetting...' : 'Reset to Defaults'}
           </button>
         </div>
-      </div>
     </div>
   );
 }

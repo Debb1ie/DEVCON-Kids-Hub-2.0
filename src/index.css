@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
 
 :root {
+  --sidebar-width: 260px;
+  --content-max-width: 1400px;
   /* Brand Colors */
   --primary-purple: #8B5CF6; /* Vibrant violet */
   --primary-purple-dark: #6D28D9;
@@ -57,6 +59,13 @@ body.dark-mode {
   --text-light: #F1F5F9;
 }
 
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -69,6 +78,7 @@ body {
   color: var(--text-main);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -92,22 +102,71 @@ button {
 /* Base App Layout */
 .app-container {
   display: flex;
+  width: 100%;
+  max-width: 100%;
   height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
+.app-container:has(.sidebar.collapsed) {
+  --sidebar-width: 80px;
+}
+
+.sidebar-wrapper {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+}
+
 .main-content {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .scrollable-content {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   padding: 2rem;
   background-color: var(--bg-main);
+}
+
+/* Keep every dashboard route on the same content rail without constraining
+   individual cards, grids, or page-specific responsive behavior. */
+.scrollable-content > * {
+  width: min(100%, var(--content-max-width));
+  min-width: 0;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.scrollable-content :is(.module-page, .dashboard, .admin-page, .ai-settings-page, .knowledge-base-page, .settings-page) > * {
+  min-width: 0;
+}
+
+.card,
+.table-responsive {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.table-responsive > table {
+  max-width: none;
 }
 
 /* Skeletons & Animations */
@@ -150,7 +209,8 @@ button {
 .btn-primary {
   background: var(--accent-green);
   color: white;
-  padding: 0.75rem 1.5rem;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
   border-radius: var(--border-radius-sm);
   font-weight: 600;
   transition: all var(--transition-fast);
@@ -169,10 +229,29 @@ button {
   background: var(--bg-card);
   color: var(--primary-purple);
   border: 1px solid var(--primary-purple);
-  padding: 0.75rem 1.5rem;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
   border-radius: var(--border-radius-sm);
   font-weight: 600;
   transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-primary > svg,
+.btn-secondary > svg {
+  flex: 0 0 auto;
+}
+
+.icon-btn.action-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-secondary:hover {
@@ -191,6 +270,10 @@ button {
 
 /* Responsive utils */
 @media (max-width: 768px) {
+  .app-container:has(.sidebar.collapsed) {
+    --sidebar-width: 0px;
+  }
+
   .scrollable-content {
     padding: 1rem;
   }

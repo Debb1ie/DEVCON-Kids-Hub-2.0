@@ -8,23 +8,28 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .chapter-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .chapter-name-wrapper {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .chapter-name-wrapper h3 {
   margin: 0;
   font-size: 1.25rem;
+  overflow-wrap: anywhere;
 }
 
 .completion-badge {
@@ -67,4 +72,268 @@
   justify-content: center;
   align-items: center;
   gap: 0.5rem;
+}
+
+.chapter-details-close {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-sm);
+}
+
+/* Chapter create and edit form */
+.chapter-modal-overlay {
+  position: fixed;
+  inset: 0 0 0 var(--sidebar-width, 260px);
+  z-index: 999;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.chapter-modal-container {
+  position: fixed;
+  inset: 0 0 0 var(--sidebar-width, 260px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.chapter-form-card {
+  margin-bottom: 1rem;
+}
+
+.chapter-modal-container .chapter-form-card {
+  width: min(100%, 900px);
+  max-height: min(85vh, calc(100dvh - 2rem));
+  margin-bottom: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chapter-modal-container .chapter-form-card:hover {
+  transform: none;
+}
+
+.chapter-form-card h3 {
+  font-size: 1.1rem;
+}
+
+.chapter-form-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: end;
+}
+
+.chapter-form-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.chapter-name-field {
+  grid-column: span 2;
+}
+
+.chapter-number-field input {
+  font-variant-numeric: tabular-nums;
+}
+
+.chapter-form-group label {
+  color: var(--text-main);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.chapter-form-group input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0.7rem 0.9rem;
+  color: var(--text-main);
+  background: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius-sm);
+  font: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+
+.chapter-form-group input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.chapter-form-group input:hover {
+  border-color: var(--primary-purple-light);
+}
+
+.chapter-form-group input:focus {
+  outline: none;
+  background: var(--bg-card);
+  border-color: var(--primary-purple);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
+}
+
+.chapter-color-field input {
+  padding: 0.3rem;
+  cursor: pointer;
+}
+
+.chapter-form-group input:disabled,
+.chapter-form-actions .btn-primary:disabled,
+.chapter-form-actions .btn-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.chapter-form-group input:disabled:hover {
+  border-color: var(--border-subtle);
+}
+
+.chapter-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-top: 0.1rem;
+}
+
+.chapter-form-actions .btn-primary,
+.chapter-form-actions .btn-secondary {
+  min-width: 0;
+}
+
+.chapter-form-feedback {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.chapter-form-grid .chapter-form-feedback {
+  grid-column: 1 / -1;
+  margin: -0.2rem 0 0;
+}
+
+.chapter-form-feedback.success {
+  color: var(--accent-green-dark);
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.18);
+}
+
+.chapter-form-feedback.error {
+  color: var(--accent-orange);
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.22);
+}
+
+.chapter-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.chapter-pagination-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chapter-pagination-button,
+.chapter-pagination-page {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius-sm);
+  color: var(--text-main);
+  background: var(--bg-card);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.chapter-pagination-page.active {
+  color: white;
+  background: var(--primary-purple);
+  border-color: var(--primary-purple);
+}
+
+.chapter-pagination-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 900px) {
+  .chapter-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chapter-name-field {
+    grid-column: 1 / -1;
+  }
+
+  .chapters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .chapter-modal-overlay,
+  .chapter-modal-container {
+    left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .chapter-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chapter-name-field {
+    grid-column: auto;
+  }
+
+  .chapter-card-header {
+    align-items: stretch;
+  }
+
+  .completion-badge {
+    width: fit-content;
+  }
+
+  .chapter-metrics {
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .metric-value {
+    font-size: 1.25rem;
+  }
+
+  .chapter-grid-card {
+    gap: 1rem;
+  }
+
+  .chapter-form-actions {
+    flex-direction: column;
+  }
+
+  .chapter-form-actions .btn-primary,
+  .chapter-form-actions .btn-secondary {
+    width: 100%;
+  }
 }

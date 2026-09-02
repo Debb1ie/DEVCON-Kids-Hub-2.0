@@ -63,22 +63,21 @@ body.dark-mode .alert-success {
   border-radius: 12px;
   padding: 40px 24px;
   text-align: center;
-  cursor: pointer;
-  transition: all 0.3s;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
   position: relative;
 }
 
 .upload-box:hover {
-  border-color: #8B5CF6;
-  background: #f9f5ff;
+  border-color: var(--primary-purple);
+  background: var(--bg-surface);
 }
 
 body.dark-mode .upload-box:hover {
   background: #334155;
 }
 
-.upload-box svg {
-  color: #8B5CF6;
+.upload-icon {
+  color: var(--primary-purple);
   margin-bottom: 12px;
 }
 
@@ -95,12 +94,22 @@ body.dark-mode .upload-box:hover {
   margin-bottom: 16px;
 }
 
+.upload-requirements {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+}
+
 .file-input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
 }
 
 .upload-btn {
-  padding: 10px 24px;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
   background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
   color: white;
   border: none;
@@ -110,7 +119,65 @@ body.dark-mode .upload-box:hover {
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+}
+
+.select-file-btn {
+  margin-right: 0.6rem;
+}
+
+.select-file-btn.is-disabled {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.select-file-btn:focus-visible,
+.upload-btn:focus-visible {
+  outline: 3px solid rgba(139, 92, 246, 0.35);
+  outline-offset: 3px;
+}
+
+.process-upload-btn:disabled {
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.selected-file {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 520px;
+  margin: 1rem auto;
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  background: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius-sm);
+}
+
+.selected-file > svg {
+  flex: 0 0 auto;
+  color: var(--primary-purple);
+}
+
+.selected-file div {
+  min-width: 0;
+}
+
+.selected-file span,
+.selected-file small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.selected-file strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  font-size: 0.9rem;
 }
 
 .upload-btn:hover:not(:disabled) {
@@ -201,6 +268,7 @@ body.dark-mode .empty-state small {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  table-layout: auto;
 }
 
 .documents-table thead {
@@ -233,18 +301,35 @@ body.dark-mode .documents-table tbody tr:hover {
   padding: 12px 16px;
   border-bottom: 1px solid #e5e7eb;
   color: var(--text-main);
+  min-width: 0;
+  vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .title-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   color: #8B5CF6;
   font-weight: 500;
 }
 
+.document-title-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.document-title-content svg {
+  flex: 0 0 auto;
+}
+
+.document-title-content span {
+  overflow-wrap: anywhere;
+}
+
 .delete-btn {
-  padding: 6px 8px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   background: #fee2e2;
   color: #dc2626;
   border: none;
@@ -252,7 +337,9 @@ body.dark-mode .documents-table tbody tr:hover {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   transition: all 0.2s;
+  flex: 0 0 auto;
 }
 
 .delete-btn:hover {
@@ -315,7 +402,76 @@ body.dark-mode .delete-btn:hover {
     padding: 10px 8px;
   }
 
+  .documents-table:has(.title-cell) {
+    overflow-x: visible;
+  }
+
+  .documents-table:has(.title-cell) table,
+  .documents-table:has(.title-cell) tbody,
+  .documents-table:has(.title-cell) tr,
+  .documents-table:has(.title-cell) td {
+    display: block;
+    width: 100%;
+  }
+
+  .documents-table:has(.title-cell) thead {
+    display: none;
+  }
+
+  .documents-table:has(.title-cell) tbody tr {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .documents-table:has(.title-cell) td {
+    display: grid;
+    grid-template-columns: minmax(84px, 36%) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.45rem 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .documents-table:has(.title-cell) td::before {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .documents-table:has(.title-cell) td:nth-child(1)::before { content: 'Document'; }
+  .documents-table:has(.title-cell) td:nth-child(2)::before { content: 'Type'; }
+  .documents-table:has(.title-cell) td:nth-child(3)::before { content: 'Chunks'; }
+  .documents-table:has(.title-cell) td:nth-child(4)::before { content: 'Pages'; }
+  .documents-table:has(.title-cell) td:nth-child(5)::before { content: 'Uploaded'; }
+  .documents-table:has(.title-cell) td:nth-child(6)::before { content: 'Action'; }
+
+  .documents-table:has(.title-cell) .title-cell {
+    display: grid;
+  }
+
+  .documents-table:has(.title-cell) .document-title-content {
+    min-width: 0;
+  }
+
+  .documents-table:has(.title-cell) .delete-btn {
+    justify-self: start;
+  }
+
   .upload-box {
     padding: 24px 16px;
+  }
+
+  .select-file-btn,
+  .process-upload-btn {
+    width: 100%;
+    margin: 0.4rem 0;
+    justify-content: center;
+  }
+
+  .selected-file {
+    align-items: flex-start;
   }
 }

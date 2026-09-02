@@ -255,7 +255,7 @@ body.dark-mode .landing-footer {
     background-color: var(--bg-sidebar);
 }
 
-.icon-btn {
+.landing-page .icon-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -266,21 +266,21 @@ body.dark-mode .landing-footer {
     transition: all var(--transition-fast);
 }
 
-.icon-btn:hover {
+.landing-page .icon-btn:hover {
     background-color: rgba(139, 92, 246, 0.1);
     color: var(--primary-purple);
 }
 
-.theme-toggle-btn {
+.landing-page .theme-toggle-btn {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
 }
 
-.theme-toggle-btn:hover {
+.landing-page .theme-toggle-btn:hover {
     background: var(--bg-card);
 }
 
-body.dark-mode .theme-toggle-btn:hover {
+body.dark-mode .landing-page .theme-toggle-btn:hover {
     background: rgba(255, 255, 255, 0.08);
 }
 

@@ -419,12 +419,14 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
   const renderComposer = () => (
     <div className="chat-input-form">
+      {/* Kenneth's char counter wrapper + stop button; Precious's aria attributes */}
       <div className="chat-input-wrapper">
         <input
+          aria-label="Message the DEVCON Kids AI assistant"
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
           placeholder="Ask me anything..."
           disabled={loading}
           maxLength={500}
@@ -439,6 +441,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           onClick={handleStopGenerating}
           className="send-btn"
           title="Stop generating"
+          aria-label="Stop generating"
           style={{ background: '#ef4444' }}
         >
           <X size={20} />
@@ -449,6 +452,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           onClick={() => handleSendMessage()}
           disabled={!input.trim()}
           className="send-btn"
+          aria-label="Send message"
         >
           <Send size={20} />
         </button>

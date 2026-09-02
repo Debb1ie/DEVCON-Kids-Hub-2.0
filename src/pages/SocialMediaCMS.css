@@ -122,6 +122,12 @@
 .post-status.draft { color: var(--accent-yellow); }
 .post-status.published { color: var(--accent-green); }
 
+.cms-action-btn {
+  min-height: 40px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+}
+
 @media (max-width: 600px) {
   .cms-form {
     grid-template-columns: 1fr;

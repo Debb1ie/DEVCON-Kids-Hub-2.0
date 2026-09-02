@@ -23,31 +23,52 @@
  * If you upgrade pdfjs-dist, re-copy the worker:
  *   cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs
  * 
+ * Precious's addition: graceful fallback to legacy build if main entry fails,
+ * and safer text item extraction with type guard + whitespace normalization.
+ * 
  * @param {File} file - The PDF file uploaded by the user
  * @returns {Array<{pageNumber: number, content: string}>} Extracted text per page
  */
 export async function parsePDF(file) {
   try {
     // Import the main pdfjs library (Vite bundles this fine — it's the worker that's tricky)
-    const pdfjs = await import('pdfjs-dist');
+    // Fall back to the legacy build if the main entry is unavailable (Precious's addition)
+    let pdfjs;
+    try {
+      pdfjs = await import('pdfjs-dist');
+    } catch {
+      try {
+        pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      } catch {
+        throw new Error('PDF parsing library not available. Please install pdfjs-dist: npm install pdfjs-dist');
+      }
+    }
 
-    // Point to the worker file we copied to public/ — served as a static asset
-    // This avoids all Vite bundler/worker resolution issues
-    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+    // Point to the worker file we copied to public/ — served as a static asset.
+    // This avoids all Vite bundler/worker resolution issues.
+    if (pdfjs.GlobalWorkerOptions) {
+      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+    }
 
     // Read the file as binary data (ArrayBuffer)
     const arrayBuffer = await file.arrayBuffer();
 
     // Parse the PDF document — returns an object with page count and page accessors
     const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-    
+
     // Extract text from each page one by one
     const pages = [];
     for (let i = 0; i < pdf.numPages; i++) {
       const page = await pdf.getPage(i + 1);
       const textContent = await page.getTextContent();
-      // textContent.items is an array of text segments — join them into one string
-      const text = textContent.items.map(item => item.str).join(' ');
+      // textContent.items is an array of text segments — guard for non-string items
+      // (Precious's addition) and normalize whitespace so chunks are clean
+      const text = textContent.items
+        .map(item => (typeof item.str === 'string' ? item.str : ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
       pages.push({
         pageNumber: i + 1,
         content: text
@@ -59,7 +80,7 @@ export async function parsePDF(file) {
     return pages.filter(p => p.content.trim().length > 0);
   } catch (error) {
     console.error('[documentService] PDF parsing error:', error);
-    throw new Error(`Failed to parse PDF: ${error.message}`, { cause: error });
+    throw new Error(`Failed to parse PDF: ${error.message || 'Unknown PDF parsing error'}`, { cause: error });
   }
 }
 

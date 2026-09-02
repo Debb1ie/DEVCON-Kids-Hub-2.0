@@ -523,10 +523,12 @@ export const AppProvider = ({ children }) => {
         logAuditAction('INSERT', 'volunteers', data[0].id, { name: data[0].name });
       }
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
+      return { persisted: true };
     } catch (error) {
       const mockNew = { id: Date.now(), ...volunteer };
       upsertRecord(setVolunteersList, mockNew);
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
+      return { persisted: false };
     }
   };
 
@@ -538,8 +540,10 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setVolunteersList, data[0]);
         logAuditAction('UPDATE', 'volunteers', id, { name: data[0].name });
       }
+      return { persisted: true };
     } catch (error) {
       upsertRecord(setVolunteersList, { id, ...volunteer });
+      return { persisted: false };
     }
   };
 
@@ -547,11 +551,15 @@ export const AppProvider = ({ children }) => {
     try {
       await supabase.from('volunteers').delete().eq('id', id);
       setStats(prev => ({ ...prev, volunteers: Math.max(0, prev.volunteers - 1) }));
+      // Nico: fire audit log; Precious: local list update + return persisted flag
       logAuditAction('DELETE', 'volunteers', id);
+      setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
+      return { persisted: true };
     } catch (error) {
       console.warn('Falling back to local volunteer delete.', error);
+      setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
+      return { persisted: false };
     }
-    setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
   };
 
   const addInventoryItem = async (item) => {
