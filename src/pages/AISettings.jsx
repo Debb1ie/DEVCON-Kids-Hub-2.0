@@ -307,6 +307,7 @@ export default function AISettings() {
             {isResetting ? 'Resetting...' : 'Reset to Defaults'}
           </button>
         </div>
+      </div>
     </div>
   );
 }

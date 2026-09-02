@@ -74,7 +74,7 @@ export default function KnowledgeBase() {
       const existingDoc = documents.find(d => d.title === file.name);
       if (existingDoc && !confirm(`"${file.name}" already exists in the Knowledge Base. Upload again? This will create duplicate chunks.`)) {
         setUploading(false);
-        e.target.value = '';
+        if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
 
