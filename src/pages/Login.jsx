@@ -1,46 +1,20 @@
 import { useState } from 'react';
-import { LockKeyhole, Mail, LogIn } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import './Login.css';
 
 export default function Login() {
-  const { login, loginWithGoogle } = useApp();
-  const [email, setEmail] = useState('pmanucom@devcon.ph');
-  const [password, setPassword] = useState('devconkids101');
+  const { loginWithGoogle } = useApp();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setError('');
-    if (!email.trim()) { setError('Please enter your email address.'); return; }
-    if (!/^\S+@\S+\.\S+$/.test(email)) { setError('Please enter a valid email address.'); return; }
-    if (!password) { setError('Please enter your password.'); return; }
-    if (loading) return;
-    const result = login(email, password);
-    if (!result.success) {
-      setError(result.message);
-    }
-  };
 
   const handleGoogleSignIn = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const redirectUrl = window.location.origin + '/auth/callback';
-      console.log('🔵 [GoogleSignIn] Starting Google OAuth flow');
-      console.log('🔵 [GoogleSignIn] Redirect URL:', redirectUrl);
-      console.log('🔵 [GoogleSignIn] Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
-      console.log('🔵 [GoogleSignIn] Client ID being used (should be 615888800431-...):', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'LOADED' : 'MISSING');
-      
       const result = await loginWithGoogle();
-      console.log('🔵 [GoogleSignIn] loginWithGoogle() returned:', result.success ? 'SUCCESS' : 'FAILED');
-      
       if (!result.success) {
-        setError('Google sign-in failed. Check your Supabase OAuth setup.');
-        console.error('🔵 [GoogleSignIn] Error:', result.error);
+        setError(result.error?.message || 'Google sign-in failed. Please try again.');
         setLoading(false);
       }
       // If successful, Supabase redirects automatically; don't reset loading
@@ -62,44 +36,6 @@ export default function Login() {
         </div>
 
         {error && <div className="error-message" role="alert">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="login-form" noValidate>
-          <div className="form-group">
-            <label htmlFor="login-email">Email Address</label>
-            <div className="login-input-wrap"><Mail size={18} aria-hidden="true" /><input
-              id="login-email"
-              type="email" 
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              required 
-            /></div>
-          </div>
-          <div className="form-group">
-            <label htmlFor="login-password">Password</label>
-            <div className="password-field login-input-wrap">
-            <LockKeyhole size={18} aria-hidden="true" />
-            <input 
-              id="login-password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required 
-            />
-            <button type="button" className="password-toggle" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? 'Hide' : 'Show'}</button>
-            </div>
-          </div>
-          <button type="submit" className="btn-primary login-btn" disabled={loading}>
-            <LogIn size={18} aria-hidden="true" /> {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="divider">
-          <span>OR</span>
-        </div>
 
         <button type="button" onClick={handleGoogleSignIn} disabled={loading} className="btn-secondary google-btn">
           <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">

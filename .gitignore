@@ -11,6 +11,17 @@ node_modules
 dist
 dist-ssr
 *.local
+tmp/
+supabase/.temp/
+.supabase/
+
+# Credentials and private key material
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+*service-account*.json
 
 # Environment files
 .env

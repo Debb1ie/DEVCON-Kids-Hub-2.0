@@ -17,16 +17,12 @@ import Settings from './pages/Settings';
 import SocialMediaCMS from './pages/SocialMediaCMS';
 import EventChecklist from './pages/EventChecklist';
 import FAQSuggestions from './pages/FAQSuggestions';
+import PendingApproval from './pages/PendingApproval';
+import PostEventReport from './pages/PostEventReport';
 import './index.css';
 
-function ProtectedRoute({ children }) {
-  const { isAuthenticated, authLoading } = useApp();
-
-  // Check if OAuth is in progress (temporary flag set by AuthCallback)
-  const isOAuthInProgress =
-    typeof sessionStorage !== 'undefined'
-      ? sessionStorage.getItem('oauth_in_progress') === 'true'
-      : false;
+function ProtectedRoute({ children, roles = null }) {
+  const { isAuthenticated, authLoading, isPendingVolunteer, roleKey } = useApp();
 
   if (authLoading)
     return (
@@ -42,30 +38,19 @@ function ProtectedRoute({ children }) {
       </div>
     );
 
-  // Allow access if authenticated OR if OAuth is in progress
-  if (!isAuthenticated && !isOAuthInProgress) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // Clear the OAuth flag once user is authenticated
-  if (isAuthenticated && isOAuthInProgress) {
-    try {
-      sessionStorage.removeItem('oauth_in_progress');
-    } catch {
-      /* ignore */
-    }
-  }
+  if (isPendingVolunteer) return <Navigate to="/pending-approval" replace />;
+
+  if (roles && !roles.includes(roleKey)) return <Navigate to="/dashboard" replace />;
 
   return children;
 }
 
 function SuperadminRoute({ children }) {
-  const { isSuperadmin, authLoading, isAuthenticated } = useApp();
-
-  const isOAuthInProgress =
-    typeof sessionStorage !== 'undefined'
-      ? sessionStorage.getItem('oauth_in_progress') === 'true'
-      : false;
+  const { isSuperadmin, authLoading, isAuthenticated, isPendingVolunteer } = useApp();
 
   if (authLoading)
     return (
@@ -81,11 +66,13 @@ function SuperadminRoute({ children }) {
       </div>
     );
 
-  if (!isAuthenticated && !isOAuthInProgress) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!isOAuthInProgress && !isSuperadmin) {
+  if (isPendingVolunteer) return <Navigate to="/pending-approval" replace />;
+
+  if (!isSuperadmin) {
     return (
       <div
         style={{
@@ -111,7 +98,7 @@ function SuperadminRoute({ children }) {
 }
 
 function AppRoutes() {
-  const { isAuthenticated, authLoading } = useApp();
+  const { isAuthenticated, authLoading, isPendingVolunteer } = useApp();
 
   if (authLoading)
     return (
@@ -147,6 +134,18 @@ function AppRoutes() {
           }
         />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route
+          path="/pending-approval"
+          element={
+            !isAuthenticated ? (
+              <Navigate to="/login" replace />
+            ) : isPendingVolunteer ? (
+              <PendingApproval />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
 
         <Route
           path="/dashboard"
@@ -157,19 +156,20 @@ function AppRoutes() {
           }
         >
           <Route index element={<Dashboard />} />
-          <Route path="chapters" element={<Chapters />} />
-          <Route path="volunteers" element={<Volunteers />} />
-          <Route path="inventory" element={<Inventory />} />
+          <Route path="chapters" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator']}><Chapters /></ProtectedRoute>} />
+          <Route path="volunteers" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'volunteer']}><Volunteers /></ProtectedRoute>} />
+          <Route path="inventory" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator']}><Inventory /></ProtectedRoute>} />
           <Route path="events" element={<Events />} />
+          <Route path="post-event-report" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator']}><PostEventReport /></ProtectedRoute>} />
           <Route
             path="admin"
             element={
-              <SuperadminRoute>
+              <ProtectedRoute roles={['super_admin', 'admin']}>
                 <Admin />
-              </SuperadminRoute>
+              </ProtectedRoute>
             }
           />
-          <Route path="knowledge-base" element={<KnowledgeBase />} />
+          <Route path="knowledge-base" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator', 'volunteer']}><KnowledgeBase /></ProtectedRoute>} />
           <Route
             path="ai-settings"
             element={
@@ -179,14 +179,14 @@ function AppRoutes() {
             }
           />
           {/* Kenneth's AI automation routes */}
-          <Route path="social-media" element={<SocialMediaCMS />} />
-          <Route path="event-checklist" element={<EventChecklist />} />
+          <Route path="social-media" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator']}><SocialMediaCMS /></ProtectedRoute>} />
+          <Route path="event-checklist" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator']}><EventChecklist /></ProtectedRoute>} />
           <Route
             path="faq-suggestions"
             element={
-              <SuperadminRoute>
+              <ProtectedRoute roles={['super_admin', 'admin']}>
                 <FAQSuggestions />
-              </SuperadminRoute>
+              </ProtectedRoute>
             }
           />
           <Route

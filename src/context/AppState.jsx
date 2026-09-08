@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -75,27 +76,44 @@ const normalizeFolderName = (value = '') =>
     .replace(/[\\/:*?"<>|]/g, '')
     .replace(/\s+/g, ' ');
 
-const resolveRole = (email, userMetadata = {}) => {
-  const metadataRole = (userMetadata.role || '').toLowerCase();
-  const normalizedEmail = (email || '').toLowerCase();
-
-  if (normalizedEmail === 'pmanucom@devcon.ph' || metadataRole === 'superadmin' || metadataRole === 'admin') {
-    return 'Superadmin';
-  }
-
-  if (metadataRole === 'visitor') {
-    return 'Visitor';
-  }
-
-  return 'Visitor';
+const ROLE_LABELS = {
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  chapter_coordinator: 'Chapter Coordinator',
+  event_coordinator: 'Event Coordinator',
+  volunteer: 'Volunteer',
+  pending_volunteer: 'Pending Volunteer'
 };
 
-const buildUserProfile = (sessionUser, fallbackRole = 'Visitor') => ({
+const ROLE_PRIORITY = Object.keys(ROLE_LABELS);
+
+const buildUserProfile = (sessionUser, assignment = null) => ({
   id: sessionUser.id,
   email: sessionUser.email,
   name: sessionUser.user_metadata?.name || sessionUser.user_metadata?.full_name || sessionUser.email,
-  role: resolveRole(sessionUser.email, sessionUser.user_metadata) || fallbackRole
+  role: ROLE_LABELS[assignment?.role] || 'Pending Volunteer',
+  roleKey: assignment?.role || 'pending_volunteer',
+  chapterId: assignment?.chapter_id || null
 });
+
+const loadUserProfile = async (sessionUser) => {
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('role, chapter_id')
+    .eq('user_id', sessionUser.id);
+
+  if (error) {
+    console.warn('[Auth] Unable to load user role; using safe pending access.', error);
+    return buildUserProfile(sessionUser);
+  }
+
+  const assignments = data || [];
+  const assignment = ROLE_PRIORITY
+    .map((role) => assignments.find((item) => item.role === role))
+    .find(Boolean);
+
+  return buildUserProfile(sessionUser, assignment);
+};
 
 const buildEventFolderMetadata = (event) => {
   const safeTitle = normalizeFolderName(event.title || 'New Event');
@@ -201,7 +219,7 @@ export const AppProvider = ({ children }) => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true); // eslint-disable-line no-unused-vars
+  const [authLoading, setAuthLoading] = useState(true);
   const [themeMode, setThemeModeState] = useState(getStoredThemeMode);
   const [dashboardSettings, setDashboardSettings] = useState(loadDashboardSettings);
 
@@ -222,183 +240,108 @@ export const AppProvider = ({ children }) => {
     }
   }, [dashboardSettings]);
 
-// Fetch Data from Supabase
-   useEffect(() => {
-     fetchChapters(supabase, setChapters, setStats);
-     fetchVolunteers(supabase, setVolunteersList);
-     fetchInventory(supabase, setInventoryList);
-     fetchSocialPosts(supabase, setSocialPosts);
-     fetchEvents(supabase, setEventsList);
-   }, []);
+  // Load protected workspace data only after the user's approved role is known.
+  useEffect(() => {
+    if (!isAuthenticated || user?.roleKey === 'pending_volunteer') return;
+    fetchChapters(supabase, setChapters, setStats);
+    fetchVolunteers(supabase, setVolunteersList);
+    fetchInventory(supabase, setInventoryList);
+    fetchSocialPosts(supabase, setSocialPosts);
+    fetchEvents(supabase, setEventsList);
+  }, [isAuthenticated, user?.roleKey]);
 
   // Sync Supabase auth session on mount and listen for changes
   useEffect(() => {
     let mounted = true;
     let pollTimer = null;
+    let callbackTimeout = null;
     const isOAuthCallback =
       typeof window !== 'undefined' && window.location.pathname === '/auth/callback';
 
-    if (isOAuthCallback) {
-      console.debug('[Auth] /auth/callback route detected — will poll getSession() for OAuth code exchange');
-    }
-
     const finishLoading = () => {
       if (mounted) setAuthLoading(false);
-      console.debug('[Auth] authLoading -> false, isAuthenticated =', isAuthenticated);
     };
 
-    // Fast-path: if polling already stored the session in sessionStorage,
-    // restore state immediately without waiting for getSession().
-    const { storedSession } = (() => {
-      try { return JSON.parse(sessionStorage.getItem('auth_session') || '{}'); }
-      catch { return {}; }
-    })();
-    if (storedSession?.user) {
-      if (mounted) {
-        setIsAuthenticated(true);
-        setUser(buildUserProfile(storedSession.user));
-        sessionStorage.removeItem('auth_session');
+    const applySession = async (session) => {
+      if (!session?.user || !mounted) return false;
+      if (callbackTimeout) {
+        window.clearTimeout(callbackTimeout);
+        callbackTimeout = null;
       }
+      const profile = await loadUserProfile(session.user);
+      if (!mounted) return false;
+      setUser(profile);
+      setIsAuthenticated(true);
       finishLoading();
-    }
+      return true;
+    };
 
     const syncSession = async () => {
       try {
-        console.log('[Auth] Calling getSession()...');
         const { data, error } = await supabase.auth.getSession();
         const session = data?.session;
-        if (error) {
-          console.warn('[Auth] getSession() error:', error);
-        } else {
-          console.log('[Auth] getSession() returned:', session ? `user ${session.user.email}` : 'null');
-        }
-        if (session?.user && mounted) {
-          console.log('[Auth] Sync: Session found from getSession()');
-          setIsAuthenticated(true);
-          setUser(buildUserProfile(session.user));
-          // Mirror into sessionStorage so AuthCallback has a fast-path on remount
-          try { sessionStorage.setItem('auth_session', JSON.stringify({ user: session.user })); } catch {}
-          finishLoading();
-          return;
-        }
-        if (isOAuthCallback) {
-          console.log('[Auth] On /auth/callback but no session yet — starting poll');
-        }
+        if (error) console.warn('[Auth] getSession() error:', error);
+        if (session?.user && await applySession(session)) return;
       } catch (e) {
         console.warn('[Auth] getSession() failed immediately:', e);
       }
 
-      // If we're on /auth/callback and getSession() returned null,
-      // the PKCE code may not have been exchanged yet — poll until we know.
       if (isOAuthCallback) {
-        const setIntervalFn = typeof self !== 'undefined' ? self.setInterval : (typeof setInterval !== 'undefined' ? setInterval : undefined);
-        const clearIntervalFn = typeof self !== 'undefined' ? self.clearInterval : (typeof clearInterval !== 'undefined' ? clearInterval : undefined);
-        const clearTimeoutFn = typeof window !== 'undefined' && window.clearTimeout ? window.clearTimeout : (typeof clearTimeout !== 'undefined' ? clearTimeout : undefined);
-        if (!setIntervalFn) {
-          finishLoading();
-          return;
-        }
-        console.log('[Auth] Starting OAuth session poll every 500ms...');
-        let pollAttempts = 0;
-        pollTimer = setIntervalFn(async () => {
-          if (!mounted) {
-            if (pollTimer !== null && clearIntervalFn) clearIntervalFn(pollTimer);
-            pollTimer = null;
-            return;
-          }
+        pollTimer = window.setInterval(async () => {
+          if (!mounted) return;
           try {
             const { data } = await supabase.auth.getSession();
-            const session = data?.session;
-            if (session?.user) {
-              console.log('[Auth] Poll: Session found after', pollAttempts * 500, 'ms');
-              setIsAuthenticated(true);
-              setUser(buildUserProfile(session.user));
-              try { sessionStorage.setItem('auth_session', JSON.stringify({ user: session.user })); } catch {}
-              if (pollTimer !== null && clearIntervalFn) clearIntervalFn(pollTimer);
+            if (data?.session?.user && await applySession(data.session)) {
+              window.clearInterval(pollTimer);
               pollTimer = null;
-              finishLoading();
-            } else {
-              pollAttempts++;
-              if (pollAttempts % 6 === 0) {
-                console.log('[Auth] Poll attempt', pollAttempts, '— still waiting for session (', pollAttempts * 500, 'ms)...');
-              }
             }
           } catch (e) {
             console.warn('[Auth] Poll attempt error:', e);
           }
         }, 500);
+
+        callbackTimeout = window.setTimeout(() => {
+          if (pollTimer) window.clearInterval(pollTimer);
+          pollTimer = null;
+          setIsAuthenticated(false);
+          setUser(null);
+          finishLoading();
+        }, 20_000);
       } else {
-        // Not on /auth/callback - only finish loading if we actually found a session or confirmed no session
-        console.log('[Auth] Not on /auth/callback route, will rely on onAuthStateChange to determine auth state');
+        setIsAuthenticated(false);
+        setUser(null);
+        finishLoading();
       }
     };
 
-    // On /auth/callback, add a delay before syncing to let Supabase parse the OAuth URL
-    if (isOAuthCallback) {
-      console.log('[Auth] On /auth/callback — delaying sync by 800ms to allow Supabase to parse OAuth parameters');
-      setTimeout(syncSession, 800);
-    } else {
-      syncSession();
-    }
-
-    // Fallback only after 60 seconds (removed the 20s timeout)
-    const callbackFallbackTimer = window.setTimeout(() => {
-      console.warn('[Auth] Extended poll fallback timer fired — no session after 60 s. Stopping poll. URL:', window.location.href);
-      if (pollTimer) {
-        if (typeof self !== 'undefined') self.clearInterval(pollTimer);
-        else clearInterval(pollTimer);
-        pollTimer = null;
-      }
-      // Only finish loading if we're not on /auth/callback (user will be redirected to dashboard anyway)
-      if (!isOAuthCallback) {
-        finishLoading();
-      }
-    }, 60_000);
+    void syncSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        console.log('[Auth] onAuthStateChange event:', _event, 'user:', session?.user?.email ?? 'signed-out');
         if (pollTimer) {
-          if (typeof self !== 'undefined') self.clearInterval(pollTimer);
-          else clearInterval(pollTimer);
+          window.clearInterval(pollTimer);
           pollTimer = null;
         }
+        if (callbackTimeout) window.clearTimeout(callbackTimeout);
         if (session?.user) {
-          console.log('[Auth] Setting authenticated state for user:', session.user.email);
-          setIsAuthenticated(true);
-          setUser(buildUserProfile(session.user));
-          try { sessionStorage.setItem('auth_session', JSON.stringify({ user: session.user })); } catch {}
+          void applySession(session);
         } else {
-          console.log('[Auth] Clearing authenticated state');
           setIsAuthenticated(false);
           setUser(null);
+          finishLoading();
         }
-        finishLoading();
       }
     );
 
     return () => {
       mounted = false;
-      window.clearTimeout(callbackFallbackTimer);
-      if (pollTimer) {
-        if (typeof self !== 'undefined') self.clearInterval(pollTimer);
-        else clearInterval(pollTimer);
-        pollTimer = null;
-      }
+      if (callbackTimeout) window.clearTimeout(callbackTimeout);
+      if (pollTimer) window.clearInterval(pollTimer);
       if (listener && listener.subscription) listener.subscription.unsubscribe();
     };
   }, []);
 
   // Auth Actions
-  const login = (email, password) => {
-    if (email === 'pmanucom@devcon.ph' && password === 'devconkids101') {
-      setIsAuthenticated(true);
-      setUser({ email, name: 'Admin User', role: 'Superadmin' });
-      return { success: true };
-    }
-    return { success: false, message: 'Invalid credentials. Please use pmanucom@devcon.ph / devconkids101' };
-  };
-
   const loginWithGoogle = async () => {
     try {
       const redirectUrl = window.location.origin + '/auth/callback';
@@ -483,7 +426,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setChapters, data[0]);
         logAuditAction('INSERT', 'chapters', data[0].id, { name: data[0].name });
       }
-    } catch (error) {
+    } catch {
       const mockNew = { id: Date.now(), ...payload };
       upsertRecord(setChapters, mockNew);
     }
@@ -498,7 +441,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setChapters, data[0]);
         logAuditAction('UPDATE', 'chapters', id, { name: data[0].name });
       }
-    } catch (error) {
+    } catch {
       upsertRecord(setChapters, { id, ...payload });
     }
   };
@@ -524,7 +467,7 @@ export const AppProvider = ({ children }) => {
       }
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
       return { persisted: true };
-    } catch (error) {
+    } catch {
       const mockNew = { id: Date.now(), ...volunteer };
       upsertRecord(setVolunteersList, mockNew);
       setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
@@ -541,7 +484,7 @@ export const AppProvider = ({ children }) => {
         logAuditAction('UPDATE', 'volunteers', id, { name: data[0].name });
       }
       return { persisted: true };
-    } catch (error) {
+    } catch {
       upsertRecord(setVolunteersList, { id, ...volunteer });
       return { persisted: false };
     }
@@ -570,7 +513,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setInventoryList, data[0]);
         logAuditAction('INSERT', 'inventory', data[0].id, { item: data[0].name });
       }
-    } catch (error) {
+    } catch {
       const mockNew = { id: Date.now(), ...item };
       upsertRecord(setInventoryList, mockNew);
     }
@@ -584,7 +527,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setInventoryList, data[0]);
         logAuditAction('UPDATE', 'inventory', id, { item: data[0].name });
       }
-    } catch (error) {
+    } catch {
       upsertRecord(setInventoryList, { id, ...item });
     }
   };
@@ -607,7 +550,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setSocialPosts, data[0]);
         logAuditAction('INSERT', 'social_media_posts', data[0].id);
       }
-    } catch (error) {
+    } catch {
       const mockNew = { id: Date.now(), ...post };
       upsertRecord(setSocialPosts, mockNew);
     }
@@ -621,7 +564,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setSocialPosts, data[0]);
         logAuditAction('UPDATE', 'social_media_posts', id);
       }
-    } catch (error) {
+    } catch {
       upsertRecord(setSocialPosts, { id, ...post });
     }
   };
@@ -645,7 +588,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setEventsList, data[0]);
         logAuditAction('INSERT', 'events', data[0].id, { title: data[0].title });
       }
-    } catch (error) {
+    } catch {
       const mockNew = { id: Date.now(), ...payload };
       upsertRecord(setEventsList, mockNew);
     }
@@ -660,7 +603,7 @@ export const AppProvider = ({ children }) => {
         upsertRecord(setEventsList, data[0]);
         logAuditAction('UPDATE', 'events', id, { title: data[0].title });
       }
-    } catch (error) {
+    } catch {
       upsertRecord(setEventsList, { id, ...payload });
     }
   };
@@ -714,9 +657,12 @@ export const AppProvider = ({ children }) => {
       updateDashboardSetting,
       resetDashboardSettings,
       role: user?.role || 'Visitor',
-      isSuperadmin: (user?.role || '').toLowerCase() === 'superadmin',
-      canManageContent: (user?.role || '').toLowerCase() === 'superadmin',
-      login,
+      roleKey: user?.roleKey || 'visitor',
+      isPendingVolunteer: user?.roleKey === 'pending_volunteer',
+      isSuperadmin: user?.roleKey === 'super_admin',
+      isAdmin: user?.roleKey === 'super_admin' || user?.roleKey === 'admin',
+      hasRole: (...roles) => roles.includes(user?.roleKey),
+      canManageContent: user?.roleKey === 'super_admin' || user?.roleKey === 'admin',
       loginWithGoogle,
       logout,
       addChapter,
