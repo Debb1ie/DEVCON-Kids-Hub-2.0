@@ -24,7 +24,9 @@ import { supabase } from '../lib/supabase';
 // --- Configuration ---
 // WHY: API key stored in env var as transitional fallback. The secure path uses
 // Edge Functions where the key lives server-side (never exposed to the browser).
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY; // ponytail: fallback only, remove after A05 verified
+// Private AI credentials must never be bundled into the browser. The direct
+// provider fallback remains disabled until the server-side Edge Function exists.
+const GROQ_API_KEY = null;
 const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
 

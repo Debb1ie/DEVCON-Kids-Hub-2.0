@@ -30,7 +30,9 @@ import { supabase } from '../lib/supabase';
 // WHY fallback: The secure path goes through the Edge Function (server-side key).
 // This direct path exists only while we transition — once Edge Functions are verified,
 // VITE_MISTRAL_API_KEY will be removed from the client.
-const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY;
+// Embeddings require the authenticated server-side Edge Function. Never read a
+// private Mistral credential from Vite's browser environment.
+const MISTRAL_API_KEY = null;
 const MISTRAL_EMBED_MODEL = 'mistral-embed';
 const MISTRAL_EMBED_URL = 'https://api.mistral.ai/v1/embeddings';
 

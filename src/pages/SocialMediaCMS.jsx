@@ -4,7 +4,9 @@ import { Share2, Plus, Trash2, Image as ImageIcon, CheckCircle, Clock, PencilLin
 import './SocialMediaCMS.css';
 
 // Groq API for caption generation (same key as chatService)
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+// Direct browser access to Groq is intentionally disabled. This feature needs
+// a separately approved server-side function before release.
+const GROQ_API_KEY = null;
 const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 

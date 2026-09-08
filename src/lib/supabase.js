@@ -1,12 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 
 const runtimeEnv = import.meta.env || globalThis.process?.env || {};
-const supabaseUrl = runtimeEnv.VITE_SUPABASE_URL || runtimeEnv.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = runtimeEnv.VITE_SUPABASE_ANON_KEY || runtimeEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const supabaseUrl = runtimeEnv.VITE_SUPABASE_URL;
+const supabaseAnonKey = runtimeEnv.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    "Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, or the NEXT_PUBLIC equivalents.",
+    "Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
   );
 }
 

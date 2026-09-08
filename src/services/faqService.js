@@ -22,7 +22,8 @@ import { supabase } from '../lib/supabase';
 import { generateEmbedding } from './ragService';
 
 // --- Groq config (same as chatService) ---
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+// FAQ generation is server-only; direct browser credentials are disabled.
+const GROQ_API_KEY = null;
 const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
