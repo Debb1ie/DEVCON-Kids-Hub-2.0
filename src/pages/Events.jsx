@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppState';
+import { canPerform } from '../auth/permissions';
 import { CalendarDays, Check, ClipboardCheck, ClipboardList, FolderKanban, FolderOpen, Image as ImageIcon, PencilLine, Plus, Trash2, TrendingUp, Users, Wallet } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
+import EventApplicationsPanel from '../components/EventApplicationsPanel';
 import './Events.css';
 
 const createEmptyForm = () => ({
   title: 'Hour of AI',
   type: 'Cycle Program',
-  chapter: 'Manila',
+  chapter_id: '',
+  chapter: '',
   coordinator: 'Program Coordinators',
   event_date: '',
   description: '',
@@ -98,8 +101,15 @@ const mockEventReports = {
 export default function Events() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { eventsList, addEvent, updateEvent, deleteEvent, isSuperadmin } = useApp();
-  const [showForm, setShowForm] = useState(false);
+  const { eventsList, chapters, addEvent, updateEvent, deleteEvent, roleKey, user } = useApp();
+  const permissionContext = (event) => ({ actorUserId: user?.id, actorChapterId: user?.chapterId, event, targetChapterId: event?.chapter_id });
+  const canCreateEvent = canPerform(roleKey, 'event.create', { actorChapterId: user?.chapterId, targetChapterId: user?.chapterId });
+  const canEditEvent = (event) => canPerform(roleKey, 'event.update', permissionContext(event));
+  const canDeleteEvent = (event) => canPerform(roleKey, 'event.delete', permissionContext(event));
+  const canEditReport = (event) => canPerform(roleKey, 'report.edit', permissionContext(event));
+  const assignableChapters = (chapters || []).filter((chapter) => chapter.status !== 'inactive'
+    && (['super_admin', 'admin'].includes(roleKey) || chapter.id === user?.chapterId));
+  const [showForm, setShowForm] = useState(() => Boolean(location.state?.openCreateForm && canCreateEvent));
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [form, setForm] = useState(createEmptyForm);
@@ -132,19 +142,12 @@ export default function Events() {
     [eventsList]
   );
 
-  useEffect(() => {
-    if (!eventsList || eventsList.length === 0) {
-      setSelectedReportEventId(null);
-      return;
-    }
-
-    if (selectedReportEventId == null || !eventsList.some((event) => Number(event.id) === Number(selectedReportEventId))) {
-      setSelectedReportEventId(featuredEvent?.id ?? eventsList[0].id);
-    }
-  }, [eventsList, featuredEvent, selectedReportEventId]);
+  const effectiveReportEventId = eventsList?.some((event) => Number(event.id) === Number(selectedReportEventId))
+    ? selectedReportEventId
+    : featuredEvent?.id ?? eventsList?.[0]?.id ?? null;
 
   const selectedReport = useMemo(() => {
-    const sourceEvent = eventsList?.find((event) => Number(event.id) === Number(selectedReportEventId)) || featuredEvent || eventsList?.[0];
+    const sourceEvent = eventsList?.find((event) => Number(event.id) === Number(effectiveReportEventId)) || featuredEvent || eventsList?.[0];
     const fallback = mockEventReports[Number(sourceEvent?.id ?? 1)] || mockEventReports[1];
 
     const attendance = Number(fallback.attendance ?? 0);
@@ -167,7 +170,7 @@ export default function Events() {
       status: fallback.status,
       completion: Number(fallback.completion ?? 0)
     };
-  }, [eventsList, featuredEvent, selectedReportEventId]);
+  }, [eventsList, featuredEvent, effectiveReportEventId]);
 
   const filteredEvents = eventsList?.filter((event) => {
     const searchBlob = `${event.title} ${event.type} ${event.chapter} ${event.coordinator} ${event.description}`.toLowerCase();
@@ -178,7 +181,8 @@ export default function Events() {
   const paginatedEvents = filteredEvents.slice((activePage - 1) * EVENTS_PER_PAGE, activePage * EVENTS_PER_PAGE);
 
   const openCreateForm = () => {
-    const newForm = createEmptyForm();
+    const ownChapter = assignableChapters.find((chapter) => chapter.id === user?.chapterId);
+    const newForm = { ...createEmptyForm(), chapter_id: ownChapter?.id || '', chapter: ownChapter?.name || '' };
     setEditingId(null);
     setForm(newForm);
     setInitialForm(newForm);
@@ -193,7 +197,6 @@ export default function Events() {
       return;
     }
 
-    openCreateForm();
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
 
@@ -202,6 +205,7 @@ export default function Events() {
     const eventForm = {
       title: event.title || '',
       type: event.type || 'Cycle Program',
+      chapter_id: event.chapter_id || '',
       chapter: event.chapter || 'Manila',
       coordinator: event.coordinator || 'Program Coordinators',
       event_date: event.event_date || '',
@@ -245,8 +249,9 @@ export default function Events() {
       return;
     }
 
-    if (!form.chapter.trim()) {
-      setFormError('Enter a chapter or location.');
+    const selectedChapter = assignableChapters.find((chapter) => chapter.id === form.chapter_id);
+    if (!selectedChapter || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(form.chapter_id)) {
+      setFormError('Select a valid active chapter or Volunteer Community.');
       return;
     }
 
@@ -272,7 +277,8 @@ export default function Events() {
     const payload = {
       ...form,
       title: form.title.trim(),
-      chapter: form.chapter.trim(),
+      chapter_id: selectedChapter.id,
+      chapter: selectedChapter.name,
       coordinator: form.coordinator.trim(),
       description: form.description.trim(),
       image_url: form.image_url.trim(),
@@ -423,12 +429,12 @@ export default function Events() {
         />
       )}
       {/* Modal Overlay - excludes sidebar */}
-      {isSuperadmin && showForm && (
+      {showForm && (editingId ? canEditEvent(eventsList.find((event) => event.id === editingId)) : canCreateEvent) && (
         <div className="event-modal-overlay" onClick={closeForm} />
       )}
 
       {/* Modal Container */}
-      {isSuperadmin && showForm && (
+      {showForm && (editingId ? canEditEvent(eventsList.find((event) => event.id === editingId)) : canCreateEvent) && (
         <div className="event-modal-container">
           <div className="event-modal card">
             <div className="event-form-header">
@@ -469,7 +475,10 @@ export default function Events() {
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-chapter">Chapter</label>
-                    <input id="event-chapter" className="border-input" type="text" value={form.chapter} onChange={(e) => { setFormError(''); setForm({ ...form, chapter: e.target.value }); }} disabled={isSubmitting} aria-invalid={formError === 'Enter a chapter or location.'} required />
+                    <select id="event-chapter" className="border-input" value={form.chapter_id} onChange={(e) => { const selected = assignableChapters.find((chapter) => chapter.id === e.target.value); setFormError(''); setForm({ ...form, chapter_id: e.target.value, chapter: selected?.name || '' }); }} disabled={isSubmitting || roleKey === 'chapter_coordinator'} aria-invalid={formError === 'Select a valid active chapter or Volunteer Community.'} required>
+                      <option value="">Select an active location</option>
+                      {assignableChapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.name}</option>)}
+                    </select>
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-coordinator">Coordinator</label>
@@ -560,10 +569,10 @@ export default function Events() {
       )}
 
       {/* Post-Event Report collection modal */}
-      {isSuperadmin && showReportForm && (
+      {showReportForm && canEditReport(eventsList.find((event) => Number(event.id) === Number(effectiveReportEventId))) && (
         <div className="event-modal-overlay" onClick={closeReportForm} />
       )}
-      {isSuperadmin && showReportForm && (
+      {showReportForm && canEditReport(eventsList.find((event) => Number(event.id) === Number(effectiveReportEventId))) && (
         <div className="event-modal-container">
           <div className="event-modal card">
             <div className="event-form-header">
@@ -733,7 +742,7 @@ export default function Events() {
             <p className="text-muted">Coordinate cycle programs, including Hour of AI, and generate Google Drive folder blueprints for each event.</p>
           </div>
         </div>
-        {isSuperadmin && (
+        {canCreateEvent && (
           <button className="btn-primary" onClick={openCreateForm} type="button">
             <Plus size={20} />
             Create Event
@@ -768,6 +777,8 @@ export default function Events() {
         </div>
       )}
 
+      <EventApplicationsPanel events={eventsList || []} />
+
       {eventsList && eventsList.length > 0 && (
         <section className="card event-report-shell">
           <div className="event-report-header">
@@ -788,7 +799,7 @@ export default function Events() {
                 <select
                   id="report-event-select"
                   className="report-event-select"
-                  value={selectedReportEventId ?? ''}
+                  value={effectiveReportEventId ?? ''}
                   onChange={(e) => setSelectedReportEventId(e.target.value)}
                 >
                   {eventsList.map((event) => (
@@ -797,7 +808,7 @@ export default function Events() {
                 </select>
               </div>
             </div>
-            {isSuperadmin && (
+            {canEditReport(eventsList.find((event) => Number(event.id) === Number(effectiveReportEventId))) && (
               <button type="button" className="btn-primary" onClick={openReportForm}>
                 <Plus size={18} />
                 New Report
@@ -938,16 +949,16 @@ export default function Events() {
                   </div>
                 </div>
 
-                {isSuperadmin && (
+                {(canEditEvent(event) || canDeleteEvent(event)) && (
                   <div className="event-actions">
-                    <button type="button" className="btn-secondary small-action" onClick={() => openEditForm(event)} disabled={deletingId === event.id}>
+                    {canEditEvent(event) && <button type="button" className="btn-secondary small-action" onClick={() => openEditForm(event)} disabled={deletingId === event.id}>
                       <PencilLine size={16} />
                       Edit
-                    </button>
-                    <button type="button" className="btn-secondary small-action danger" onClick={() => handleDelete(event)} disabled={deletingId === event.id}>
+                    </button>}
+                    {canDeleteEvent(event) && <button type="button" className="btn-secondary small-action danger" onClick={() => handleDelete(event)} disabled={deletingId === event.id}>
                       <Trash2 size={16} />
                       {deletingId === event.id ? 'Deleting...' : 'Delete'}
-                    </button>
+                    </button>}
                   </div>
                 )}
               </div>

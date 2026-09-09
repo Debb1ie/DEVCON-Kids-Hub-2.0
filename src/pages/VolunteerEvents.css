@@ -1,0 +1,15 @@
+.volunteer-events-page { padding: 1.5rem; }
+.volunteer-events-page header { margin-bottom: 1.25rem; }
+.volunteer-events-page header p { color: var(--text-muted); }
+.volunteer-event-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+.volunteer-event-card { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; }
+.volunteer-event-card h2 { font-size: 1.05rem; margin: 0; }
+.volunteer-event-heading span { color: var(--primary); font-size: .82rem; font-weight: 700; }
+.volunteer-event-meta { display: grid; gap: .5rem; color: var(--text-muted); }
+.volunteer-event-meta span { display: flex; align-items: center; gap: .45rem; }
+.application-status { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: auto; }
+.event-application-state { padding: 2rem; text-align: center; }
+.event-application-notice { border-radius: .75rem; margin-bottom: 1rem; padding: .85rem 1rem; }
+.event-application-notice.success { background: #ecfdf5; color: #065f46; }
+.event-application-notice.error { background: #fef2f2; color: #991b1b; }
+@media (max-width: 640px) { .volunteer-events-page { padding: 1rem; } .application-status { align-items: stretch; flex-direction: column; } }
