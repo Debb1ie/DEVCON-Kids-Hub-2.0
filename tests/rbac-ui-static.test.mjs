@@ -18,6 +18,12 @@ test('routes and sidebar share the centralized permission registry', () => {
   assert.doesNotMatch(app, /roles=\{\[/);
 });
 
+test('Social Media is deactivated and its former URL redirects to the dashboard', () => {
+  assert.doesNotMatch(sidebar, /Social Media|\/dashboard\/social-media/);
+  assert.doesNotMatch(app, /SocialMediaCMS/);
+  assert.match(app, /path="social-media" element=\{<Navigate to="\/dashboard" replace \/>\}/);
+});
+
 test('volunteers receive the application-focused events interface', () => {
   assert.match(app, /roleKey === 'volunteer'.*VolunteerEvents/s);
   assert.match(volunteerEvents, /Apply as Volunteer/);

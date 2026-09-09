@@ -10,7 +10,6 @@ import {
   CalendarDays,
   Brain,
   Database,
-  Share2,
   ClipboardList,
   HelpCircle,
   FileText,
@@ -34,7 +33,6 @@ export default function Sidebar() {
     { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
     { name: 'Events & CodeCamps', path: '/dashboard/events', icon: <CalendarDays size={20} /> },
     { name: 'Post Event Report', path: '/dashboard/post-event-report', icon: <FileText size={20} /> },
-    { name: 'Social Media', path: '/dashboard/social-media', icon: <Share2 size={20} /> },
     { name: 'Event Checklist', path: '/dashboard/event-checklist', icon: <ClipboardList size={20} /> },
     { name: 'AI Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
   ].filter(visible);

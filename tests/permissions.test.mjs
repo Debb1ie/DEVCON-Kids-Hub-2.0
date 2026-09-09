@@ -17,6 +17,13 @@ test('route matrix enforces all six roles', () => {
   assert.equal(canAccessRoute(ROLES.PENDING_VOLUNTEER, '/dashboard/events'), false);
 });
 
+test('Social Media is absent from every role and action permission matrix', () => {
+  for (const role of roles) {
+    assert.equal(canAccessRoute(role, '/dashboard/social-media'), false, `${role} route`);
+    assert.equal(canPerform(role, 'social.manage'), false, `${role} action`);
+  }
+});
+
 test('Knowledge Base management is Super Admin-only for every route and action check', () => {
   for (const role of roles) {
     const expected = role === ROLES.SUPER_ADMIN;

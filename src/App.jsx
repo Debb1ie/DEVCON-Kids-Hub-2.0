@@ -15,7 +15,6 @@ import KnowledgeBase from './pages/KnowledgeBase';
 import AISettings from './pages/AISettings';
 import Settings from './pages/Settings';
 // Kenneth's AI automation pages
-import SocialMediaCMS from './pages/SocialMediaCMS';
 import EventChecklist from './pages/EventChecklist';
 import FAQSuggestions from './pages/FAQSuggestions';
 import PendingApproval from './pages/PendingApproval';
@@ -128,8 +127,9 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
+          {/* Retired feature URLs return authenticated users to the dashboard. */}
+          <Route path="social-media" element={<Navigate to="/dashboard" replace />} />
           {/* Kenneth's AI automation routes */}
-          <Route path="social-media" element={<ProtectedRoute route="/dashboard/social-media"><SocialMediaCMS /></ProtectedRoute>} />
           <Route path="event-checklist" element={<ProtectedRoute route="/dashboard/event-checklist"><EventChecklist /></ProtectedRoute>} />
           <Route
             path="faq-suggestions"
