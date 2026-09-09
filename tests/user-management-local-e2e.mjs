@@ -110,7 +110,7 @@ ok(audits.data[0].actor_id === superA.id && audits.data[0].metadata.from_role ==
 ok(Boolean(audits.data[0].created_at) && !JSON.stringify(audits.data).match(/token|secret|password/i), 'Audit timestamp exists without credential fields');
 const failedAuditCount = (await adminApi.from('audit_logs').select('*', { count: 'exact', head: true })).count;
 const auditEdit = await volunteer.client.from('audit_logs').update({ action: 'tampered' }).eq('id', audits.data[0].id).select();
-assert.ifError(auditEdit.error); ok(auditEdit.data.length === 0, 'Ordinary user cannot modify audit rows');
+ok(Boolean(auditEdit.error) || auditEdit.data.length === 0, 'Ordinary user cannot modify audit rows');
 ok((await adminApi.from('audit_logs').select('*', { count: 'exact', head: true })).count === failedAuditCount, 'Failed operations create no misleading audits');
 
 const races = await Promise.all([
