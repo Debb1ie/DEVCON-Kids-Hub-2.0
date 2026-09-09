@@ -40,3 +40,4 @@ tests/eval/report.json
 *.sln
 *.sw?
 .vercel
+.env*
