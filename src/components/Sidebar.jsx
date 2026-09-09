@@ -14,6 +14,7 @@ import {
   ClipboardList,
   HelpCircle,
   FileText,
+  UserCog,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
@@ -38,7 +39,8 @@ export default function Sidebar() {
 
   // Admin-only links — visible only to Superadmin users
   const adminLinks = isAdmin
-    ? [
+      ? [
+        { name: 'User Management', path: '/dashboard/users', icon: <UserCog size={20} /> },
         isSuperadmin && { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Brain size={20} /> },
         { name: 'FAQ Builder', path: '/dashboard/faq-suggestions', icon: <HelpCircle size={20} /> },
         { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },

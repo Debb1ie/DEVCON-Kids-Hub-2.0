@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import './ConfirmationModal.css';
 
-export default function ConfirmationModal({ title, message, confirmLabel = 'Delete', onCancel, onConfirm, isBusy = false }) {
+export default function ConfirmationModal({ title, message, confirmLabel = 'Delete', busyLabel = 'Working...', onCancel, onConfirm, isBusy = false }) {
   return (
     <>
       <div className="confirmation-modal-overlay" onClick={isBusy ? undefined : onCancel} />
@@ -14,7 +14,7 @@ export default function ConfirmationModal({ title, message, confirmLabel = 'Dele
           </div>
           <div className="confirmation-modal-actions">
             <button type="button" className="btn-secondary" onClick={onCancel} disabled={isBusy}>Cancel</button>
-            <button type="button" className="confirmation-modal-confirm" onClick={onConfirm} disabled={isBusy}>{isBusy ? 'Deleting...' : confirmLabel}</button>
+            <button type="button" className="confirmation-modal-confirm" onClick={onConfirm} disabled={isBusy}>{isBusy ? busyLabel : confirmLabel}</button>
           </div>
         </div>
       </div>

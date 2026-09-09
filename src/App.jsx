@@ -19,6 +19,7 @@ import EventChecklist from './pages/EventChecklist';
 import FAQSuggestions from './pages/FAQSuggestions';
 import PendingApproval from './pages/PendingApproval';
 import PostEventReport from './pages/PostEventReport';
+import UserManagement from './pages/UserManagement';
 import './index.css';
 
 function AuthLoading() {
@@ -163,6 +164,7 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
+          <Route path="users" element={<ProtectedRoute roles={['super_admin', 'admin']}><UserManagement /></ProtectedRoute>} />
           <Route path="knowledge-base" element={<ProtectedRoute roles={['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator', 'volunteer']}><KnowledgeBase /></ProtectedRoute>} />
           <Route
             path="ai-settings"
