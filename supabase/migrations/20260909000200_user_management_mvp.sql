@@ -1,7 +1,27 @@
 -- REVIEW ONLY. Do not apply without explicit approval.
 -- Centralizes role administration so clients never write user_roles directly.
 
-create or replace function public.admin_list_users()
+do $preflight$
+begin
+  if to_regclass('public.profiles') is null
+     or to_regclass('public.user_roles') is null
+     or to_regclass('public.chapters') is null
+     or to_regclass('public.audit_logs') is null
+     or to_regtype('public.app_role') is null then
+    raise exception 'User Management prerequisites are missing';
+  end if;
+  if to_regprocedure('public.admin_list_users(text,public.app_role,uuid)') is not null
+     or to_regprocedure('public.admin_manage_user_role(uuid,public.app_role,uuid)') is not null then
+    raise exception 'User Management function collision detected; review ownership and definition before proceeding';
+  end if;
+end
+$preflight$;
+
+create function public.admin_list_users(
+  search_query text default null,
+  role_filter public.app_role default null,
+  chapter_filter uuid default null
+)
 returns table (
   user_id uuid,
   full_name text,
@@ -12,25 +32,36 @@ returns table (
   chapter_name text,
   created_at timestamptz
 )
-language sql
+language plpgsql
 stable
 security definer
 set search_path = pg_catalog, public
 as $$
+begin
+  if not exists (
+    select 1 from public.user_roles actor
+    where actor.user_id = auth.uid()
+      and actor.role in ('super_admin', 'admin')
+  ) then
+    raise exception 'Not authorized';
+  end if;
+
+  return query
   select p.id, p.full_name, p.email, p.avatar_url, ur.role,
          ur.chapter_id, c.name, p.created_at
   from public.profiles p
   join public.user_roles ur on ur.user_id = p.id
   left join public.chapters c on c.id = ur.chapter_id
-  where exists (
-    select 1 from public.user_roles actor
-    where actor.user_id = auth.uid()
-      and actor.role in ('super_admin', 'admin')
-  )
-  order by p.created_at desc;
+  where (nullif(btrim(search_query), '') is null
+      or p.full_name ilike '%' || btrim(search_query) || '%'
+      or p.email ilike '%' || btrim(search_query) || '%')
+    and (role_filter is null or ur.role = role_filter)
+    and (chapter_filter is null or ur.chapter_id = chapter_filter)
+  order by p.created_at desc, p.id;
+end;
 $$;
 
-create or replace function public.admin_manage_user_role(
+create function public.admin_manage_user_role(
   target_user_id uuid,
   new_role public.app_role,
   new_chapter_id uuid default null
@@ -45,7 +76,12 @@ declare
   target_role public.app_role;
   target_chapter uuid;
   normalized_chapter uuid;
+  target_role_rows integer;
+  changed_rows integer;
 begin
+  -- Serialize all role transitions that could affect the final Super Admin invariant.
+  perform pg_advisory_xact_lock(hashtext('devcon_user_role_management'));
+
   select role into actor_role
   from public.user_roles
   where user_id = auth.uid()
@@ -57,6 +93,11 @@ begin
   end if;
   if target_user_id = auth.uid() then
     raise exception 'You cannot change your own role';
+  end if;
+
+  select count(*) into target_role_rows from public.user_roles where user_id = target_user_id;
+  if target_role_rows <> 1 then
+    raise exception 'Expected exactly one role assignment';
   end if;
 
   select role, chapter_id into target_role, target_chapter
@@ -86,6 +127,8 @@ begin
   update public.user_roles
   set role = new_role, chapter_id = normalized_chapter
   where user_id = target_user_id;
+  get diagnostics changed_rows = row_count;
+  if changed_rows <> 1 then raise exception 'Role update did not affect exactly one row'; end if;
 
   insert into public.audit_logs(actor_id, action, target_table, target_id, metadata)
   values (auth.uid(), 'ROLE_UPDATE', 'user_roles', target_user_id,
@@ -94,15 +137,15 @@ begin
 end;
 $$;
 
-revoke all on function public.admin_list_users() from public, anon;
+revoke all on function public.admin_list_users(text, public.app_role, uuid) from public, anon;
 revoke all on function public.admin_manage_user_role(uuid, public.app_role, uuid) from public, anon;
-grant execute on function public.admin_list_users() to authenticated;
+grant execute on function public.admin_list_users(text, public.app_role, uuid) to authenticated;
 grant execute on function public.admin_manage_user_role(uuid, public.app_role, uuid) to authenticated;
 
-comment on function public.admin_list_users() is 'Admin-only user directory for the management UI.';
+comment on function public.admin_list_users(text, public.app_role, uuid) is 'Admin-only filtered user directory for the management UI.';
 comment on function public.admin_manage_user_role(uuid, public.app_role, uuid) is
   'Atomic role change enforcing actor permissions, self-change prevention, final Super Admin protection, chapter validation, and audit logging.';
 
 -- Rollback:
 -- drop function if exists public.admin_manage_user_role(uuid, public.app_role, uuid);
--- drop function if exists public.admin_list_users();
+-- drop function if exists public.admin_list_users(text, public.app_role, uuid);

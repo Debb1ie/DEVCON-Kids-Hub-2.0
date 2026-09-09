@@ -5,8 +5,12 @@ export const USER_ROLES = [
   'chapter_coordinator', 'admin', 'super_admin',
 ];
 
-export async function listManagedUsers() {
-  const { data, error } = await supabase.rpc('admin_list_users');
+export async function listManagedUsers({ search = null, role = null, chapterId = null } = {}) {
+  const { data, error } = await supabase.rpc('admin_list_users', {
+    search_query: search || null,
+    role_filter: role || null,
+    chapter_filter: chapterId || null,
+  });
   if (error) throw error;
   return data || [];
 }
