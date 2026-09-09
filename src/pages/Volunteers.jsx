@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../context/AppState';
+import { canPerform } from '../auth/permissions';
 import {
   Users,
   Search,
@@ -65,7 +66,11 @@ function LadderProgress({ status }) {
 }
 
 export default function Volunteers() {
-  const { volunteersList, chapters, addVolunteer, updateVolunteer, deleteVolunteer, isSuperadmin } = useApp();
+  const { volunteersList, chapters, addVolunteer, updateVolunteer, deleteVolunteer, roleKey, user } = useApp();
+  const canManageVolunteers = canPerform(roleKey, 'volunteer.manage', {
+    actorChapterId: user?.chapterId,
+    targetChapterId: user?.chapterId,
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [showForm, setShowForm] = useState(false);
@@ -248,7 +253,7 @@ export default function Volunteers() {
             <p className="text-muted">Review applications, approve volunteers, and track your nationwide community of tech educators.</p>
           </div>
         </div>
-        {isSuperadmin && (
+        {canManageVolunteers && (
           <button type="button" className="btn-primary" onClick={openCreateForm}>
             <Plus size={20} />
             Add Volunteer
@@ -385,7 +390,7 @@ export default function Volunteers() {
       </section>
 
       {/* ---- Add / Edit volunteer form ---- */}
-      {isSuperadmin && showForm && (
+      {canManageVolunteers && showForm && (
         <>
           <div className="volunteer-form-modal-overlay" onClick={closeForm} />
           <div className="volunteer-form-modal-container">
@@ -520,7 +525,7 @@ export default function Volunteers() {
                         <button type="button" className="icon-btn action-btn" onClick={() => setViewingVolunteer(volunteer)} title={`View ${volunteer.name || 'volunteer'}`}>
                           <Eye size={18} color="#6B7280" />
                         </button>
-                        {isPending && isSuperadmin && (
+                        {isPending && canManageVolunteers && (
                           <>
                             <button type="button" className="action-pill approve-pill" onClick={() => handleStatusChange(volunteer, 'Approved')} title={`Approve ${volunteer.name || 'volunteer'}`}>
                               <Check size={14} /> Approve
@@ -530,7 +535,7 @@ export default function Volunteers() {
                             </button>
                           </>
                         )}
-                        {isSuperadmin && (
+                        {canManageVolunteers && (
                           <>
                             <button type="button" className="icon-btn action-btn" onClick={() => openEditForm(volunteer)} title="Edit">
                               <PencilLine size={18} color="#8B5CF6" />
@@ -607,7 +612,7 @@ export default function Volunteers() {
               </div>
 
               <div className="volunteer-modal-actions">
-                {normalizeStatus(viewingVolunteer.status) === 'pending' && isSuperadmin && (
+                {normalizeStatus(viewingVolunteer.status) === 'pending' && canManageVolunteers && (
                   <>
                     <button type="button" className="btn-primary approve-cta" onClick={() => handleStatusChange(viewingVolunteer, 'Approved')}>
                       <Check size={16} /> Approve

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppState';
 import { MapPin, ArrowRight, Plus, PencilLine, Trash2 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { canPerform } from '../auth/permissions';
 import './Chapters.css';
 
 const createEmptyForm = () => ({
@@ -23,7 +24,16 @@ const isWholeNumberInRange = (value, minimum, maximum) => {
 const CHAPTERS_PER_PAGE = 6;
 
 export default function Chapters() {
-  const { chapters, addChapter, updateChapter, deleteChapter, isSuperadmin } = useApp();
+  const { chapters, addChapter, updateChapter, deleteChapter, roleKey, user } = useApp();
+  const canCreateChapter = canPerform(roleKey, 'chapter.create');
+  const canEditChapter = (chapter) => canPerform(roleKey, 'chapter.update', {
+    actorChapterId: user?.chapterId,
+    targetChapterId: chapter?.id,
+  });
+  const canDeleteChapter = (chapter) => canPerform(roleKey, 'chapter.delete', {
+    actorChapterId: user?.chapterId,
+    targetChapterId: chapter?.id,
+  });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
@@ -156,7 +166,7 @@ export default function Chapters() {
             <p className="text-muted">Nationwide locations bringing tech to the youth.</p>
           </div>
         </div>
-        {isSuperadmin && (
+        {canCreateChapter && (
           <button className="btn-primary" onClick={openCreateForm} type="button">
             <Plus size={20} />
             Add Chapter
@@ -176,7 +186,7 @@ export default function Chapters() {
         />
       )}
 
-      {isSuperadmin && showForm && (
+      {showForm && (editingId ? canEditChapter(chapters.find((chapter) => chapter.id === editingId)) : canCreateChapter) && (
         <>
           <div className="chapter-modal-overlay" onClick={closeForm} />
           <div className="chapter-modal-container">
@@ -337,14 +347,14 @@ export default function Chapters() {
               View Chapter Details <ArrowRight size={16} />
             </button>
 
-            {isSuperadmin && (
+            {(canEditChapter(chapter) || canDeleteChapter(chapter)) && (
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button type="button" className="btn-secondary full-width chapter-action" onClick={() => openEditForm(chapter)}>
+                {canEditChapter(chapter) && <button type="button" className="btn-secondary full-width chapter-action" onClick={() => openEditForm(chapter)}>
                   <PencilLine size={16} /> Edit
-                </button>
-                <button type="button" className="btn-secondary full-width chapter-action" onClick={() => handleDelete(chapter.id)} style={{ borderColor: '#DC2626', color: '#DC2626' }}>
+                </button>}
+                {canDeleteChapter(chapter) && <button type="button" className="btn-secondary full-width chapter-action" onClick={() => handleDelete(chapter.id)} style={{ borderColor: '#DC2626', color: '#DC2626' }}>
                   <Trash2 size={16} /> Delete
-                </button>
+                </button>}
               </div>
             )}
           </div>

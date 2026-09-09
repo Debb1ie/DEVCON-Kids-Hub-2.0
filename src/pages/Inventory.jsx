@@ -2,12 +2,18 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppState';
 import { Package, AlertCircle, CheckCircle, Search, Plus, Trash2, Image as ImageIcon, PencilLine } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { canPerform } from '../auth/permissions';
 import './Inventory.css';
 
 const INVENTORY_PER_PAGE = 8;
 
 export default function Inventory() {
-  const { inventoryList, addInventoryItem, updateInventoryItem, deleteInventoryItem, isSuperadmin } = useApp();
+  const { inventoryList, addInventoryItem, updateInventoryItem, deleteInventoryItem, roleKey, user } = useApp();
+  const canManageItem = (item) => canPerform(roleKey, 'inventory.manage', {
+    actorChapterId: user?.chapterId,
+    targetChapterId: item?.chapter_id || user?.chapterId,
+  });
+  const canCreateItem = canManageItem();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -64,7 +70,7 @@ export default function Inventory() {
     if (imageUrl.trim() && !isValidHttpUrl(imageUrl.trim())) { setFormError('Enter a valid image URL beginning with http:// or https://.'); return; }
     setFormError(''); setFormSuccess(''); setIsSubmitting(true);
     const status = stockValue > 10 ? 'In Stock' : stockValue > 0 ? 'Low Stock' : 'Out of Stock';
-    const payload = { name: name.trim(), category, stock: stockValue, status, image_url: imageUrl.trim() };
+    const payload = { name: name.trim(), category, stock: stockValue, status, image_url: imageUrl.trim(), ...(user?.chapterId ? { chapter_id: user.chapterId } : {}) };
 
     try {
       if (editingId) { await updateInventoryItem(editingId, payload); setFormSuccess('Inventory item updated successfully.'); }
@@ -107,7 +113,7 @@ export default function Inventory() {
             <p className="text-muted">Track and request hardware and materials for workshops.</p>
           </div>
         </div>
-        {isSuperadmin && (
+        {canCreateItem && (
           <button className="btn-primary" onClick={openCreateForm} type="button">
             <Plus size={20} />
             Add Item
@@ -126,7 +132,7 @@ export default function Inventory() {
           isBusy={deletingId === pendingDelete.id}
         />
       )}
-      {isSuperadmin && showForm && (
+      {showForm && (editingId ? canManageItem(inventoryList.find((item) => item.id === editingId)) : canCreateItem) && (
         <>
           <div className="inventory-modal-overlay" onClick={closeForm} />
           <div className="inventory-modal-container">
@@ -196,7 +202,7 @@ export default function Inventory() {
                 <th>Category</th>
                 <th>Stock Level</th>
                 <th>Status</th>
-                {isSuperadmin && <th>Action</th>}
+                {(roleKey === 'super_admin' || roleKey === 'admin' || roleKey === 'chapter_coordinator') && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
@@ -221,7 +227,7 @@ export default function Inventory() {
                       {item.status}
                     </div>
                   </td>
-                  {isSuperadmin && (
+                  {canManageItem(item) && (
                     <td>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button type="button" className="icon-btn action-btn" onClick={() => openEditForm(item)} title="Edit" disabled={deletingId === item.id}>
@@ -237,7 +243,7 @@ export default function Inventory() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={isSuperadmin ? "6" : "5"} className="empty-state">No inventory items found. Make sure to add one!</td>
+                  <td colSpan={(roleKey === 'super_admin' || roleKey === 'admin' || roleKey === 'chapter_coordinator') ? "6" : "5"} className="empty-state">No inventory items found. Make sure to add one!</td>
                 </tr>
               )}
             </tbody>

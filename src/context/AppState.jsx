@@ -48,24 +48,6 @@ const loadDashboardSettings = () => {
   }
 };
 
-const fallbackEvents = [
-  {
-    id: 1,
-    title: 'Hour of AI',
-    type: 'Cycle Program',
-    chapter: 'Manila',
-    coordinator: 'Program Coordinators',
-    event_date: '2026-06-15',
-    description: 'Highlighted solution program for kids, coordinated by chapter leads for repeated cycle delivery.',
-    image_url: '',
-    status: 'Scheduled',
-    google_folder_name: 'Hour of AI',
-    google_folder_path: 'Google Drive/DEVCON Kids/Events/Hour of AI',
-    google_assets_path: 'Google Drive/DEVCON Kids/Events/Hour of AI/Assets',
-    google_folder_status: 'Ready for Google Drive sync'
-  }
-];
-
 const normalizeFolderName = (value = '') =>
   value
     .trim()
@@ -144,7 +126,9 @@ const fetchChapters = async (supabase, setChapters, setStats) => {
     setChapters(data || []);
     setStats((prev) => ({ ...prev, activeChapters: data?.length || 0 }));
   } catch (e) {
-    console.warn("Using fallback chapters. Please run the SQL setup script.", e);
+    setChapters([]);
+    setStats((prev) => ({ ...prev, activeChapters: 0 }));
+    console.warn('Unable to load authorized chapters.', e);
   }
 };
 
@@ -154,7 +138,8 @@ const fetchVolunteers = async (supabase, setVolunteersList) => {
     if (error) throw error;
     if (data) setVolunteersList(data);
   } catch (e) {
-    console.warn("Using fallback volunteers.", e);
+    setVolunteersList([]);
+    console.warn('Unable to load authorized volunteers.', e);
   }
 };
 
@@ -164,7 +149,8 @@ const fetchInventory = async (supabase, setInventoryList) => {
     if (error) throw error;
     if (data) setInventoryList(data);
   } catch (e) {
-    console.warn("Using fallback inventory.", e);
+    setInventoryList([]);
+    console.warn('Unable to load authorized inventory.', e);
   }
 };
 
@@ -174,7 +160,8 @@ const fetchSocialPosts = async (supabase, setSocialPosts) => {
     if (error) throw error;
     if (data) setSocialPosts(data);
   } catch (e) {
-    console.warn("Using fallback social posts.", e);
+    setSocialPosts([]);
+    console.warn('Unable to load authorized social posts.', e);
   }
 };
 
@@ -182,9 +169,10 @@ const fetchEvents = async (supabase, setEventsList) => {
   try {
     const { data, error } = await supabase.from('events').select('*');
     if (error) throw error;
-    if (data && data.length > 0) setEventsList(data);
+    setEventsList(data || []);
   } catch (e) {
-    console.warn('Using fallback events.', e);
+    setEventsList([]);
+    console.warn('Unable to load authorized events.', e);
   }
 };
 
@@ -201,7 +189,7 @@ export const AppProvider = ({ children }) => {
   const [volunteersList, setVolunteersList] = useState([]);
   const [inventoryList, setInventoryList] = useState([]);
   const [socialPosts, setSocialPosts] = useState([]);
-  const [eventsList, setEventsList] = useState(fallbackEvents);
+  const [eventsList, setEventsList] = useState([]);
 
   const [growthData] = useState([
     { month: 'Jan', learners: 5000 },
@@ -374,203 +362,148 @@ export const AppProvider = ({ children }) => {
 
   const addChapter = async (chapter) => {
     const payload = { ...chapter };
-    try {
-      const { data, error } = await supabase.from('chapters').insert([payload]).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setChapters, data[0]);
-        logAuditAction('INSERT', 'chapters', data[0].id, { name: data[0].name });
-      }
-    } catch {
-      const mockNew = { id: Date.now(), ...payload };
-      upsertRecord(setChapters, mockNew);
+    const { data, error } = await supabase.from('chapters').insert([payload]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setChapters, data[0]);
+      logAuditAction('INSERT', 'chapters', data[0].id, { name: data[0].name });
     }
+    return { persisted: true };
   };
 
   const updateChapter = async (id, chapter) => {
     const payload = { ...chapter };
-    try {
-      const { data, error } = await supabase.from('chapters').update(payload).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setChapters, data[0]);
-        logAuditAction('UPDATE', 'chapters', id, { name: data[0].name });
-      }
-    } catch {
-      upsertRecord(setChapters, { id, ...payload });
+    const { data, error } = await supabase.from('chapters').update(payload).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setChapters, data[0]);
+      logAuditAction('UPDATE', 'chapters', id, { name: data[0].name });
     }
+    return { persisted: true };
   };
 
   const deleteChapter = async (id) => {
-    try {
-      await supabase.from('chapters').delete().eq('id', id);
-      logAuditAction('DELETE', 'chapters', id);
-    } catch (error) {
-      console.warn('Falling back to local chapter delete.', error);
-    } finally {
-      setChapters((current) => current.filter((chapter) => chapter.id !== id));
-    }
+    const { error } = await supabase.from('chapters').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'chapters', id);
+    setChapters((current) => current.filter((chapter) => chapter.id !== id));
+    return { persisted: true };
   };
 
   const addVolunteer = async (volunteer) => {
-    try {
-      const { data, error } = await supabase.from('volunteers').insert([volunteer]).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setVolunteersList, data[0]);
-        logAuditAction('INSERT', 'volunteers', data[0].id, { name: data[0].name });
-      }
-      setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
-      return { persisted: true };
-    } catch {
-      const mockNew = { id: Date.now(), ...volunteer };
-      upsertRecord(setVolunteersList, mockNew);
-      setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
-      return { persisted: false };
+    const { data, error } = await supabase.from('volunteers').insert([volunteer]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setVolunteersList, data[0]);
+      logAuditAction('INSERT', 'volunteers', data[0].id, { name: data[0].name });
     }
+    setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
+    return { persisted: true };
   };
 
   const updateVolunteer = async (id, volunteer) => {
-    try {
-      const { data, error } = await supabase.from('volunteers').update(volunteer).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setVolunteersList, data[0]);
-        logAuditAction('UPDATE', 'volunteers', id, { name: data[0].name });
-      }
-      return { persisted: true };
-    } catch {
-      upsertRecord(setVolunteersList, { id, ...volunteer });
-      return { persisted: false };
+    const { data, error } = await supabase.from('volunteers').update(volunteer).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setVolunteersList, data[0]);
+      logAuditAction('UPDATE', 'volunteers', id, { name: data[0].name });
     }
+    return { persisted: true };
   };
 
   const deleteVolunteer = async (id) => {
-    try {
-      await supabase.from('volunteers').delete().eq('id', id);
-      setStats(prev => ({ ...prev, volunteers: Math.max(0, prev.volunteers - 1) }));
-      // Nico: fire audit log; Precious: local list update + return persisted flag
-      logAuditAction('DELETE', 'volunteers', id);
-      setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
-      return { persisted: true };
-    } catch (error) {
-      console.warn('Falling back to local volunteer delete.', error);
-      setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
-      return { persisted: false };
-    }
+    const { error } = await supabase.from('volunteers').delete().eq('id', id);
+    if (error) throw error;
+    setStats(prev => ({ ...prev, volunteers: Math.max(0, prev.volunteers - 1) }));
+    logAuditAction('DELETE', 'volunteers', id);
+    setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
+    return { persisted: true };
   };
 
   const addInventoryItem = async (item) => {
-    try {
-      const { data, error } = await supabase.from('inventory').insert([item]).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setInventoryList, data[0]);
-        logAuditAction('INSERT', 'inventory', data[0].id, { item: data[0].name });
-      }
-    } catch {
-      const mockNew = { id: Date.now(), ...item };
-      upsertRecord(setInventoryList, mockNew);
+    const { data, error } = await supabase.from('inventory').insert([item]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setInventoryList, data[0]);
+      logAuditAction('INSERT', 'inventory', data[0].id, { item: data[0].name });
     }
+    return { persisted: true };
   };
 
   const updateInventoryItem = async (id, item) => {
-    try {
-      const { data, error } = await supabase.from('inventory').update(item).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setInventoryList, data[0]);
-        logAuditAction('UPDATE', 'inventory', id, { item: data[0].name });
-      }
-    } catch {
-      upsertRecord(setInventoryList, { id, ...item });
+    const { data, error } = await supabase.from('inventory').update(item).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setInventoryList, data[0]);
+      logAuditAction('UPDATE', 'inventory', id, { item: data[0].name });
     }
+    return { persisted: true };
   };
 
   const deleteInventoryItem = async (id) => {
-    try {
-      await supabase.from('inventory').delete().eq('id', id);
-      logAuditAction('DELETE', 'inventory', id);
-    } catch (error) {
-      console.warn('Falling back to local inventory delete.', error);
-    }
+    const { error } = await supabase.from('inventory').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'inventory', id);
     setInventoryList((current) => current.filter((item) => item.id !== id));
+    return { persisted: true };
   };
 
   const addSocialPost = async (post) => {
-    try {
-      const { data, error } = await supabase.from('social_media_posts').insert([post]).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setSocialPosts, data[0]);
-        logAuditAction('INSERT', 'social_media_posts', data[0].id);
-      }
-    } catch {
-      const mockNew = { id: Date.now(), ...post };
-      upsertRecord(setSocialPosts, mockNew);
+    const { data, error } = await supabase.from('social_media_posts').insert([post]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setSocialPosts, data[0]);
+      logAuditAction('INSERT', 'social_media_posts', data[0].id);
     }
+    return { persisted: true };
   };
 
   const updateSocialPost = async (id, post) => {
-    try {
-      const { data, error } = await supabase.from('social_media_posts').update(post).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setSocialPosts, data[0]);
-        logAuditAction('UPDATE', 'social_media_posts', id);
-      }
-    } catch {
-      upsertRecord(setSocialPosts, { id, ...post });
+    const { data, error } = await supabase.from('social_media_posts').update(post).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setSocialPosts, data[0]);
+      logAuditAction('UPDATE', 'social_media_posts', id);
     }
+    return { persisted: true };
   };
 
   const deleteSocialPost = async (id) => {
-    try {
-      await supabase.from('social_media_posts').delete().eq('id', id);
-      logAuditAction('DELETE', 'social_media_posts', id);
-    } catch (error) {
-      console.warn('Falling back to local post delete.', error);
-    }
+    const { error } = await supabase.from('social_media_posts').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'social_media_posts', id);
     setSocialPosts((current) => current.filter((post) => post.id !== id));
+    return { persisted: true };
   };
 
   const addEvent = async (event) => {
     const payload = buildEventFolderMetadata(event);
-    try {
-      const { data, error } = await supabase.from('events').insert([payload]).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setEventsList, data[0]);
-        logAuditAction('INSERT', 'events', data[0].id, { title: data[0].title });
-      }
-    } catch {
-      const mockNew = { id: Date.now(), ...payload };
-      upsertRecord(setEventsList, mockNew);
+    const { data, error } = await supabase.from('events').insert([payload]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setEventsList, data[0]);
+      logAuditAction('INSERT', 'events', data[0].id, { title: data[0].title });
     }
+    return { persisted: true };
   };
 
   const updateEvent = async (id, event) => {
     const payload = buildEventFolderMetadata(event);
-    try {
-      const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setEventsList, data[0]);
-        logAuditAction('UPDATE', 'events', id, { title: data[0].title });
-      }
-    } catch {
-      upsertRecord(setEventsList, { id, ...payload });
+    const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setEventsList, data[0]);
+      logAuditAction('UPDATE', 'events', id, { title: data[0].title });
     }
+    return { persisted: true };
   };
 
   const deleteEvent = async (id) => {
-    try {
-      await supabase.from('events').delete().eq('id', id);
-      logAuditAction('DELETE', 'events', id);
-    } catch (error) {
-      console.warn('Falling back to local event delete.', error);
-    }
+    const { error } = await supabase.from('events').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'events', id);
     setEventsList((current) => current.filter((event) => event.id !== id));
+    return { persisted: true };
   };
 
   const addLearner = () => {

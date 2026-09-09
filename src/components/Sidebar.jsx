@@ -19,34 +19,34 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { useApp } from '../context/AppState';
+import { canAccessRoute } from '../auth/permissions';
 import './Sidebar.css';
 
 export default function Sidebar() {
-  const { user, isSuperadmin, isAdmin, hasRole } = useApp();
+  const { user, roleKey } = useApp();
   const [collapsed, setCollapsed] = useState(false);
 
+  const visible = (link) => canAccessRoute(roleKey, link.path);
   const workspaceLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
-    hasRole('super_admin', 'admin', 'chapter_coordinator', 'event_coordinator') && { name: 'Chapters', path: '/dashboard/chapters', icon: <MapPin size={20} /> },
-    hasRole('super_admin', 'admin', 'chapter_coordinator', 'volunteer') && { name: 'Volunteers', path: '/dashboard/volunteers', icon: <Users size={20} /> },
-    hasRole('super_admin', 'admin', 'chapter_coordinator', 'event_coordinator') && { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
+    { name: 'Chapters', path: '/dashboard/chapters', icon: <MapPin size={20} /> },
+    { name: 'Volunteers', path: '/dashboard/volunteers', icon: <Users size={20} /> },
+    { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
     { name: 'Events & CodeCamps', path: '/dashboard/events', icon: <CalendarDays size={20} /> },
-    hasRole('super_admin', 'admin', 'chapter_coordinator', 'event_coordinator') && { name: 'Post Event Report', path: '/dashboard/post-event-report', icon: <FileText size={20} /> },
-    hasRole('super_admin', 'admin', 'chapter_coordinator', 'event_coordinator') && { name: 'Social Media', path: '/dashboard/social-media', icon: <Share2 size={20} /> },
-    hasRole('super_admin', 'admin', 'chapter_coordinator', 'event_coordinator') && { name: 'Event Checklist', path: '/dashboard/event-checklist', icon: <ClipboardList size={20} /> },
+    { name: 'Post Event Report', path: '/dashboard/post-event-report', icon: <FileText size={20} /> },
+    { name: 'Social Media', path: '/dashboard/social-media', icon: <Share2 size={20} /> },
+    { name: 'Event Checklist', path: '/dashboard/event-checklist', icon: <ClipboardList size={20} /> },
     { name: 'AI Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
-  ].filter(Boolean);
+  ].filter(visible);
 
   // Admin-only links — visible only to Superadmin users
-  const adminLinks = isAdmin
-      ? [
+  const adminLinks = [
         { name: 'User Management', path: '/dashboard/users', icon: <UserCog size={20} /> },
-        isSuperadmin && { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Brain size={20} /> },
+        { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Brain size={20} /> },
         { name: 'FAQ Builder', path: '/dashboard/faq-suggestions', icon: <HelpCircle size={20} /> },
         { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
-        isSuperadmin && { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
-      ].filter(Boolean)
-    : [];
+        { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
+      ].filter(visible);
 
   const displayName = user?.name || user?.email || 'Visitor';
 

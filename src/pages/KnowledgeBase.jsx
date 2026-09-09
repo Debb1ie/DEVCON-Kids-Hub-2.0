@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Upload, Trash2, FileText, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useApp } from '../context/AppState';
+import { canPerform } from '../auth/permissions';
 import { processDocument, validateDocumentFile } from '../services/documentService';
 import { storeDocumentChunks, listDocuments, deleteDocument } from '../services/ragService';
 import './KnowledgeBase.css';
@@ -16,8 +18,10 @@ const formatFileSize = (bytes) => {
 const getFileTypeLabel = (file) => file.name.split('.').pop()?.toUpperCase() || 'FILE';
 
 export default function KnowledgeBase() {
+  const { roleKey } = useApp();
+  const canManageKnowledge = canPerform(roleKey, 'knowledge.manage');
   const [documents, setDocuments] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -33,7 +37,15 @@ export default function KnowledgeBase() {
 
   // Ref to the hidden file input — we trigger it when the button is clicked
   useEffect(() => {
-    loadDocuments();
+    let active = true;
+    listDocuments()
+      .then((docs) => { if (active) setDocuments(docs); })
+      .catch((err) => {
+        console.error('Error loading documents:', err);
+        if (active) setError('Failed to load documents');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   async function loadDocuments() {
@@ -152,13 +164,13 @@ export default function KnowledgeBase() {
 
   return (
     <div className="knowledge-base-page">
-      <h1>Knowledge Base Management</h1>
-      <p className="subtitle">Upload and manage documents for AI knowledge grounding</p>
+      <h1>{canManageKnowledge ? 'Knowledge Base Management' : 'Knowledge Base'}</h1>
+      <p className="subtitle">{canManageKnowledge ? 'Upload and manage documents for AI knowledge grounding' : 'Browse approved resources used by the DEVCON Kids assistant'}</p>
 
       {error && <div className="alert alert-error" role="alert" aria-live="assertive">{error}</div>}
       {success && <div className="alert alert-success" role="status" aria-live="polite">{success}</div>}
 
-      <div className="upload-section">
+      {canManageKnowledge && <div className="upload-section">
         <div className="upload-box">
           <div className="upload-icon"><Upload size={32} aria-hidden="true" /></div>
           <h3>Upload Documents</h3>
@@ -201,7 +213,7 @@ export default function KnowledgeBase() {
             )}
           </button>
         </div>
-      </div>
+      </div>}
 
       <div className="documents-section">
         <h2>Uploaded Documents ({documents.length})</h2>
@@ -227,7 +239,7 @@ export default function KnowledgeBase() {
                   <th>Chunks</th>
                   <th>Pages</th>
                   <th>Uploaded</th>
-                  <th>Action</th>
+                  {canManageKnowledge && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -242,9 +254,9 @@ export default function KnowledgeBase() {
                     <td>{doc.file_type.toUpperCase()}</td>
                     <td>{doc.total_chunks}</td>
                     <td>{doc.total_pages}</td>
-                    <td>
+                    {canManageKnowledge && <td>
                       {new Date(doc.created_at).toLocaleDateString()}
-                    </td>
+                    </td>}
                     <td>
                       <button
                         onClick={() => handleDeleteDocument(doc.id)}
