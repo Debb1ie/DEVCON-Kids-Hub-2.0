@@ -21,6 +21,16 @@ import PendingApproval from './pages/PendingApproval';
 import PostEventReport from './pages/PostEventReport';
 import './index.css';
 
+function AuthLoading() {
+  return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem' }}>Loading authentication…</div>;
+}
+
+function PublicOnlyRoute({ children, authenticatedDestination = '/dashboard' }) {
+  const { isAuthenticated, authLoading } = useApp();
+  if (authLoading) return <AuthLoading />;
+  return isAuthenticated ? <Navigate to={authenticatedDestination} replace /> : children;
+}
+
 function ProtectedRoute({ children, roles = null }) {
   const { isAuthenticated, authLoading, isPendingVolunteer, roleKey } = useApp();
 
@@ -100,44 +110,28 @@ function SuperadminRoute({ children }) {
 function AppRoutes() {
   const { isAuthenticated, authLoading, isPendingVolunteer } = useApp();
 
-  if (authLoading)
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-        }}
-      >
-        Loading authentication…
-      </div>
-    );
-
   return (
     <BrowserRouter>
       <Routes>
         <Route
           path="/"
           element={
-            isAuthenticated ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
-              <LandingPage />
-            )
+            <PublicOnlyRoute><LandingPage /></PublicOnlyRoute>
           }
         />
         <Route
           path="/login"
           element={
-            isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
+            <PublicOnlyRoute><Login /></PublicOnlyRoute>
           }
         />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route
           path="/pending-approval"
           element={
-            !isAuthenticated ? (
+            authLoading ? (
+              <AuthLoading />
+            ) : !isAuthenticated ? (
               <Navigate to="/login" replace />
             ) : isPendingVolunteer ? (
               <PendingApproval />

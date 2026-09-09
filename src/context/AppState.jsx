@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { AUTH_CALLBACK_PATH, buildOAuthRedirectUrl, clearAuthSession } from '../auth/authFlow';
 
 const AppContext = createContext();
 
@@ -223,6 +224,15 @@ export const AppProvider = ({ children }) => {
   const [themeMode, setThemeModeState] = useState(getStoredThemeMode);
   const [dashboardSettings, setDashboardSettings] = useState(loadDashboardSettings);
 
+  const acceptSession = useCallback(async (session) => {
+    if (!session?.user) return false;
+    const profile = await loadUserProfile(session.user);
+    setUser(profile);
+    setIsAuthenticated(true);
+    setAuthLoading(false);
+    return profile;
+  }, []);
+
   useEffect(() => {
     applyThemeMode(themeMode);
     try {
@@ -253,27 +263,11 @@ export const AppProvider = ({ children }) => {
   // Sync Supabase auth session on mount and listen for changes
   useEffect(() => {
     let mounted = true;
-    let pollTimer = null;
-    let callbackTimeout = null;
     const isOAuthCallback =
-      typeof window !== 'undefined' && window.location.pathname === '/auth/callback';
+      typeof window !== 'undefined' && window.location.pathname === AUTH_CALLBACK_PATH;
 
     const finishLoading = () => {
       if (mounted) setAuthLoading(false);
-    };
-
-    const applySession = async (session) => {
-      if (!session?.user || !mounted) return false;
-      if (callbackTimeout) {
-        window.clearTimeout(callbackTimeout);
-        callbackTimeout = null;
-      }
-      const profile = await loadUserProfile(session.user);
-      if (!mounted) return false;
-      setUser(profile);
-      setIsAuthenticated(true);
-      finishLoading();
-      return true;
     };
 
     const syncSession = async () => {
@@ -281,33 +275,17 @@ export const AppProvider = ({ children }) => {
         const { data, error } = await supabase.auth.getSession();
         const session = data?.session;
         if (error) console.warn('[Auth] getSession() error:', error);
-        if (session?.user && await applySession(session)) return;
+        if (session?.user && mounted) {
+          await acceptSession(session);
+          return;
+        }
       } catch (e) {
         console.warn('[Auth] getSession() failed immediately:', e);
       }
 
-      if (isOAuthCallback) {
-        pollTimer = window.setInterval(async () => {
-          if (!mounted) return;
-          try {
-            const { data } = await supabase.auth.getSession();
-            if (data?.session?.user && await applySession(data.session)) {
-              window.clearInterval(pollTimer);
-              pollTimer = null;
-            }
-          } catch (e) {
-            console.warn('[Auth] Poll attempt error:', e);
-          }
-        }, 500);
-
-        callbackTimeout = window.setTimeout(() => {
-          if (pollTimer) window.clearInterval(pollTimer);
-          pollTimer = null;
-          setIsAuthenticated(false);
-          setUser(null);
-          finishLoading();
-        }, 20_000);
-      } else {
+      // The public callback route owns the PKCE exchange. Keep the loading gate
+      // active so no protected route can redirect before that exchange finishes.
+      if (!isOAuthCallback) {
         setIsAuthenticated(false);
         setUser(null);
         finishLoading();
@@ -318,13 +296,8 @@ export const AppProvider = ({ children }) => {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (pollTimer) {
-          window.clearInterval(pollTimer);
-          pollTimer = null;
-        }
-        if (callbackTimeout) window.clearTimeout(callbackTimeout);
         if (session?.user) {
-          void applySession(session);
+          void acceptSession(session);
         } else {
           setIsAuthenticated(false);
           setUser(null);
@@ -335,17 +308,14 @@ export const AppProvider = ({ children }) => {
 
     return () => {
       mounted = false;
-      if (callbackTimeout) window.clearTimeout(callbackTimeout);
-      if (pollTimer) window.clearInterval(pollTimer);
       if (listener && listener.subscription) listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [acceptSession]);
 
   // Auth Actions
   const loginWithGoogle = async () => {
     try {
-      const redirectUrl = window.location.origin + '/auth/callback';
-      console.log('🟡 [AppState.loginWithGoogle] Initiating Google OAuth with redirectTo:', redirectUrl);
+      const redirectUrl = buildOAuthRedirectUrl(window.location.origin);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -358,32 +328,24 @@ export const AppProvider = ({ children }) => {
         },
       });
       
-      if (error) {
-        console.error('🟡 [AppState.loginWithGoogle] OAuth error from Supabase:', error);
-        throw error;
-      }
+      if (error) throw error;
       
       if (data?.url) {
-        console.log('🟡 [AppState.loginWithGoogle] Received redirect URL from Supabase:', data.url);
-        console.log('🟡 [AppState.loginWithGoogle] About to redirect to Google...');
         if (typeof window !== 'undefined') {
           window.location.href = data.url;
-          return { success: true, redirectUrl: data.url };
+          return { success: true };
         }
-      } else {
-        console.log('🟡 [AppState.loginWithGoogle] No URL in response, but no error either');
       }
       
       return { success: true, data };
     } catch (error) {
-      console.error('🟡 [AppState.loginWithGoogle] Exception caught:', error.message, error);
       return { success: false, error };
     }
   };
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      await clearAuthSession(supabase.auth);
     } catch (error) {
       console.warn('Sign out failed', error);
     }
@@ -663,6 +625,7 @@ export const AppProvider = ({ children }) => {
       isAdmin: user?.roleKey === 'super_admin' || user?.roleKey === 'admin',
       hasRole: (...roles) => roles.includes(user?.roleKey),
       canManageContent: user?.roleKey === 'super_admin' || user?.roleKey === 'admin',
+      acceptSession,
       loginWithGoogle,
       logout,
       addChapter,

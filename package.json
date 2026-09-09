@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "eval": "node tests/eval/run.js",
+    "test:auth": "node --test tests/auth-flow.test.mjs",
     "test:post-report:local": "node tests/post-event-report-local-e2e.mjs"
   },
   "dependencies": {

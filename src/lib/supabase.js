@@ -19,21 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: typeof window !== "undefined" ? window.localStorage : undefined,
     // Faster getSession() polling when no session is present yet.
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
+    flowType: 'pkce',
   },
 });
-
-// Immediately check for session from URL on app load (triggers OAuth code exchange)
-if (typeof window !== "undefined") {
-  console.log("[Supabase Init] Checking for session in URL...");
-  supabase.auth.getSession().then(({ data, error }) => {
-    if (error) {
-      console.warn("[Supabase Init] getSession() error:", error);
-    } else {
-      console.log(
-        "[Supabase Init] getSession() result:",
-        data?.session ? `user ${data.session.user.email}` : "no session",
-      );
-    }
-  });
-}
