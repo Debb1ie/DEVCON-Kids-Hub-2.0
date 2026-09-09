@@ -65,12 +65,12 @@ function LadderProgress({ status }) {
 }
 
 export default function Volunteers() {
-  const { volunteersList, addVolunteer, updateVolunteer, deleteVolunteer, isSuperadmin } = useApp();
+  const { volunteersList, chapters, addVolunteer, updateVolunteer, deleteVolunteer, isSuperadmin } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', role: 'Lead Instructor', chapter: 'Manila', status: 'Pending' });
+  const [form, setForm] = useState({ name: '', role: 'Lead Instructor', chapter: '', status: 'Pending' });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewingVolunteer, setViewingVolunteer] = useState(null);
@@ -78,7 +78,7 @@ export default function Volunteers() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const emptyForm = { name: '', role: 'Lead Instructor', chapter: 'Manila', status: 'Pending' };
+  const emptyForm = { name: '', role: 'Lead Instructor', chapter: '', status: 'Pending' };
 
   // Auto-dismiss volunteer action feedback.
   useEffect(() => {
@@ -151,7 +151,7 @@ export default function Volunteers() {
     setForm({
       name: volunteer.name || '',
       role: volunteer.role || 'Lead Instructor',
-      chapter: volunteer.chapter || 'Manila',
+      chapter: volunteer.chapter || '',
       status: volunteer.status || 'Pending'
     });
     setFormError('');
@@ -419,9 +419,12 @@ export default function Volunteers() {
               <div className="volunteer-field">
                 <label htmlFor="volunteer-chapter">Chapter <span aria-hidden="true">*</span></label>
                 <select id="volunteer-chapter" className="border-input" value={form.chapter} onChange={(e) => setForm({ ...form, chapter: e.target.value })} disabled={isSubmitting}>
-                  <option>Manila</option>
-                  <option>Cebu</option>
-                  <option>Davao</option>
+                  <option value="">Select a location</option>
+                  {chapters.map((chapter) => (
+                    <option key={chapter.id} value={chapter.name}>
+                      {chapter.name}{chapter.location_type === 'volunteer_community' ? ' (Volunteer Community)' : ''}
+                    </option>
+                  ))}
                 </select>
                 <small>Select the chapter the volunteer belongs to.</small>
               </div>

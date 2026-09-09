@@ -48,11 +48,6 @@ const loadDashboardSettings = () => {
   }
 };
 
-const fallbackChapters = [
-  { id: 1, name: 'Manila', learners: 2340, workshops: 38, completion: 95, color: '#8B5CF6' },
-  { id: 2, name: 'Cebu', learners: 1820, workshops: 25, completion: 92, color: '#10B981' }
-];
-
 const fallbackEvents = [
   {
     id: 1,
@@ -146,10 +141,8 @@ const fetchChapters = async (supabase, setChapters, setStats) => {
   try {
     const { data, error } = await supabase.from('chapters').select('*');
     if (error) throw error;
-    if (data && data.length > 0) {
-      setChapters(data);
-      setStats((prev) => ({ ...prev, activeChapters: data.length }));
-    }
+    setChapters(data || []);
+    setStats((prev) => ({ ...prev, activeChapters: data?.length || 0 }));
   } catch (e) {
     console.warn("Using fallback chapters. Please run the SQL setup script.", e);
   }
@@ -204,7 +197,7 @@ export const AppProvider = ({ children }) => {
     hourOfAIStudents: 0
   });
 
-  const [chapters, setChapters] = useState(fallbackChapters);
+  const [chapters, setChapters] = useState([]);
   const [volunteersList, setVolunteersList] = useState([]);
   const [inventoryList, setInventoryList] = useState([]);
   const [socialPosts, setSocialPosts] = useState([]);
