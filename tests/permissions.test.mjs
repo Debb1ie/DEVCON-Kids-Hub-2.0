@@ -17,6 +17,14 @@ test('route matrix enforces all six roles', () => {
   assert.equal(canAccessRoute(ROLES.PENDING_VOLUNTEER, '/dashboard/events'), false);
 });
 
+test('Knowledge Base management is Super Admin-only for every route and action check', () => {
+  for (const role of roles) {
+    const expected = role === ROLES.SUPER_ADMIN;
+    assert.equal(canAccessRoute(role, '/dashboard/knowledge-base'), expected, `${role} route`);
+    assert.equal(canPerform(role, 'knowledge.manage'), expected, `${role} management action`);
+  }
+});
+
 test('chapter access is nationwide, own chapter, or assigned-event scoped', () => {
   assert.equal(canAccessChapter(ROLES.ADMIN, 'a', 'b'), true);
   assert.equal(canAccessChapter(ROLES.CHAPTER_COORDINATOR, 'a', 'a'), true);

@@ -24,6 +24,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { assertKnowledgeManager, KnowledgeAuthorizationError } from './knowledgeAuthorization';
 
 // --- Mistral Embedding Config (fallback only, remove after A06 verified) ---
 // WHAT: Mistral's embedding API converts text into 1024-dimensional vectors.
@@ -145,7 +146,8 @@ export async function generateEmbedding(text) {
  * @param {Array} chunks - Array of {content, pageNumber} objects
  * @returns {number} Number of chunks stored (0 if storage failed)
  */
-export async function storeDocumentChunks(documentId, documentTitle, chunks) {
+export async function storeDocumentChunks(documentId, documentTitle, chunks, role) {
+  assertKnowledgeManager(role);
   try {
     const BATCH_SIZE = 5; // Process 5 chunks at a time for parallel embedding
     let storedCount = 0;
@@ -342,7 +344,8 @@ export async function retrieveContext(userQuery, chatHistory = []) { // eslint-d
 /**
  * Delete document and its chunks
  */
-export async function deleteDocument(documentId) {
+export async function deleteDocument(documentId, role) {
+  assertKnowledgeManager(role);
   try {
     const { error } = await supabase
       .from('knowledge_base')
@@ -360,7 +363,8 @@ export async function deleteDocument(documentId) {
 /**
  * List all documents in knowledge base
  */
-export async function listDocuments() {
+export async function listDocuments(role) {
+  assertKnowledgeManager(role);
   try {
     const { data, error } = await supabase
       .from('documents')
@@ -373,4 +377,22 @@ export async function listDocuments() {
     console.error('Error listing documents:', error);
     return [];
   }
+}
+
+export async function createDocumentMetadata(document, role) {
+  assertKnowledgeManager(role);
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new KnowledgeAuthorizationError();
+
+  const { error } = await supabase.from('documents').insert({
+    ...document,
+    uploaded_by: user.id,
+  });
+  if (error) throw new Error('Unable to save document metadata.');
+}
+
+export async function deleteDocumentMetadata(documentId, role) {
+  assertKnowledgeManager(role);
+  const { error } = await supabase.from('documents').delete().eq('id', documentId);
+  if (error) throw new Error('Unable to delete document metadata.');
 }

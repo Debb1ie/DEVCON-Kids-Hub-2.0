@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Upload, Trash2, FileText, Loader } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppState';
 import { canPerform } from '../auth/permissions';
 import { processDocument, validateDocumentFile } from '../services/documentService';
-import { storeDocumentChunks, listDocuments, deleteDocument } from '../services/ragService';
+import { createDocumentMetadata, deleteDocument, deleteDocumentMetadata, storeDocumentChunks, listDocuments } from '../services/ragService';
 import './KnowledgeBase.css';
 
 const formatFileSize = (bytes) => {
@@ -38,7 +37,7 @@ export default function KnowledgeBase() {
   // Ref to the hidden file input — we trigger it when the button is clicked
   useEffect(() => {
     let active = true;
-    listDocuments()
+    listDocuments(roleKey)
       .then((docs) => { if (active) setDocuments(docs); })
       .catch((err) => {
         console.error('Error loading documents:', err);
@@ -46,12 +45,12 @@ export default function KnowledgeBase() {
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [roleKey]);
 
   async function loadDocuments() {
     setLoading(true);
     try {
-      const docs = await listDocuments();
+      const docs = await listDocuments(roleKey);
       setDocuments(docs);
     } catch (err) {
       console.error('Error loading documents:', err);
@@ -96,32 +95,18 @@ export default function KnowledgeBase() {
       // Generate document ID
       const docId = `doc_${Date.now()}`;
 
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error('You must be signed in to upload knowledge base documents.');
-
-      // Store in Supabase documents table
-      const { error: docError } = await supabase
-        .from('documents')
-        .insert([{
-          id: docId,
-          title: processedDoc.fileName,
-          file_type: processedDoc.fileType,
-          total_chunks: processedDoc.totalChunks,
-          total_pages: processedDoc.totalPages,
-          uploaded_by: user.id,
-          created_at: new Date().toISOString()
-        }]);
-
-      if (docError) {
-        // If documents table doesn't exist or RLS blocks, warn but continue
-        console.error('[KnowledgeBase] Failed to save document metadata:', docError);
-        console.warn('[KnowledgeBase] The "documents" table may not exist. Run the SQL migration.');
-      }
+      await createDocumentMetadata({
+        id: docId,
+        title: processedDoc.fileName,
+        file_type: processedDoc.fileType,
+        total_chunks: processedDoc.totalChunks,
+        total_pages: processedDoc.totalPages,
+        created_at: new Date().toISOString()
+      }, roleKey);
 
       // Store chunks with embeddings in knowledge_base table
       // This is now graceful — returns 0 on failure instead of throwing
-      const chunksStored = await storeDocumentChunks(docId, processedDoc.fileName, processedDoc.chunks);
+      const chunksStored = await storeDocumentChunks(docId, processedDoc.fileName, processedDoc.chunks, roleKey);
 
       if (chunksStored > 0) {
         setSelectedFile(null);
@@ -145,14 +130,8 @@ export default function KnowledgeBase() {
     if (!confirm('Delete this document and all its indexed chunks?')) return;
 
     try {
-      await deleteDocument(docId);
-      
-      const { error } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', docId);
-
-      if (error) throw error;
+      await deleteDocument(docId, roleKey);
+      await deleteDocumentMetadata(docId, roleKey);
 
       setSuccess('Document deleted successfully');
       await loadDocuments();

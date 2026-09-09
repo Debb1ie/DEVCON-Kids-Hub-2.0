@@ -20,6 +20,7 @@
 
 import { supabase } from '../lib/supabase';
 import { generateEmbedding } from './ragService';
+import { assertKnowledgeManager } from './knowledgeAuthorization';
 
 // --- Groq config (same as chatService) ---
 // FAQ generation is server-only; direct browser credentials are disabled.
@@ -348,8 +349,9 @@ export async function generateFAQAnswer(topic, sampleQuestions = []) {
  * @param {Array} sampleQuestions - Original questions (stored as metadata)
  * @returns {boolean} true if successfully added to KB
  */
-export async function addFAQToKnowledgeBase(topic, answer, sampleQuestions = []) {
+export async function addFAQToKnowledgeBase(topic, answer, sampleQuestions = [], role) {
   try {
+    assertKnowledgeManager(role);
     if (!answer || answer.trim().length < 10) {
       console.warn('[faqService] Answer too short to add to KB.');
       return false;

@@ -5,14 +5,25 @@ import test from 'node:test';
 const hardening = readFileSync(new URL('../supabase/migrations/20260909000400_rbac_hardening.sql', import.meta.url), 'utf8');
 const applications = readFileSync(new URL('../supabase/migrations/20260909000500_volunteer_event_applications.sql', import.meta.url), 'utf8');
 const identifiers = readFileSync(new URL('../supabase/migrations/20260910000100_event_identifier_hardening.sql', import.meta.url), 'utf8');
+const knowledge = readFileSync(new URL('../supabase/migrations/20260910000200_knowledge_base_super_admin_only.sql', import.meta.url), 'utf8');
 
 test('review migrations are transactional and contain rollback guidance', () => {
-  for (const sql of [hardening, applications, identifiers]) {
+  for (const sql of [hardening, applications, identifiers, knowledge]) {
     assert.match(sql, /^-- REVIEW ONLY/m);
     assert.match(sql, /begin;/i);
     assert.match(sql, /commit;/i);
     assert.match(sql, /rollback/i);
   }
+});
+
+test('Knowledge Base management and private source policies are Super Admin-only', () => {
+  assert.match(knowledge, /documents_superadmin_rbac[\s\S]*has_role\(array\['super_admin'\]\)/i);
+  assert.match(knowledge, /knowledge_base_superadmin_rbac[\s\S]*has_role\(array\['super_admin'\]\)/i);
+  assert.match(knowledge, /knowledge_source_objects_(select|insert|update|delete)_superadmin/i);
+  assert.match(knowledge, /bucket_id = 'knowledge-base-documents'/i);
+  assert.match(knowledge, /revoke all on function public\.search_knowledge_base.*from public, anon/i);
+  assert.doesNotMatch(knowledge.match(/public\.has_role\(array\[[\s\S]*?\]\)/i)?.[0] || '', /pending_volunteer/i);
+  assert.match(knowledge, /does not create a bucket/i);
 });
 
 test('role and assignment helpers are protected from anonymous execution', () => {

@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Trash2, Loader, HelpCircle, TrendingUp, AlertTriangle, Sparkles, Database } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { XCircle, Trash2, Loader, HelpCircle, TrendingUp, AlertTriangle, Sparkles, Database } from 'lucide-react';
 import { getFAQSuggestions, updateSuggestionStatus, updateSuggestionAnswer, deleteSuggestion, getQuestionStats, generateFAQAnswer, addFAQToKnowledgeBase } from '../services/faqService';
+import { canPerform } from '../auth/permissions';
 import { useApp } from '../context/AppState';
 import './FAQSuggestions.css';
 
 export default function FAQSuggestions() {
-  const { user } = useApp();
+  const { user, roleKey } = useApp();
+  const canManageKnowledge = canPerform(roleKey, 'knowledge.manage');
   const [suggestions, setSuggestions] = useState([]);
   const [stats, setStats] = useState({ totalQuestions: 0, lowConfidence: 0, pendingSuggestions: 0 });
   const [loading, setLoading] = useState(true);
@@ -15,11 +17,7 @@ export default function FAQSuggestions() {
   const [editingAnswer, setEditingAnswer] = useState({});
   const [addingToKB, setAddingToKB] = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, [filter]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [suggestionsData, statsData] = await Promise.all([
@@ -33,7 +31,13 @@ export default function FAQSuggestions() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    // Loading is the external synchronization performed by this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
+  }, [loadData]);
 
   const handleApprove = async (id) => {
     const suggestion = suggestions.find(s => s.id === id);
@@ -64,7 +68,7 @@ export default function FAQSuggestions() {
     if (!suggestion || !answer) return;
 
     setAddingToKB(id);
-    const success = await addFAQToKnowledgeBase(suggestion.topic, answer, suggestion.sample_questions || []);
+    const success = await addFAQToKnowledgeBase(suggestion.topic, answer, suggestion.sample_questions || [], roleKey);
     setAddingToKB(null);
 
     if (success) {
@@ -250,7 +254,7 @@ export default function FAQSuggestions() {
                     </button>
                   </>
                 )}
-                {(editingAnswer[suggestion.id] || suggestion.suggested_answer) && suggestion.status === 'approved' && (
+                {canManageKnowledge && (editingAnswer[suggestion.id] || suggestion.suggested_answer) && suggestion.status === 'approved' && (
                   <button
                     className="faq-action-btn add-kb"
                     onClick={() => handleAddToKB(suggestion.id)}

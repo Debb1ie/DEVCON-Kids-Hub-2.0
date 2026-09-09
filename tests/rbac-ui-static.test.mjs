@@ -8,6 +8,9 @@ const state = readFileSync('src/context/AppState.jsx', 'utf8');
 const volunteerEvents = readFileSync('src/pages/VolunteerEvents.jsx', 'utf8');
 const applicationReview = readFileSync('src/components/EventApplicationsPanel.jsx', 'utf8');
 const events = readFileSync('src/pages/Events.jsx', 'utf8');
+const knowledgePage = readFileSync('src/pages/KnowledgeBase.jsx', 'utf8');
+const faqPage = readFileSync('src/pages/FAQSuggestions.jsx', 'utf8');
+const ragService = readFileSync('src/services/ragService.js', 'utf8');
 
 test('routes and sidebar share the centralized permission registry', () => {
   assert.match(app, /canAccessRoute/);
@@ -34,4 +37,13 @@ test('authorized event pages include application review and confirmation control
   assert.match(applicationReview, /rejected/);
   assert.match(applicationReview, /withdrawn/);
   assert.match(applicationReview, /Reopen/);
+});
+
+test('Knowledge Base route, sidebar, page, and services share the Super Admin permission boundary', () => {
+  assert.match(app, /ProtectedRoute route="\/dashboard\/knowledge-base"/);
+  assert.match(sidebar, /AI Knowledge Base.*\/dashboard\/knowledge-base/);
+  assert.match(knowledgePage, /listDocuments\(roleKey\)/);
+  assert.match(knowledgePage, /storeDocumentChunks\([^;]+roleKey\)/s);
+  assert.match(ragService, /assertKnowledgeManager\(role\)/);
+  assert.match(faqPage, /canManageKnowledge &&/);
 });
