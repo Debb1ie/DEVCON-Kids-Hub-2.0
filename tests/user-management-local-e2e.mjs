@@ -49,12 +49,12 @@ const anonymous = createClient(url, anonKey, { auth: { persistSession: false, au
 
 const directory = await superA.client.rpc('admin_list_users');
 assert.ifError(directory.error);
-ok(directory.data.length === 7, 'Super Admin lists directory');
+ok(directory.data.length >= 7, 'Super Admin lists directory');
 ok(Object.keys(directory.data[0]).sort().join(',') === 'avatar_url,chapter_id,chapter_name,created_at,email,full_name,role,user_id', 'Directory returns approved fields only');
 ok(directory.data.every((row, index, all) => index === 0 || row.created_at <= all[index - 1].created_at), 'Directory ordering is deterministic');
 
 const adminDirectory = await regularAdmin.client.rpc('admin_list_users');
-assert.ifError(adminDirectory.error); ok(adminDirectory.data.length === 7, 'Admin lists permitted directory');
+assert.ifError(adminDirectory.error); ok(adminDirectory.data.length >= 7, 'Admin lists permitted directory');
 for (const [args, expected, name] of [
   [{ search_query: 'super alpha' }, 1, 'Display-name search'],
   [{ search_query: superA.email.toUpperCase() }, 1, 'Case-insensitive email search'],

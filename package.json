@@ -12,6 +12,9 @@
     "test:auth": "node --test tests/auth-flow.test.mjs",
     "test:user-management": "node --test tests/user-management-rules.test.mjs",
     "test:user-management:local": "node tests/user-management-local-e2e.mjs",
+    "test:locations:local": "node tests/location-directory-local-e2e.mjs",
+    "test:locations": "node --test tests/location-rules.test.mjs",
+    "test:locations:ui": "node --test tests/location-ui-static.test.mjs",
     "test:post-report:local": "node tests/post-event-report-local-e2e.mjs"
   },
   "dependencies": {
