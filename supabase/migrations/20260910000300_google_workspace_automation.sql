@@ -16,7 +16,8 @@ begin
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relname in (
     'google_workspace_settings', 'google_workspace_jobs',
-    'google_workspace_event_links', 'google_workspace_report_syncs'
+    'google_workspace_event_links', 'google_workspace_report_syncs',
+    'google_oauth_credentials', 'google_oauth_states'
   ) limit 1;
   if collision is not null then
     raise exception 'Google Workspace preflight failed: object already exists: %', collision;
@@ -25,16 +26,18 @@ end $$;
 
 create table public.google_workspace_settings (
   singleton boolean primary key default true check (singleton),
-  shared_drive_root_folder_id text,
+  google_drive_root_folder_id text,
   report_sheet_id text,
   automatic_folder_creation_enabled boolean not null default false,
   sheet_synchronization_enabled boolean not null default false,
   report_sheet_tab_name text not null default 'Post Event Reports',
+  connected_google_email text,
+  google_connected_at timestamptz,
   updated_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint google_root_folder_id_format check (
-    shared_drive_root_folder_id is null or shared_drive_root_folder_id ~ '^[A-Za-z0-9_-]{10,200}$'
+    google_drive_root_folder_id is null or google_drive_root_folder_id ~ '^[A-Za-z0-9_-]{10,200}$'
   ),
   constraint google_sheet_id_format check (
     report_sheet_id is null or report_sheet_id ~ '^[A-Za-z0-9_-]{10,200}$'
@@ -43,6 +46,26 @@ create table public.google_workspace_settings (
     length(btrim(report_sheet_tab_name)) between 1 and 100
     and report_sheet_tab_name !~ '[\\[\\]*?/\\:]'
   )
+);
+
+-- OAuth secrets are encrypted by the Edge Function before storage. Browser roles
+-- have no grants or policies on this table; only service_role may access it.
+create table public.google_oauth_credentials (
+  singleton boolean primary key default true check (singleton),
+  refresh_token_ciphertext text not null,
+  granted_scopes text[] not null,
+  google_account_email text not null,
+  connected_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.google_oauth_states (
+  state_hash text primary key,
+  requested_by uuid not null references auth.users(id) on delete cascade,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
 );
 
 create table public.google_workspace_event_links (
@@ -99,6 +122,9 @@ for each row execute function public.set_updated_at();
 create trigger google_workspace_jobs_updated_at
 before update on public.google_workspace_jobs
 for each row execute function public.set_updated_at();
+create trigger google_oauth_credentials_updated_at
+before update on public.google_oauth_credentials
+for each row execute function public.set_updated_at();
 
 create or replace function public.google_resource_id(input_value text, resource_kind text)
 returns text language plpgsql immutable
@@ -145,7 +171,7 @@ begin
 end $$;
 
 create or replace function public.update_google_workspace_settings(
-  shared_drive_root text,
+  google_drive_root text,
   report_sheet text,
   automatic_folders boolean,
   sheet_sync boolean,
@@ -160,22 +186,26 @@ begin
   if not public.has_role(array['super_admin']) then
     raise exception using errcode = '42501', message = 'Only a Super Admin can change integration settings.';
   end if;
-  if automatic_folders and nullif(btrim(coalesce(shared_drive_root, '')), '') is null then
-    raise exception using errcode = '22023', message = 'A Shared Drive root folder is required when folder automation is enabled.';
+  if (automatic_folders or sheet_sync)
+     and not exists (select 1 from public.google_workspace_settings where singleton and google_connected_at is not null) then
+    raise exception using errcode = '22023', message = 'Connect an authorized DEVCON Google account before enabling automation.';
+  end if;
+  if automatic_folders and nullif(btrim(coalesce(google_drive_root, '')), '') is null then
+    raise exception using errcode = '22023', message = 'A Google Drive root folder is required when folder automation is enabled.';
   end if;
   if sheet_sync and nullif(btrim(coalesce(report_sheet, '')), '') is null then
     raise exception using errcode = '22023', message = 'A Google Sheet is required when synchronization is enabled.';
   end if;
   insert into public.google_workspace_settings (
-    singleton, shared_drive_root_folder_id, report_sheet_id,
+    singleton, google_drive_root_folder_id, report_sheet_id,
     automatic_folder_creation_enabled, sheet_synchronization_enabled,
     report_sheet_tab_name, updated_by
   ) values (
-    true, public.google_resource_id(shared_drive_root, 'folder'),
+    true, public.google_resource_id(google_drive_root, 'folder'),
     public.google_resource_id(report_sheet, 'sheet'), coalesce(automatic_folders, false),
     coalesce(sheet_sync, false), coalesce(nullif(btrim(sheet_tab_name), ''), 'Post Event Reports'), auth.uid()
   ) on conflict (singleton) do update set
-    shared_drive_root_folder_id = excluded.shared_drive_root_folder_id,
+    google_drive_root_folder_id = excluded.google_drive_root_folder_id,
     report_sheet_id = excluded.report_sheet_id,
     automatic_folder_creation_enabled = excluded.automatic_folder_creation_enabled,
     sheet_synchronization_enabled = excluded.sheet_synchronization_enabled,
@@ -207,27 +237,20 @@ begin
   return result;
 end $$;
 
-create or replace function public.queue_google_event_folder()
-returns trigger language plpgsql security definer
-set search_path = pg_catalog, public
-as $$
-begin
-  if exists (select 1 from public.google_workspace_settings where singleton and automatic_folder_creation_enabled) then
-    insert into public.google_workspace_jobs(job_type, event_id, idempotency_key)
-    values ('create_event_folder', new.id, 'event-folder:' || new.id::text)
-    on conflict (idempotency_key) do nothing;
-  end if;
-  return new;
-end $$;
-
 create or replace function public.queue_google_report_sync()
 returns trigger language plpgsql security definer
 set search_path = pg_catalog, public
 as $$
 begin
+  if new.status is distinct from old.status and new.status::text = 'submitted'
+     and exists (select 1 from public.google_workspace_settings where singleton and automatic_folder_creation_enabled and google_connected_at is not null) then
+    insert into public.google_workspace_jobs(job_type, event_id, idempotency_key)
+    values ('create_event_folder', new.event_id, 'event-folder:' || new.event_id::text)
+    on conflict (idempotency_key) do nothing;
+  end if;
   if new.status is distinct from old.status
      and new.status::text in ('submitted', 'needs_revision', 'approved')
-     and exists (select 1 from public.google_workspace_settings where singleton and sheet_synchronization_enabled) then
+     and exists (select 1 from public.google_workspace_settings where singleton and sheet_synchronization_enabled and google_connected_at is not null) then
     insert into public.google_workspace_jobs(job_type, event_id, report_id, idempotency_key)
     values ('sync_report_sheet', new.event_id, new.id,
       'report-sheet:' || new.id::text || ':' || new.status::text || ':' || coalesce(new.updated_at::text, now()::text))
@@ -236,8 +259,6 @@ begin
   return new;
 end $$;
 
-create trigger queue_google_event_folder_trigger
-after insert on public.events for each row execute function public.queue_google_event_folder();
 create trigger queue_google_report_sync_trigger
 after update of status on public.post_event_reports
 for each row execute function public.queue_google_report_sync();
@@ -276,6 +297,8 @@ alter table public.google_workspace_settings enable row level security;
 alter table public.google_workspace_jobs enable row level security;
 alter table public.google_workspace_event_links enable row level security;
 alter table public.google_workspace_report_syncs enable row level security;
+alter table public.google_oauth_credentials enable row level security;
+alter table public.google_oauth_states enable row level security;
 
 create policy google_workspace_settings_superadmin on public.google_workspace_settings
 for select to authenticated using (public.has_role(array['super_admin']));
@@ -287,10 +310,12 @@ create policy google_workspace_report_syncs_superadmin on public.google_workspac
 for select to authenticated using (public.has_role(array['super_admin']));
 
 revoke all on public.google_workspace_settings, public.google_workspace_jobs,
-  public.google_workspace_event_links, public.google_workspace_report_syncs from public, anon, authenticated;
+  public.google_workspace_event_links, public.google_workspace_report_syncs,
+  public.google_oauth_credentials, public.google_oauth_states from public, anon, authenticated;
 grant select on public.google_workspace_jobs to authenticated;
 grant all on public.google_workspace_settings, public.google_workspace_jobs,
-  public.google_workspace_event_links, public.google_workspace_report_syncs to service_role;
+  public.google_workspace_event_links, public.google_workspace_report_syncs,
+  public.google_oauth_credentials, public.google_oauth_states to service_role;
 revoke all on function public.google_resource_id(text,text) from public, anon, authenticated;
 revoke all on function public.get_google_workspace_settings() from public, anon;
 revoke all on function public.update_google_workspace_settings(text,text,boolean,boolean,text) from public, anon;
@@ -298,7 +323,7 @@ revoke all on function public.retry_google_workspace_job(uuid) from public, anon
 grant execute on function public.get_google_workspace_settings() to authenticated;
 grant execute on function public.update_google_workspace_settings(text,text,boolean,boolean,text) to authenticated;
 grant execute on function public.retry_google_workspace_job(uuid) to authenticated;
-revoke all on function public.queue_google_event_folder(), public.queue_google_report_sync()
+revoke all on function public.queue_google_report_sync()
   from public, anon, authenticated;
 revoke all on function public.claim_google_workspace_jobs(integer) from public, anon, authenticated;
 revoke all on function public.finish_google_workspace_job(uuid,boolean,text,text) from public, anon, authenticated;
@@ -307,7 +332,7 @@ grant execute on function public.finish_google_workspace_job(uuid,boolean,text,t
 
 -- Verification: inspect pg_policies, information_schema.routine_privileges, and
 -- trigger definitions; test every role plus anon against the three browser RPCs.
--- Rollback must be a separately reviewed migration that drops the two triggers,
--- seven functions, four tables (jobs first), policies, and grants. Preserve job
+-- Rollback must be a separately reviewed migration that drops the queue trigger,
+-- functions, six tables (jobs and OAuth states first), policies, and grants. Preserve job
 -- history externally before rollback if it has operational value.
 commit;

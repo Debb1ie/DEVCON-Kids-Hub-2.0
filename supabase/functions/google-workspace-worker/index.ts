@@ -1,18 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
-import { GoogleAuth } from 'npm:google-auth-library@9.15.1';
 import { findOrCreateEventFolder, upsertReportSheetRow } from './core.mjs';
+import { decryptToken, refreshAccessToken, requiredEnv } from '../_shared/googleOAuth.ts';
 
 const SAFE_FAILURE = 'Google Workspace synchronization failed. Review the integration configuration and retry.';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
 const respond = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
-
-const requiredEnv = (name: string) => {
-  const value = Deno.env.get(name);
-  if (!value) throw new Error(`Missing server configuration: ${name}`);
-  return value;
-};
 
 const escapeDriveQuery = (value: string) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 const folderUrl = (id: string) => `https://drive.google.com/drive/folders/${id}`;
@@ -39,14 +33,14 @@ async function ensureEventFolder(db: ReturnType<typeof createClient>, token: str
   const provider = {
     findFolders: async (name: string, parentId: string) => {
       const query = encodeURIComponent(`name = '${escapeDriveQuery(name)}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-      const found = await googleRequest(token, `https://www.googleapis.com/drive/v3/files?q=${query}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=files(id,name,webViewLink)&pageSize=2`);
+      const found = await googleRequest(token, `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,webViewLink)&pageSize=2`);
       return found.files || [];
     },
-    createFolder: (name: string, parentId: string) => googleRequest(token, 'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,name,webViewLink', {
+    createFolder: (name: string, parentId: string) => googleRequest(token, 'https://www.googleapis.com/drive/v3/files?fields=id,name,webViewLink', {
       method: 'POST', body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
     }),
   };
-  const { folder } = await findOrCreateEventFolder(provider, eventResult.data, settingsResult.data.shared_drive_root_folder_id);
+  const { folder } = await findOrCreateEventFolder(provider, eventResult.data, settingsResult.data.google_drive_root_folder_id);
   const saved = await db.from('google_workspace_event_links').upsert({
     event_id: job.event_id,
     google_folder_id: folder.id,
@@ -63,11 +57,16 @@ async function syncReport(db: ReturnType<typeof createClient>, token: string, jo
     db.from('google_workspace_report_syncs').select('*').eq('report_id', job.report_id).maybeSingle(),
   ]);
   if (settings.error || report.error || existingSync.error) throw settings.error || report.error || existingSync.error;
-  const [folder, submitter] = await Promise.all([
+  let [folder, submitter] = await Promise.all([
     db.from('google_workspace_event_links').select('google_folder_url').eq('event_id', report.data.event_id).maybeSingle(),
     db.from('profiles').select('full_name').eq('id', report.data.submitted_by).maybeSingle(),
   ]);
   if (folder.error || submitter.error) throw folder.error || submitter.error;
+  if (!folder.data && settings.data.automatic_folder_creation_enabled) {
+    await ensureEventFolder(db, token, { event_id: report.data.event_id });
+    folder = await db.from('google_workspace_event_links').select('google_folder_url').eq('event_id', report.data.event_id).single();
+    if (folder.error) throw folder.error;
+  }
   const attendance = Array.isArray(report.data.post_event_report_attendance) ? report.data.post_event_report_attendance[0] || {} : report.data.post_event_report_attendance || {};
   const impact = Array.isArray(report.data.post_event_report_impact) ? report.data.post_event_report_impact[0] || {} : report.data.post_event_report_impact || {};
   const metricsApproved = report.data.status === 'approved';
@@ -113,11 +112,10 @@ Deno.serve(async (request) => {
     const role = await caller.from('user_roles').select('role').eq('user_id', user.data.user.id).eq('role', 'super_admin').maybeSingle();
     if (role.error || !role.data) return respond(403, { error: 'Only a Super Admin can process integration jobs.' });
 
-    const credentials = JSON.parse(requiredEnv('GOOGLE_WORKSPACE_SERVICE_ACCOUNT_JSON'));
-    const auth = new GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'] });
-    const token = await auth.getAccessToken();
-    if (!token) throw new Error('Google access token unavailable');
     const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+    const credential = await db.from('google_oauth_credentials').select('refresh_token_ciphertext').eq('singleton', true).single();
+    if (credential.error) throw credential.error;
+    const token = await refreshAccessToken(await decryptToken(credential.data.refresh_token_ciphertext));
     const claimed = await db.rpc('claim_google_workspace_jobs', { batch_size: 10 });
     if (claimed.error) throw claimed.error;
     let succeeded = 0;
