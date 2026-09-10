@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CloudCog, FolderSync, RefreshCcw, Save, Sheet } from 'lucide-react';
+import { CloudCog, FolderSync, Link2, RefreshCcw, Save, Sheet, Unlink } from 'lucide-react';
 import { useApp } from '../context/AppState.jsx';
 import { googleWorkspaceService } from '../services/googleWorkspaceService.js';
 import './IntegrationSettings.css';
 
-const EMPTY = { sharedDriveRoot: '', reportSheet: '', automaticFolders: false, sheetSync: false, sheetTabName: 'Post Event Reports' };
+const EMPTY = { googleDriveRoot: '', reportSheet: '', automaticFolders: false, sheetSync: false, sheetTabName: 'Post Event Reports', connectedEmail: '', connectedAt: null };
+const oauthResult = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('google');
 
 export default function IntegrationSettings() {
   const { roleKey } = useApp();
@@ -12,8 +13,8 @@ export default function IntegrationSettings() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
+  const [notice, setNotice] = useState(oauthResult === 'connected' ? 'Google account connected.' : '');
+  const [error, setError] = useState(oauthResult && oauthResult !== 'connected' ? 'Google authorization was not completed. Please connect again.' : '');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -21,11 +22,13 @@ export default function IntegrationSettings() {
       const result = await googleWorkspaceService.load(roleKey);
       const settings = result.settings;
       setForm(settings ? {
-        sharedDriveRoot: settings.shared_drive_root_folder_id || '',
+        googleDriveRoot: settings.google_drive_root_folder_id || '',
         reportSheet: settings.report_sheet_id || '',
         automaticFolders: settings.automatic_folder_creation_enabled,
         sheetSync: settings.sheet_synchronization_enabled,
         sheetTabName: settings.report_sheet_tab_name || 'Post Event Reports',
+        connectedEmail: settings.connected_google_email || '',
+        connectedAt: settings.google_connected_at,
       } : EMPTY);
       setJobs(result.jobs);
     } catch (cause) { setError(cause.message); }
@@ -36,7 +39,23 @@ export default function IntegrationSettings() {
     const timer = window.setTimeout(load, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+  useEffect(() => {
+    if (oauthResult) window.history.replaceState({}, document.title, '/dashboard/integrations');
+  }, []);
   const change = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+
+  const connect = async () => {
+    setBusy(true); setError('');
+    try { window.location.assign(await googleWorkspaceService.beginAuthorization(roleKey)); }
+    catch (cause) { setError(cause.message); setBusy(false); }
+  };
+
+  const disconnect = async () => {
+    setBusy(true); setError(''); setNotice('');
+    try { await googleWorkspaceService.disconnect(roleKey); setNotice('Google access revoked and disconnected.'); await load(); }
+    catch (cause) { setError(cause.message); }
+    finally { setBusy(false); }
+  };
 
   const save = async (event) => {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
@@ -61,16 +80,17 @@ export default function IntegrationSettings() {
 
   if (loading) return <div className="integration-state">Loading integration settings…</div>;
   return <div className="integration-page">
-    <header className="integration-hero card"><div><span className="eyebrow"><CloudCog size={15}/> Server-side integration</span><h1>Google Workspace</h1><p>Manage the DEVCON Shared Drive folder and Post Event Report Sheet automation.</p></div></header>
+    <header className="integration-hero card"><div><span className="eyebrow"><CloudCog size={15}/> Server-side integration</span><h1>Google Workspace</h1><p>Connect the authorized DEVCON Google account and manage My Drive report automation.</p></div></header>
     {error && <div className="integration-alert error" role="alert">{error}</div>}
     {notice && <div className="integration-alert success" role="status">{notice}</div>}
+    <section className="card integration-connection"><div><h2>Google authorization</h2>{form.connectedAt?<p>Connected as <strong>{form.connectedEmail}</strong>. Tokens remain encrypted and server-side.</p>:<p>No Google account is connected. A Super Admin must authorize the dedicated DEVCON account.</p>}</div>{form.connectedAt?<button type="button" className="btn-secondary" disabled={busy} onClick={disconnect}><Unlink size={16}/> Disconnect and revoke access</button>:<button type="button" className="btn-primary" disabled={busy} onClick={connect}><Link2 size={16}/> Connect Google account</button>}</section>
     <form className="card integration-form" onSubmit={save}>
       <div className="section-head"><div><h2>Integration settings</h2><p>Only non-secret resource references are stored here. Credentials stay in Supabase secrets.</p></div></div>
-      <label><span><FolderSync size={17}/> Shared Drive root folder URL or ID</span><input value={form.sharedDriveRoot} onChange={(e)=>change('sharedDriveRoot',e.target.value)} placeholder="Google Drive folder URL or ID" autoComplete="off" /></label>
+      <label><span><FolderSync size={17}/> Google Drive root folder URL or ID</span><input value={form.googleDriveRoot} onChange={(e)=>change('googleDriveRoot',e.target.value)} placeholder="My Drive folder URL or ID" autoComplete="off" /></label>
       <label><span><Sheet size={17}/> Google Sheet URL or ID</span><input value={form.reportSheet} onChange={(e)=>change('reportSheet',e.target.value)} placeholder="Google Sheet URL or ID" autoComplete="off" /></label>
       <label><span>Report sheet tab name</span><input value={form.sheetTabName} onChange={(e)=>change('sheetTabName',e.target.value)} maxLength={100} /></label>
-      <label className="integration-toggle"><span><strong>Automatic event folders</strong><small>Queue one deterministic folder for each newly created event.</small></span><input type="checkbox" checked={form.automaticFolders} onChange={(e)=>change('automaticFolders',e.target.checked)} /></label>
-      <label className="integration-toggle"><span><strong>Post Event Report Sheet sync</strong><small>Queue updates after submission, revision requests, and approval.</small></span><input type="checkbox" checked={form.sheetSync} onChange={(e)=>change('sheetSync',e.target.checked)} /></label>
+      <label className="integration-toggle"><span><strong>Automatic event folders</strong><small>Create one deterministic folder when the first valid report is submitted.</small></span><input type="checkbox" disabled={!form.connectedAt} checked={form.automaticFolders} onChange={(e)=>change('automaticFolders',e.target.checked)} /></label>
+      <label className="integration-toggle"><span><strong>Post Event Report Sheet sync</strong><small>Queue updates after submission, revision requests, and approval.</small></span><input type="checkbox" disabled={!form.connectedAt} checked={form.sheetSync} onChange={(e)=>change('sheetSync',e.target.checked)} /></label>
       <button className="btn-primary" disabled={busy} type="submit"><Save size={17}/> {busy?'Saving…':'Save integration settings'}</button>
     </form>
     <section className="card integration-jobs">

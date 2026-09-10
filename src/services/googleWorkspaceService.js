@@ -26,7 +26,7 @@ export const createGoogleWorkspaceService = (client = supabase) => ({
   async save(role, values) {
     assertSuperAdmin(role);
     const result = await client.rpc('update_google_workspace_settings', {
-      shared_drive_root: values.sharedDriveRoot,
+      google_drive_root: values.googleDriveRoot,
       report_sheet: values.reportSheet,
       automatic_folders: Boolean(values.automaticFolders),
       sheet_sync: Boolean(values.sheetSync),
@@ -47,6 +47,22 @@ export const createGoogleWorkspaceService = (client = supabase) => ({
     assertSuperAdmin(role);
     const result = await client.functions.invoke('google-workspace-worker', { body: {} });
     if (result.error) throw new Error('Integration jobs could not be processed. Try again later.');
+    return result.data;
+  },
+
+  async beginAuthorization(role) {
+    assertSuperAdmin(role);
+    const result = await client.functions.invoke('google-workspace-auth', { body: { action: 'authorize' } });
+    if (result.error || !result.data?.authorizationUrl) throw new Error('Google authorization could not be started.');
+    const target = new URL(result.data.authorizationUrl);
+    if (target.protocol !== 'https:' || target.hostname !== 'accounts.google.com') throw new Error('Google authorization returned an invalid destination.');
+    return target.toString();
+  },
+
+  async disconnect(role) {
+    assertSuperAdmin(role);
+    const result = await client.functions.invoke('google-workspace-auth', { body: { action: 'disconnect' } });
+    if (result.error) throw new Error('Google access could not be revoked. Please try again.');
     return result.data;
   },
 });
