@@ -16,6 +16,7 @@ import {
   UserCog,
   PanelLeftClose,
   PanelLeftOpen,
+  CloudCog,
 } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import { canAccessRoute } from '../auth/permissions';
@@ -44,6 +45,7 @@ export default function Sidebar() {
         { name: 'FAQ Builder', path: '/dashboard/faq-suggestions', icon: <HelpCircle size={20} /> },
         { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
         { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
+        { name: 'Integrations', path: '/dashboard/integrations', icon: <CloudCog size={20} /> },
       ].filter(visible);
 
   const displayName = user?.name || user?.email || 'Visitor';

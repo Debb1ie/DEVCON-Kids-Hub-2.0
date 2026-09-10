@@ -14,6 +14,7 @@ import Admin from './pages/Admin';
 import KnowledgeBase from './pages/KnowledgeBase';
 import AISettings from './pages/AISettings';
 import Settings from './pages/Settings';
+import IntegrationSettings from './pages/IntegrationSettings';
 // Kenneth's AI automation pages
 import EventChecklist from './pages/EventChecklist';
 import FAQSuggestions from './pages/FAQSuggestions';
@@ -147,6 +148,7 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
+          <Route path="integrations" element={<ProtectedRoute route="/dashboard/integrations"><IntegrationSettings /></ProtectedRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

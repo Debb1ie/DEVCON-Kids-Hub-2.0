@@ -36,6 +36,7 @@ export const ROUTE_SCOPES = Object.freeze({
   '/dashboard/faq-suggestions': { super_admin: 'platform', admin: 'nationwide' },
   '/dashboard/ai-settings': { super_admin: 'platform' },
   '/dashboard/settings': { super_admin: 'platform' },
+  '/dashboard/integrations': { super_admin: 'platform' },
 });
 
 export const ACTION_SCOPES = Object.freeze({
@@ -63,6 +64,7 @@ export const ACTION_SCOPES = Object.freeze({
   'audit.read': { super_admin: 'platform', admin: 'nationwide' },
   'user.manage': { super_admin: 'platform', admin: 'nationwide' },
   'ai.settings.manage': { super_admin: 'platform' },
+  'integration.manage': { super_admin: 'platform' },
 });
 
 export const getRouteScope = (role, route) => ROUTE_SCOPES[route]?.[normalizeRole(role)] || SCOPES.NONE;
