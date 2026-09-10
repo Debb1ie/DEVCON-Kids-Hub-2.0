@@ -31,6 +31,8 @@ const chapterCoordinator = await identity('google-chapter', 'chapter_coordinator
 const coordinator = await identity('google-coordinator', 'event_coordinator', chapter.id);
 const volunteer = await identity('google-volunteer', 'volunteer', chapter.id);
 const pending = await identity('google-pending', 'pending_volunteer');
+assert.ifError((await root.from('google_oauth_credentials').delete().eq('singleton', true)).error);
+assert.ifError((await root.from('google_workspace_settings').delete().eq('singleton', true)).error);
 
 const deniedActors = [
   ['anonymous', anonymous], ['Admin', admin.client], ['Chapter Coordinator', chapterCoordinator.client],
@@ -44,22 +46,33 @@ for (const [label, client] of deniedActors) {
   pass(`${label} cannot configure or retry`);
 }
 
+const disconnectedEnable = await superAdmin.client.rpc('update_google_workspace_settings', {
+  google_drive_root: 'local_folder_12345', report_sheet: 'local_sheet_12345', automatic_folders: true, sheet_sync: true, sheet_tab_name: 'Post Event Reports',
+});
+assert(disconnectedEnable.error, 'Automation cannot be enabled before Google OAuth connection'); pass('Connection is required before automation can be enabled');
+assert.ifError((await root.from('google_workspace_settings').upsert({ singleton: true, connected_google_email: 'authorized-devcon@local.test', google_connected_at: new Date().toISOString(), updated_by: superAdmin.id })).error);
+assert.ifError((await root.from('google_oauth_credentials').insert({ singleton: true, refresh_token_ciphertext: 'local-ciphertext-fixture', granted_scopes: ['local-scope'], google_account_email: 'authorized-devcon@local.test', connected_by: superAdmin.id })).error);
+for (const [label, client] of [['Super Admin', superAdmin.client], ...deniedActors]) {
+  const credential = await client.from('google_oauth_credentials').select('*');
+  assert(credential.error || credential.data.length === 0, `${label} must not read encrypted OAuth credentials`);
+}
+pass('OAuth credential storage is inaccessible to anonymous and browser roles');
 const invalid = await superAdmin.client.rpc('update_google_workspace_settings', {
-  shared_drive_root: 'not a Google resource', report_sheet: 'also invalid', automatic_folders: true, sheet_sync: true, sheet_tab_name: 'Post Event Reports',
+  google_drive_root: 'not a Google resource', report_sheet: 'also invalid', automatic_folders: true, sheet_sync: true, sheet_tab_name: 'Post Event Reports',
 });
 assert(invalid.error, 'Invalid resource identifiers must be rejected'); pass('Server validates Google resource identifiers');
 const configured = await superAdmin.client.rpc('update_google_workspace_settings', {
-  shared_drive_root: 'local_folder_12345', report_sheet: 'local_sheet_12345', automatic_folders: true, sheet_sync: true, sheet_tab_name: 'Post Event Reports',
+  google_drive_root: 'local_folder_12345', report_sheet: 'local_sheet_12345', automatic_folders: true, sheet_sync: true, sheet_tab_name: 'Post Event Reports',
 });
 assert.ifError(configured.error); pass('Super Admin saves non-secret integration configuration');
 
 const event = (await superAdmin.client.from('events').insert({ chapter_id: chapter.id, created_by: superAdmin.id, title: 'Local Automation Event', chapter: chapter.name, event_date: '2026-09-10' }).select().single()).data;
 assert(event?.id, 'Event must be created');
 let folderJobs = await root.from('google_workspace_jobs').select('*').eq('event_id', event.id).eq('job_type', 'create_event_folder');
-assert.equal(folderJobs.data.length, 1); pass('Event creation queues exactly one folder job');
+assert.equal(folderJobs.data.length, 0); pass('Event creation does not create a Google Drive folder');
 assert.ifError((await superAdmin.client.from('events').update({ description: 'No duplicate folder job' }).eq('id', event.id)).error);
 folderJobs = await root.from('google_workspace_jobs').select('*').eq('event_id', event.id).eq('job_type', 'create_event_folder');
-assert.equal(folderJobs.data.length, 1); pass('Repeated event processing does not duplicate folder jobs');
+assert.equal(folderJobs.data.length, 0); pass('Event updates do not create Google Drive folders');
 
 assert.ifError((await superAdmin.client.from('event_assignments').insert({ event_id: event.id, user_id: coordinator.id, assignment_role: 'event_coordinator', assigned_by: superAdmin.id })).error);
 const coordinatorReports = createPostEventReportRepository({ client: coordinator.client, backendUrl: url });
@@ -70,9 +83,13 @@ const draft = await coordinatorReports.saveDraft({
   impact: { keyLearnings: 'Local learning', communityImpact: 'Local impact' }, transactions: [],
 });
 await coordinatorReports.submit(draft.report.id);
+folderJobs = await root.from('google_workspace_jobs').select('*').eq('event_id', event.id).eq('job_type', 'create_event_folder');
+assert.equal(folderJobs.data.length, 1); pass('First valid report submission queues exactly one folder job');
 await reviewerReports.requestRevision(draft.report.id, 'Local revision requested.');
 await coordinatorReports.resubmit(draft.report.id);
 await reviewerReports.approve(draft.report.id, 'Approved locally.');
+folderJobs = await root.from('google_workspace_jobs').select('*').eq('event_id', event.id).eq('job_type', 'create_event_folder');
+assert.equal(folderJobs.data.length, 1); pass('Later report transitions do not duplicate the event folder job');
 const reportJobs = await root.from('google_workspace_jobs').select('*').eq('report_id', draft.report.id).eq('job_type', 'sync_report_sheet');
 assert.equal(reportJobs.data.length, 4); pass('Submission, revision, resubmission, and approval each queue an idempotent Sheet job');
 
