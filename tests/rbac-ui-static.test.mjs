@@ -11,6 +11,7 @@ const events = readFileSync('src/pages/Events.jsx', 'utf8');
 const knowledgePage = readFileSync('src/pages/KnowledgeBase.jsx', 'utf8');
 const faqPage = readFileSync('src/pages/FAQSuggestions.jsx', 'utf8');
 const ragService = readFileSync('src/services/ragService.js', 'utf8');
+const integrationPage = readFileSync('src/pages/IntegrationSettings.jsx', 'utf8');
 
 test('routes and sidebar share the centralized permission registry', () => {
   assert.match(app, /canAccessRoute/);
@@ -52,4 +53,11 @@ test('Knowledge Base route, sidebar, page, and services share the Super Admin pe
   assert.match(knowledgePage, /storeDocumentChunks\([^;]+roleKey\)/s);
   assert.match(ragService, /assertKnowledgeManager\(role\)/);
   assert.match(faqPage, /canManageKnowledge &&/);
+});
+
+test('Google Workspace integration route and controls use the centralized Super Admin boundary', () => {
+  assert.match(app, /ProtectedRoute route="\/dashboard\/integrations"/);
+  assert.match(sidebar, /Integrations.*\/dashboard\/integrations/);
+  assert.match(integrationPage, /googleWorkspaceService\.save\(roleKey/);
+  assert.match(integrationPage, /googleWorkspaceService\.retry\(roleKey/);
 });

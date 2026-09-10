@@ -93,7 +93,8 @@ await expectError(
   'Anonymous caller cannot use chatbot retrieval RPC',
 );
 
-assert.ifError((await root.storage.createBucket('knowledge-base-documents', { public: false })).error);
+const bucketSetup = await root.storage.createBucket('knowledge-base-documents', { public: false });
+assert(!bucketSetup.error || bucketSetup.error.statusCode === '409', bucketSetup.error?.message);
 const sourcePath = `sources/${crypto.randomUUID()}.txt`;
 assert.ifError((await actors.super_admin.client.storage.from('knowledge-base-documents').upload(sourcePath, new Blob(['local']))).error);
 pass('Super Admin uploads a private source file');

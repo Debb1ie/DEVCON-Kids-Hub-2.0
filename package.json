@@ -17,7 +17,9 @@
     "test:locations": "node --test tests/location-rules.test.mjs",
     "test:locations:ui": "node --test tests/location-ui-static.test.mjs",
     "test:permissions": "node --test tests/permissions.test.mjs tests/rbac-ui-static.test.mjs tests/rbac-migrations-static.test.mjs",
-    "test:post-report:local": "node tests/post-event-report-local-e2e.mjs"
+    "test:post-report:local": "node tests/post-event-report-local-e2e.mjs",
+    "test:google-workspace": "node --test tests/google-workspace-automation.test.mjs",
+    "test:google-workspace:local": "node tests/google-workspace-local-e2e.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
