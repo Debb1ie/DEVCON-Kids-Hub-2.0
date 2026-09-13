@@ -16,6 +16,15 @@ test('event form uses a chapter-dependent UUID coordinator dropdown', () => {
   assert.match(ui, /coordinator_user_id: ''/);
 });
 
+test('coordinator results stay coupled to the chapter request that returned them', () => {
+  assert.match(ui, /const coordinatorRequestRef = useRef\(0\)/);
+  assert.match(ui, /coordinatorRequestRef\.current !== requestId/);
+  assert.match(ui, /setCoordinatorChapterId\(chapterId\)/);
+  assert.match(ui, /coordinatorChapterId === form\.chapter_id/);
+  assert.match(ui, /coordinator_user_id: e\.target\.value/);
+  assert.match(service, /target_coordinator_id: coordinatorUserId/);
+});
+
 test('event writes use the atomic RPC instead of direct table inserts', () => {
   assert.match(service, /rpc\('save_event_with_coordinator'/);
   assert.match(service, /target_coordinator_id: coordinatorUserId/);

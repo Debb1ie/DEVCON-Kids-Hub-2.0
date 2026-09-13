@@ -34,7 +34,7 @@ const chapterA = (await root.from('chapters').insert({ name: `Manila UAT ${suffi
 const chapterB = (await root.from('chapters').insert({ name: `Cebu UAT ${suffix}` }).select().single()).data;
 const superAdmin = await identity('Flow Super Admin', 'super_admin');
 const chapterCoordinator = await identity('Manila Chapter Coordinator', 'chapter_coordinator', chapterA.id);
-const coordinatorA = await identity('Manila Event Coordinator', 'event_coordinator', chapterA.id);
+const coordinatorA = await identity('Sinag Exe', 'event_coordinator', chapterA.id);
 const coordinatorA2 = await identity('Second Manila Event Coordinator', 'event_coordinator', chapterA.id);
 const coordinatorB = await identity('Cebu Event Coordinator', 'event_coordinator', chapterB.id);
 const inactiveUser = await identity('Inactive Coordinator', 'pending_volunteer');
@@ -42,7 +42,8 @@ const inactiveUser = await identity('Inactive Coordinator', 'pending_volunteer')
 const listA = await superAdmin.client.rpc('list_eligible_event_coordinators', { target_chapter_id: chapterA.id });
 assert.ifError(listA.error);
 assert.deepEqual(new Set(listA.data.map((row) => row.user_id)), new Set([coordinatorA.id, coordinatorA2.id]));
-passed.push('Manila lists only Manila Event Coordinators');
+assert.equal(listA.data.find((row) => row.user_id === coordinatorA.id)?.full_name, 'Sinag Exe');
+passed.push('Manila lists Sinag Exe using the UUID accepted by event save');
 
 const listB = await superAdmin.client.rpc('list_eligible_event_coordinators', { target_chapter_id: chapterB.id });
 assert.ifError(listB.error);

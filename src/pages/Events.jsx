@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppState';
 import { canPerform } from '../auth/permissions';
@@ -122,8 +122,10 @@ export default function Events() {
   const [pendingDiscard, setPendingDiscard] = useState(null);
   const [formError, setFormError] = useState('');
   const [eligibleCoordinators, setEligibleCoordinators] = useState([]);
+  const [coordinatorChapterId, setCoordinatorChapterId] = useState('');
   const [coordinatorsLoading, setCoordinatorsLoading] = useState(false);
   const [coordinatorsError, setCoordinatorsError] = useState('');
+  const coordinatorRequestRef = useRef(0);
   const [formSuccess, setFormSuccess] = useState('');
   const [deleteSuccess, setDeleteSuccess] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -143,9 +145,14 @@ export default function Events() {
   }, [deleteSuccess]);
 
   const loadCoordinators = async (chapterId, selectedCoordinatorId = '') => {
+    const requestId = coordinatorRequestRef.current + 1;
+    coordinatorRequestRef.current = requestId;
+    setEligibleCoordinators([]);
+    setCoordinatorChapterId('');
+
     if (!chapterId) {
-      setEligibleCoordinators([]);
       setCoordinatorsError('');
+      setCoordinatorsLoading(false);
       return;
     }
 
@@ -153,15 +160,19 @@ export default function Events() {
     setCoordinatorsError('');
     try {
       const rows = await listEligibleEventCoordinators(chapterId);
+      if (coordinatorRequestRef.current !== requestId) return;
       setEligibleCoordinators(rows);
+      setCoordinatorChapterId(chapterId);
       if (selectedCoordinatorId && !rows.some((row) => row.user_id === selectedCoordinatorId)) {
         setForm((current) => ({ ...current, coordinator_user_id: '', coordinator: '' }));
       }
     } catch {
+      if (coordinatorRequestRef.current !== requestId) return;
       setEligibleCoordinators([]);
+      setCoordinatorChapterId('');
       setCoordinatorsError('Unable to load eligible Event Coordinators for this chapter.');
     } finally {
-      setCoordinatorsLoading(false);
+      if (coordinatorRequestRef.current === requestId) setCoordinatorsLoading(false);
     }
   };
 
@@ -261,6 +272,7 @@ export default function Events() {
     setFormError('');
     setImagePreviewFailed(false);
     setEligibleCoordinators([]);
+    setCoordinatorChapterId('');
     setCoordinatorsError('');
     setShowForm(false);
   };
@@ -288,7 +300,9 @@ export default function Events() {
       return;
     }
 
-    const selectedCoordinator = eligibleCoordinators.find((coordinator) => coordinator.user_id === form.coordinator_user_id);
+    const selectedCoordinator = coordinatorChapterId === form.chapter_id
+      ? eligibleCoordinators.find((coordinator) => coordinator.user_id === form.coordinator_user_id)
+      : null;
     if (!selectedCoordinator || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(form.coordinator_user_id)) {
       setFormError('Select an active Event Coordinator assigned to this chapter.');
       return;
@@ -503,7 +517,7 @@ export default function Events() {
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-chapter">Chapter</label>
-                    <select id="event-chapter" className="border-input" value={form.chapter_id} onChange={(e) => { const selected = assignableChapters.find((chapter) => chapter.id === e.target.value); setFormError(''); setForm({ ...form, chapter_id: e.target.value, chapter: selected?.name || '', coordinator_user_id: '', coordinator: '' }); void loadCoordinators(e.target.value); }} disabled={isSubmitting || roleKey === 'chapter_coordinator'} aria-invalid={formError === 'Select a valid active chapter or Volunteer Community.'} required>
+                    <select id="event-chapter" className="border-input" value={form.chapter_id} onChange={(e) => { const selected = assignableChapters.find((chapter) => chapter.id === e.target.value); setFormError(''); setEligibleCoordinators([]); setCoordinatorChapterId(''); setForm((current) => ({ ...current, chapter_id: e.target.value, chapter: selected?.name || '', coordinator_user_id: '', coordinator: '' })); void loadCoordinators(e.target.value); }} disabled={isSubmitting || roleKey === 'chapter_coordinator'} aria-invalid={formError === 'Select a valid active chapter or Volunteer Community.'} required>
                       <option value="">Select an active location</option>
                       {assignableChapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.name}</option>)}
                     </select>
