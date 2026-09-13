@@ -41,6 +41,20 @@ test('OAuth uses authorization code, offline consent, account selection, and a m
   assert.equal(revokedBody.get('token'), 'mock-refresh');
 });
 
+test('OAuth initiation returns JSON and permits Supabase browser-client preflight headers', () => {
+  assert.match(oauth, /return json\(200, \{ authorizationUrl:/);
+  assert.match(oauth, /request\.method === 'OPTIONS'/);
+  assert.match(oauth, /authorization\.match\(\/\^Bearer\\s\+\(\.\+\)\$\/i\)/);
+  assert.match(oauth, /verifier\.auth\.getUser\(bearer\[1\]\)/);
+  assert.match(oauth, /server\.from\('user_roles'\).*\.eq\('role', 'super_admin'\)/s);
+  assert.match(oauth, /access-control-allow-origin': '\*'/);
+  assert.match(oauth, /access-control-allow-headers': '[^']*authorization[^']*apikey[^']*content-type[^']*x-client-info[^']*x-supabase-api-version/i);
+  assert.match(oauth, /access-control-allow-methods': 'POST, OPTIONS'/);
+  assert.match(service, /functions\.invoke\('google-workspace-auth'.*action: 'authorize'/s);
+  assert.match(page, /window\.location\.assign\(await googleWorkspaceService\.beginAuthorization\(roleKey\)\)/);
+  assert.doesNotMatch(oauth, /Response\.redirect\(buildGoogleAuthorizationUrl/);
+});
+
 test('migration allocates a stable Sheet row before provider synchronization', () => {
   assert.match(migration, /sheet_row_number bigint generated always as identity \(start with 2\) unique/i);
   assert.match(worker, /stableReference.*sheet_row_number/s);

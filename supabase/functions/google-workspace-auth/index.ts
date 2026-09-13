@@ -2,7 +2,13 @@ import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { callbackUrl, encryptToken, requiredEnv, sha256, tokenRequest } from '../_shared/googleOAuth.ts';
 import { buildGoogleAuthorizationUrl, revokeOAuthToken } from '../_shared/googleOAuthCore.mjs';
 
-const HEADERS = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, apikey, content-type' };
+const HEADERS = {
+  'content-type': 'application/json',
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info, x-supabase-api-version',
+  'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-max-age': '86400',
+};
 const SAFE_ERROR = 'Google authorization could not be completed. Please try again.';
 const json = (status: number, body: Record<string, unknown>) => new Response(JSON.stringify(body), { status, headers: HEADERS });
 const randomState = () => Array.from(crypto.getRandomValues(new Uint8Array(32))).map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -11,12 +17,15 @@ const appDestination = (result: string) => {
   return `${origin}/dashboard/integrations?google=${encodeURIComponent(result)}`;
 };
 
-async function authorizedSuperAdmin(request: Request, url: string, anonKey: string) {
+async function authorizedSuperAdmin(request: Request, url: string, anonKey: string, serviceKey: string) {
   const authorization = request.headers.get('authorization') || '';
-  const client = createClient(url, anonKey, { global: { headers: { authorization } }, auth: { persistSession: false } });
-  const user = await client.auth.getUser();
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i);
+  if (!bearer) return null;
+  const verifier = createClient(url, anonKey, { auth: { persistSession: false } });
+  const user = await verifier.auth.getUser(bearer[1]);
   if (user.error || !user.data.user) return null;
-  const role = await client.from('user_roles').select('role').eq('user_id', user.data.user.id).eq('role', 'super_admin').maybeSingle();
+  const server = createClient(url, serviceKey, { auth: { persistSession: false } });
+  const role = await server.from('user_roles').select('role').eq('user_id', user.data.user.id).eq('role', 'super_admin').maybeSingle();
   return role.data ? user.data.user : null;
 }
 
@@ -58,7 +67,7 @@ Deno.serve(async (request) => {
     }
 
     if (request.method !== 'POST') return json(405, { error: 'Method not allowed.' });
-    const user = await authorizedSuperAdmin(request, url, anonKey);
+    const user = await authorizedSuperAdmin(request, url, anonKey, serviceKey);
     if (!user) return json(403, { error: 'Only a Super Admin can manage Google authorization.' });
     const body = await request.json().catch(() => ({}));
     if (body.action === 'authorize') {
