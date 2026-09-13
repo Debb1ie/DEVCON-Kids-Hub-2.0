@@ -5,6 +5,7 @@ import { canPerform } from '../auth/permissions';
 import { CalendarDays, Check, ClipboardCheck, ClipboardList, FolderKanban, FolderOpen, Image as ImageIcon, PencilLine, Plus, Trash2, TrendingUp, Users, Wallet } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 import EventApplicationsPanel from '../components/EventApplicationsPanel';
+import { getEventErrorMessage } from '../services/eventService';
 import './Events.css';
 
 const createEmptyForm = () => ({
@@ -12,7 +13,8 @@ const createEmptyForm = () => ({
   type: 'Cycle Program',
   chapter_id: '',
   chapter: '',
-  coordinator: 'Program Coordinators',
+  coordinator_user_id: '',
+  coordinator: '',
   event_date: '',
   description: '',
   image_url: '',
@@ -101,7 +103,7 @@ const mockEventReports = {
 export default function Events() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { eventsList, chapters, addEvent, updateEvent, deleteEvent, roleKey, user } = useApp();
+  const { eventsList, chapters, listEligibleEventCoordinators, addEvent, updateEvent, deleteEvent, roleKey, user } = useApp();
   const permissionContext = (event) => ({ actorUserId: user?.id, actorChapterId: user?.chapterId, event, targetChapterId: event?.chapter_id });
   const canCreateEvent = canPerform(roleKey, 'event.create', { actorChapterId: user?.chapterId, targetChapterId: user?.chapterId });
   const canEditEvent = (event) => canPerform(roleKey, 'event.update', permissionContext(event));
@@ -119,6 +121,9 @@ export default function Events() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [pendingDiscard, setPendingDiscard] = useState(null);
   const [formError, setFormError] = useState('');
+  const [eligibleCoordinators, setEligibleCoordinators] = useState([]);
+  const [coordinatorsLoading, setCoordinatorsLoading] = useState(false);
+  const [coordinatorsError, setCoordinatorsError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
   const [deleteSuccess, setDeleteSuccess] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -136,6 +141,29 @@ export default function Events() {
     const timer = window.setTimeout(() => setDeleteSuccess(''), 3000);
     return () => window.clearTimeout(timer);
   }, [deleteSuccess]);
+
+  const loadCoordinators = async (chapterId, selectedCoordinatorId = '') => {
+    if (!chapterId) {
+      setEligibleCoordinators([]);
+      setCoordinatorsError('');
+      return;
+    }
+
+    setCoordinatorsLoading(true);
+    setCoordinatorsError('');
+    try {
+      const rows = await listEligibleEventCoordinators(chapterId);
+      setEligibleCoordinators(rows);
+      if (selectedCoordinatorId && !rows.some((row) => row.user_id === selectedCoordinatorId)) {
+        setForm((current) => ({ ...current, coordinator_user_id: '', coordinator: '' }));
+      }
+    } catch {
+      setEligibleCoordinators([]);
+      setCoordinatorsError('Unable to load eligible Event Coordinators for this chapter.');
+    } finally {
+      setCoordinatorsLoading(false);
+    }
+  };
 
   const featuredEvent = useMemo(
     () => eventsList?.find((event) => (event.title || '').toLowerCase().includes('hour of ai')) || eventsList?.[0],
@@ -190,6 +218,7 @@ export default function Events() {
     setFormSuccess('');
     setImagePreviewFailed(false);
     setShowForm(true);
+    void loadCoordinators(newForm.chapter_id);
   };
 
   useEffect(() => {
@@ -207,7 +236,8 @@ export default function Events() {
       type: event.type || 'Cycle Program',
       chapter_id: event.chapter_id || '',
       chapter: event.chapter || 'Manila',
-      coordinator: event.coordinator || 'Program Coordinators',
+      coordinator_user_id: event.coordinator_user_id || '',
+      coordinator: event.coordinator || '',
       event_date: event.event_date || '',
       description: event.description || '',
       image_url: event.image_url || '',
@@ -219,6 +249,7 @@ export default function Events() {
     setFormSuccess('');
     setImagePreviewFailed(false);
     setShowForm(true);
+    void loadCoordinators(eventForm.chapter_id, eventForm.coordinator_user_id);
   };
 
   const hasUnsavedChanges = showForm && JSON.stringify(form) !== JSON.stringify(initialForm);
@@ -229,6 +260,8 @@ export default function Events() {
     setInitialForm(createEmptyForm());
     setFormError('');
     setImagePreviewFailed(false);
+    setEligibleCoordinators([]);
+    setCoordinatorsError('');
     setShowForm(false);
   };
 
@@ -255,8 +288,9 @@ export default function Events() {
       return;
     }
 
-    if (!form.coordinator.trim()) {
-      setFormError('Enter a coordinator.');
+    const selectedCoordinator = eligibleCoordinators.find((coordinator) => coordinator.user_id === form.coordinator_user_id);
+    if (!selectedCoordinator || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(form.coordinator_user_id)) {
+      setFormError('Select an active Event Coordinator assigned to this chapter.');
       return;
     }
 
@@ -273,27 +307,22 @@ export default function Events() {
     setFormError('');
     setFormSuccess('');
     setIsSubmitting(true);
-    const folderPreview = buildFolderPreview(form.title);
     const payload = {
       ...form,
       title: form.title.trim(),
       chapter_id: selectedChapter.id,
       chapter: selectedChapter.name,
-      coordinator: form.coordinator.trim(),
+      coordinator: selectedCoordinator.full_name || selectedCoordinator.email,
       description: form.description.trim(),
-      image_url: form.image_url.trim(),
-      google_folder_name: form.title.trim(),
-      google_folder_path: folderPreview.folderPath,
-      google_assets_path: folderPreview.assetsPath,
-      google_folder_status: 'Ready for Google Drive sync'
+      image_url: form.image_url.trim()
     };
 
     try {
       if (editingId) {
-        await updateEvent(editingId, payload);
+        await updateEvent(editingId, payload, form.coordinator_user_id);
         setFormSuccess('Event updated successfully.');
       } else {
-        await addEvent(payload);
+        await addEvent(payload, form.coordinator_user_id);
         setFormSuccess('Event created successfully.');
       }
 
@@ -303,8 +332,7 @@ export default function Events() {
       setImagePreviewFailed(false);
       setShowForm(false);
     } catch (error) {
-      console.error('Failed to save event', error);
-      setFormError('Unable to save the event. Please try again.');
+      setFormError(getEventErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -445,7 +473,7 @@ export default function Events() {
                 <div>
                   <h3>{editingId ? 'Edit Event / CodeCamp' : 'Create Event / CodeCamp'}</h3>
                   {editingId && <p className="editing-event">Editing: {form.title || 'Untitled event'}</p>}
-                  <p className="text-muted">The folder path is generated automatically from the event name.</p>
+                  <p className="text-muted">Saving an event does not create Google resources. The folder is created after the first valid Post Event Report submission.</p>
                 </div>
               </div>
               <button type="button" className="modal-close-btn" onClick={closeForm} disabled={isSubmitting} aria-label="Close modal">
@@ -475,14 +503,19 @@ export default function Events() {
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-chapter">Chapter</label>
-                    <select id="event-chapter" className="border-input" value={form.chapter_id} onChange={(e) => { const selected = assignableChapters.find((chapter) => chapter.id === e.target.value); setFormError(''); setForm({ ...form, chapter_id: e.target.value, chapter: selected?.name || '' }); }} disabled={isSubmitting || roleKey === 'chapter_coordinator'} aria-invalid={formError === 'Select a valid active chapter or Volunteer Community.'} required>
+                    <select id="event-chapter" className="border-input" value={form.chapter_id} onChange={(e) => { const selected = assignableChapters.find((chapter) => chapter.id === e.target.value); setFormError(''); setForm({ ...form, chapter_id: e.target.value, chapter: selected?.name || '', coordinator_user_id: '', coordinator: '' }); void loadCoordinators(e.target.value); }} disabled={isSubmitting || roleKey === 'chapter_coordinator'} aria-invalid={formError === 'Select a valid active chapter or Volunteer Community.'} required>
                       <option value="">Select an active location</option>
                       {assignableChapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.name}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-coordinator">Coordinator</label>
-                    <input id="event-coordinator" className="border-input" type="text" value={form.coordinator} onChange={(e) => { setFormError(''); setForm({ ...form, coordinator: e.target.value }); }} disabled={isSubmitting} aria-invalid={formError === 'Enter a coordinator.'} required />
+                    <select id="event-coordinator" className="border-input" value={form.coordinator_user_id} onChange={(e) => { const selected = eligibleCoordinators.find((coordinator) => coordinator.user_id === e.target.value); setFormError(''); setForm({ ...form, coordinator_user_id: e.target.value, coordinator: selected?.full_name || selected?.email || '' }); }} disabled={isSubmitting || coordinatorsLoading || !form.chapter_id || roleKey === 'event_coordinator'} aria-invalid={formError === 'Select an active Event Coordinator assigned to this chapter.'} required>
+                      <option value="">{!form.chapter_id ? 'Select a chapter first' : coordinatorsLoading ? 'Loading coordinators…' : 'Select an Event Coordinator'}</option>
+                      {eligibleCoordinators.map((coordinator) => <option key={coordinator.user_id} value={coordinator.user_id}>{coordinator.full_name || 'Unnamed user'} — {coordinator.email}</option>)}
+                    </select>
+                    {coordinatorsError && <small className="field-error" role="alert">{coordinatorsError}</small>}
+                    {!coordinatorsLoading && form.chapter_id && !coordinatorsError && eligibleCoordinators.length === 0 && <small>No active Event Coordinators are assigned to this chapter.</small>}
                   </div>
                 </div>
               </div>
@@ -540,9 +573,9 @@ export default function Events() {
                 <div className="event-section-heading">
                   <div className="event-form-section-header">
                     <span className="event-section-icon"><FolderKanban size={15} /></span>
-                    <h4>Google Drive Preview</h4>
+                    <h4>Planned Google Drive Path</h4>
                   </div>
-                  <span>Generated automatically</span>
+                  <span>Preview only — nothing is created on save</span>
                 </div>
                 <div className="folder-preview">
                   <div>

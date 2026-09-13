@@ -1,7 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { AUTH_CALLBACK_PATH, buildOAuthRedirectUrl, clearAuthSession } from '../auth/authFlow';
+import { createEventRepository } from '../services/eventService';
 
 const AppContext = createContext();
 
@@ -48,12 +49,6 @@ const loadDashboardSettings = () => {
   }
 };
 
-const normalizeFolderName = (value = '') =>
-  value
-    .trim()
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\s+/g, ' ');
-
 const ROLE_LABELS = {
   super_admin: 'Super Admin',
   admin: 'Admin',
@@ -91,19 +86,6 @@ const loadUserProfile = async (sessionUser) => {
     .find(Boolean);
 
   return buildUserProfile(sessionUser, assignment);
-};
-
-const buildEventFolderMetadata = (event) => {
-  const safeTitle = normalizeFolderName(event.title || 'New Event');
-  const folderRoot = 'Google Drive/DEVCON Kids/Events';
-
-  return {
-    ...event,
-    google_folder_name: event.google_folder_name || safeTitle,
-    google_folder_path: event.google_folder_path || `${folderRoot}/${safeTitle}`,
-    google_assets_path: event.google_assets_path || `${folderRoot}/${safeTitle}/Assets`,
-    google_folder_status: event.google_folder_status || 'Queued for Google Drive sync'
-  };
 };
 
 const upsertRecord = (setList, record) => {
@@ -167,9 +149,12 @@ const fetchSocialPosts = async (supabase, setSocialPosts) => {
 
 const fetchEvents = async (supabase, setEventsList) => {
   try {
-    const { data, error } = await supabase.from('events').select('*');
+    const { data, error } = await supabase.from('events').select('*, event_assignments(user_id)');
     if (error) throw error;
-    setEventsList(data || []);
+    setEventsList((data || []).map((event) => ({
+      ...event,
+      coordinator_user_id: event.event_assignments?.[0]?.user_id || null,
+    })));
   } catch (e) {
     setEventsList([]);
     console.warn('Unable to load authorized events.', e);
@@ -177,6 +162,7 @@ const fetchEvents = async (supabase, setEventsList) => {
 };
 
 export const AppProvider = ({ children }) => {
+  const eventRepository = useMemo(() => createEventRepository(supabase), []);
   const [stats, setStats] = useState({
     learnersReached: 12450,
     successfulWorkshops: 142,
@@ -476,26 +462,21 @@ export const AppProvider = ({ children }) => {
     return { persisted: true };
   };
 
-  const addEvent = async (event) => {
-    const payload = buildEventFolderMetadata(event);
-    const { data, error } = await supabase.from('events').insert([payload]).select();
-    if (error) throw error;
-    if (data?.[0]) {
-      upsertRecord(setEventsList, data[0]);
-      logAuditAction('INSERT', 'events', data[0].id, { title: data[0].title });
-    }
-    return { persisted: true };
+  const listEligibleEventCoordinators = useCallback(
+    (chapterId) => eventRepository.listEligibleCoordinators(chapterId),
+    [eventRepository]
+  );
+
+  const addEvent = async (event, coordinatorUserId) => {
+    const data = await eventRepository.saveEvent({ event, coordinatorUserId });
+    if (data) upsertRecord(setEventsList, { ...data, coordinator_user_id: coordinatorUserId });
+    return { persisted: true, event: data };
   };
 
-  const updateEvent = async (id, event) => {
-    const payload = buildEventFolderMetadata(event);
-    const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
-    if (error) throw error;
-    if (data?.[0]) {
-      upsertRecord(setEventsList, data[0]);
-      logAuditAction('UPDATE', 'events', id, { title: data[0].title });
-    }
-    return { persisted: true };
+  const updateEvent = async (id, event, coordinatorUserId) => {
+    const data = await eventRepository.saveEvent({ eventId: id, event, coordinatorUserId });
+    if (data) upsertRecord(setEventsList, { ...data, coordinator_user_id: coordinatorUserId });
+    return { persisted: true, event: data };
   };
 
   const deleteEvent = async (id) => {
@@ -566,6 +547,7 @@ export const AppProvider = ({ children }) => {
       addSocialPost,
       updateSocialPost,
       deleteSocialPost,
+      listEligibleEventCoordinators,
       addEvent,
       updateEvent,
       deleteEvent,
