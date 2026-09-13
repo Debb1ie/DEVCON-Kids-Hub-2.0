@@ -37,7 +37,8 @@ const actors = {
   pending_volunteer: await identity('knowledge-pending', 'pending_volunteer'),
 };
 
-const documentId = `knowledge_${crypto.randomUUID()}`;
+const documentId = `doc_${crypto.randomUUID()}`;
+const sharedVector = [1, ...new Array(1023).fill(0)];
 const document = {
   id: documentId,
   title: 'Local authorization fixture',
@@ -46,14 +47,24 @@ const document = {
   total_pages: 1,
   uploaded_by: actors.super_admin.id,
 };
-assert.ifError((await actors.super_admin.client.from('documents').insert(document)).error);
-assert.ifError((await actors.super_admin.client.from('knowledge_base').insert({
+const sourcePath = `sources/${actors.super_admin.id}/${documentId}/local-fixture.txt`;
+assert.ifError((await actors.super_admin.client.storage.from('knowledge-base-documents').upload(
+  sourcePath,
+  new Blob(['local'], { type: 'text/plain' }),
+)).error);
+const finalized = await actors.super_admin.client.rpc('finalize_knowledge_document', {
   document_id: documentId,
   document_title: document.title,
-  content: 'Non-sensitive local fixture content.',
-  page_number: 1,
-})).error);
-pass('Super Admin creates document metadata and ingestion chunks');
+  document_file_type: 'txt',
+  document_total_chunks: 1,
+  document_total_pages: 1,
+  document_file_size: 5,
+  source_storage_path: sourcePath,
+  chunks: [{ content: 'Non-sensitive local fixture content.', page_number: 1, embedding: sharedVector }],
+});
+assert.ifError(finalized.error);
+assert.equal(finalized.data, 1);
+pass('Super Admin atomically saves source-backed metadata and ingestion chunks');
 
 for (const role of ['admin', 'chapter_coordinator', 'event_coordinator', 'volunteer', 'pending_volunteer']) {
   const actor = actors[role];
@@ -74,41 +85,43 @@ for (const role of ['admin', 'chapter_coordinator', 'event_coordinator', 'volunt
   pass(`${role} direct management reads are empty`);
 }
 
-const zeroVector = new Array(1024).fill(0);
 for (const role of ['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator', 'volunteer']) {
   const search = await actors[role].client.rpc('search_knowledge_base', {
-    query_embedding: zeroVector,
+    query_embedding: sharedVector,
     similarity_threshold: 0.7,
     match_count: 5,
   });
   assert.ifError(search.error);
-  pass(`${role} retains approved chatbot retrieval`);
+  assert.equal(search.data.length, 1);
+  assert.equal(search.data[0].document_id, documentId);
+  pass(`${role} retrieves the same saved shared knowledge`);
 }
 await expectError(
-  () => actors.pending_volunteer.client.rpc('search_knowledge_base', { query_embedding: zeroVector, similarity_threshold: 0.7, match_count: 5 }),
+  () => actors.pending_volunteer.client.rpc('search_knowledge_base', { query_embedding: sharedVector, similarity_threshold: 0.7, match_count: 5 }),
   'Pending Volunteer cannot use chatbot retrieval RPC',
 );
 await expectError(
-  () => anonymous.rpc('search_knowledge_base', { query_embedding: zeroVector, similarity_threshold: 0.7, match_count: 5 }),
+  () => anonymous.rpc('search_knowledge_base', { query_embedding: sharedVector, similarity_threshold: 0.7, match_count: 5 }),
   'Anonymous caller cannot use chatbot retrieval RPC',
 );
 
-const bucketSetup = await root.storage.createBucket('knowledge-base-documents', { public: false });
-assert(!bucketSetup.error || bucketSetup.error.statusCode === '409', bucketSetup.error?.message);
-const sourcePath = `sources/${crypto.randomUUID()}.txt`;
-assert.ifError((await actors.super_admin.client.storage.from('knowledge-base-documents').upload(sourcePath, new Blob(['local']))).error);
-pass('Super Admin uploads a private source file');
+for (const [name, type] of [
+  ['source.pdf', 'application/pdf'],
+  ['source.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+]) {
+  const path = `sources/${actors.super_admin.id}/${documentId}/${name}`;
+  assert.ifError((await actors.super_admin.client.storage.from('knowledge-base-documents').upload(path, new Blob(['local'], { type }))).error);
+  assert.ifError((await actors.super_admin.client.storage.from('knowledge-base-documents').remove([path])).error);
+}
+pass('Super Admin uploads PDF, DOCX, and TXT private source files');
 for (const role of ['admin', 'chapter_coordinator', 'event_coordinator', 'volunteer', 'pending_volunteer']) {
   await expectError(
     () => actors[role].client.storage.from('knowledge-base-documents').download(sourcePath),
     `${role} cannot access private source files`,
   );
 }
-assert.ifError((await actors.super_admin.client.storage.from('knowledge-base-documents').remove([sourcePath])).error);
-pass('Super Admin deletes a private source file');
-
-assert.ifError((await actors.super_admin.client.from('knowledge_base').delete().eq('document_id', documentId)).error);
 assert.ifError((await actors.super_admin.client.from('documents').delete().eq('id', documentId)).error);
+assert.ifError((await actors.super_admin.client.storage.from('knowledge-base-documents').remove([sourcePath])).error);
 pass('Super Admin deletes ingestion chunks and metadata');
 
 console.log(JSON.stringify({ passed: passed.length, failed: 0 }));

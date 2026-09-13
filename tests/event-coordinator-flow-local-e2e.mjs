@@ -38,6 +38,7 @@ const coordinatorA = await identity('Sinag Exe', 'event_coordinator', chapterA.i
 const coordinatorA2 = await identity('Second Manila Event Coordinator', 'event_coordinator', chapterA.id);
 const coordinatorB = await identity('Cebu Event Coordinator', 'event_coordinator', chapterB.id);
 const inactiveUser = await identity('Inactive Coordinator', 'pending_volunteer');
+const volunteer = await identity('Event Image Viewer', 'volunteer', chapterA.id);
 
 const listA = await superAdmin.client.rpc('list_eligible_event_coordinators', { target_chapter_id: chapterA.id });
 assert.ifError(listA.error);
@@ -96,6 +97,61 @@ const afterCreateJobs = await root.from('google_workspace_jobs').select('id', { 
 assert.ifError(afterCreateJobs.error);
 assert.equal(afterCreateJobs.count, beforeJobs.count);
 passed.push('event creation creates no Google automation job');
+
+const imageBytes = new Uint8Array([1, 2, 3, 4]);
+const imageIntent = await superAdmin.client.rpc('prepare_event_image_upload', {
+  target_event_id: created.data.id,
+  original_file_name: 'manila-event.jpg',
+  expected_content_type: 'image/jpeg',
+  expected_size: imageBytes.byteLength,
+});
+assert.ifError(imageIntent.error);
+const imageUpload = imageIntent.data[0];
+assert.ifError((await superAdmin.client.storage.from(imageUpload.storage_bucket).upload(
+  imageUpload.storage_path,
+  new Blob([imageBytes], { type: 'image/jpeg' }),
+)).error);
+const finalizedImage = await superAdmin.client.rpc('finalize_event_image_upload', {
+  target_upload_intent_id: imageUpload.upload_intent_id,
+});
+assert.ifError(finalizedImage.error);
+assert.equal(finalizedImage.data[0].event_id, created.data.id);
+assert.ifError((await volunteer.client.storage.from('event-images').createSignedUrl(imageUpload.storage_path, 60)).error);
+await expectFailure(
+  () => inactiveUser.client.storage.from('event-images').createSignedUrl(imageUpload.storage_path, 60),
+  'Pending Volunteer cannot view event images',
+);
+await expectFailure(
+  () => volunteer.client.rpc('prepare_event_image_upload', {
+    target_event_id: created.data.id,
+    original_file_name: 'forbidden.png',
+    expected_content_type: 'image/png',
+    expected_size: 4,
+  }),
+  'Volunteer cannot upload or replace event images',
+);
+passed.push('authorized creator uploads a private event image and Volunteer can view it');
+
+const replacementIntent = await superAdmin.client.rpc('prepare_event_image_upload', {
+  target_event_id: created.data.id,
+  original_file_name: 'manila-event-replacement.webp',
+  expected_content_type: 'image/webp',
+  expected_size: imageBytes.byteLength,
+});
+assert.ifError(replacementIntent.error);
+const replacementUpload = replacementIntent.data[0];
+assert.ifError((await superAdmin.client.storage.from('event-images').upload(
+  replacementUpload.storage_path,
+  new Blob([imageBytes], { type: 'image/webp' }),
+)).error);
+const replacedImage = await superAdmin.client.rpc('finalize_event_image_upload', {
+  target_upload_intent_id: replacementUpload.upload_intent_id,
+});
+assert.ifError(replacedImage.error);
+assert.equal(replacedImage.data[0].previous_storage_path, imageUpload.storage_path);
+assert.ifError((await superAdmin.client.storage.from('event-images').remove([imageUpload.storage_path])).error);
+assert.ifError((await volunteer.client.storage.from('event-images').createSignedUrl(replacementUpload.storage_path, 60)).error);
+passed.push('authorized editor replaces an image without exposing the old object');
 
 const reassigned = await superAdmin.client.rpc('save_event_with_coordinator', {
   ...baseArgs,

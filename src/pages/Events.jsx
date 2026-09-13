@@ -5,7 +5,7 @@ import { canPerform } from '../auth/permissions';
 import { CalendarDays, Check, ClipboardCheck, ClipboardList, FolderKanban, FolderOpen, Image as ImageIcon, PencilLine, Plus, Trash2, TrendingUp, Users, Wallet } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 import EventApplicationsPanel from '../components/EventApplicationsPanel';
-import { getEventErrorMessage } from '../services/eventService';
+import { getEventErrorMessage, validateEventImage } from '../services/eventService';
 import './Events.css';
 
 const createEmptyForm = () => ({
@@ -103,7 +103,7 @@ const mockEventReports = {
 export default function Events() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { eventsList, chapters, listEligibleEventCoordinators, addEvent, updateEvent, deleteEvent, roleKey, user } = useApp();
+  const { eventsList, chapters, listEligibleEventCoordinators, addEvent, updateEvent, uploadEventImage, deleteEvent, roleKey, user } = useApp();
   const permissionContext = (event) => ({ actorUserId: user?.id, actorChapterId: user?.chapterId, event, targetChapterId: event?.chapter_id });
   const canCreateEvent = canPerform(roleKey, 'event.create', { actorChapterId: user?.chapterId, targetChapterId: user?.chapterId });
   const canEditEvent = (event) => canPerform(roleKey, 'event.update', permissionContext(event));
@@ -130,6 +130,8 @@ export default function Events() {
   const [deleteSuccess, setDeleteSuccess] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [imagePreviewFailed, setImagePreviewFailed] = useState(false);
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [selectedImagePreview, setSelectedImagePreview] = useState('');
   const [selectedReportEventId, setSelectedReportEventId] = useState(null);
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportForm, setReportForm] = useState(createEmptyReport);
@@ -228,6 +230,9 @@ export default function Events() {
     setFormError('');
     setFormSuccess('');
     setImagePreviewFailed(false);
+    if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+    setSelectedImageFile(null);
+    setSelectedImagePreview('');
     setShowForm(true);
     void loadCoordinators(newForm.chapter_id);
   };
@@ -251,7 +256,7 @@ export default function Events() {
       coordinator: event.coordinator || '',
       event_date: event.event_date || '',
       description: event.description || '',
-      image_url: event.image_url || '',
+      image_url: event.image_fallback_url ?? event.image_url ?? '',
       status: event.status || 'Scheduled'
     };
     setForm(eventForm);
@@ -259,6 +264,9 @@ export default function Events() {
     setFormError('');
     setFormSuccess('');
     setImagePreviewFailed(false);
+    if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+    setSelectedImageFile(null);
+    setSelectedImagePreview('');
     setShowForm(true);
     void loadCoordinators(eventForm.chapter_id, eventForm.coordinator_user_id);
   };
@@ -271,10 +279,29 @@ export default function Events() {
     setInitialForm(createEmptyForm());
     setFormError('');
     setImagePreviewFailed(false);
+    if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+    setSelectedImageFile(null);
+    setSelectedImagePreview('');
     setEligibleCoordinators([]);
     setCoordinatorChapterId('');
     setCoordinatorsError('');
     setShowForm(false);
+  };
+
+  const handleEventImageSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      validateEventImage(file);
+      if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+      setSelectedImageFile(file);
+      setSelectedImagePreview(URL.createObjectURL(file));
+      setImagePreviewFailed(false);
+      setFormError('');
+    } catch (error) {
+      event.target.value = '';
+      setFormError(error.message);
+    }
   };
 
   const closeForm = () => {
@@ -313,7 +340,7 @@ export default function Events() {
       return;
     }
 
-    if (form.image_url.trim() && !isValidHttpUrl(form.image_url.trim())) {
+    if (!selectedImageFile && form.image_url.trim() && !isValidHttpUrl(form.image_url.trim())) {
       setFormError('Image URL must start with http:// or https://.');
       return;
     }
@@ -332,18 +359,33 @@ export default function Events() {
     };
 
     try {
+      let saved;
       if (editingId) {
-        await updateEvent(editingId, payload, form.coordinator_user_id);
+        saved = await updateEvent(editingId, payload, form.coordinator_user_id);
         setFormSuccess('Event updated successfully.');
       } else {
-        await addEvent(payload, form.coordinator_user_id);
+        saved = await addEvent(payload, form.coordinator_user_id);
         setFormSuccess('Event created successfully.');
+      }
+
+      if (selectedImageFile) {
+        try {
+          await uploadEventImage(saved.event.id, selectedImageFile);
+        } catch (imageError) {
+          setEditingId(saved.event.id);
+          setFormError(imageError.message);
+          setFormSuccess('The event and coordinator were saved. Retry the image upload from this edit form.');
+          return;
+        }
       }
 
       setEditingId(null);
       setForm(createEmptyForm());
       setInitialForm(createEmptyForm());
       setImagePreviewFailed(false);
+      if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+      setSelectedImageFile(null);
+      setSelectedImagePreview('');
       setShowForm(false);
     } catch (error) {
       setFormError(getEventErrorMessage(error));
@@ -561,13 +603,18 @@ export default function Events() {
                 </div>
                 <div className="event-form-fields">
                   <div className="form-group form-group-wide">
-                    <label htmlFor="event-image-url">Image URL <span className="optional-label">Optional</span></label>
+                    <label htmlFor="event-image-file">Event image <span className="optional-label">Optional</span></label>
+                    <input id="event-image-file" className="border-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleEventImageSelect} disabled={isSubmitting} />
+                    <small>PNG, JPG, JPEG, or WebP · maximum 10 MB · stored privately.</small>
+                  </div>
+                  <div className="form-group form-group-wide">
+                    <label htmlFor="event-image-url">Image URL fallback <span className="optional-label">Optional</span></label>
                     <input id="event-image-url" className="border-input" type="url" placeholder="https://example.com/event-image.jpg" value={form.image_url} onChange={(e) => { setFormError(''); setImagePreviewFailed(false); setForm({ ...form, image_url: e.target.value }); }} disabled={isSubmitting} aria-describedby="event-image-help" aria-invalid={formError === 'Image URL must start with http:// or https://.'} />
-                    <small id="event-image-help">Use a direct http:// or https:// image link.</small>
+                    <small id="event-image-help">Used only when no uploaded image is selected.</small>
                   </div>
                   <div className="event-image-preview" aria-live="polite">
-                    {form.image_url.trim() && isValidHttpUrl(form.image_url.trim()) && !imagePreviewFailed ? (
-                      <img src={form.image_url.trim()} alt="Event image preview" onError={() => setImagePreviewFailed(true)} />
+                    {(selectedImagePreview || (form.image_url.trim() && isValidHttpUrl(form.image_url.trim()))) && !imagePreviewFailed ? (
+                      <img src={selectedImagePreview || form.image_url.trim()} alt="Event image preview" onError={() => setImagePreviewFailed(true)} />
                     ) : (
                       <div className="event-image-preview-placeholder">
                         <ImageIcon size={24} />

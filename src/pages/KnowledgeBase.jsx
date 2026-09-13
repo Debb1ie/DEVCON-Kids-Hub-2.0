@@ -3,7 +3,7 @@ import { Upload, Trash2, FileText, Loader } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import { canPerform } from '../auth/permissions';
 import { processDocument, validateDocumentFile } from '../services/documentService';
-import { createDocumentMetadata, deleteDocument, deleteDocumentMetadata, storeDocumentChunks, listDocuments } from '../services/ragService';
+import { deleteKnowledgeDocument, listDocuments, uploadKnowledgeDocument } from '../services/ragService';
 import './KnowledgeBase.css';
 
 const formatFileSize = (bytes) => {
@@ -92,30 +92,9 @@ export default function KnowledgeBase() {
       // Process document (parse + chunk)
       const processedDoc = await processDocument(file);
 
-      // Generate document ID
-      const docId = `doc_${Date.now()}`;
-
-      await createDocumentMetadata({
-        id: docId,
-        title: processedDoc.fileName,
-        file_type: processedDoc.fileType,
-        total_chunks: processedDoc.totalChunks,
-        total_pages: processedDoc.totalPages,
-        created_at: new Date().toISOString()
-      }, roleKey);
-
-      // Store chunks with embeddings in knowledge_base table
-      // This is now graceful — returns 0 on failure instead of throwing
-      const chunksStored = await storeDocumentChunks(docId, processedDoc.fileName, processedDoc.chunks, roleKey);
-
-      if (chunksStored > 0) {
-        setSelectedFile(null);
-        setSuccess(`✓ ${processedDoc.fileName} uploaded successfully (${chunksStored} chunks indexed)`);
-      } else {
-        // Document was parsed but chunks couldn't be stored (DB issue) — Precious: still clear file
-        setSelectedFile(null);
-        setSuccess(`✓ ${processedDoc.fileName} parsed (${processedDoc.totalChunks} chunks) but storage may have failed — check console for details`);
-      }
+      const { chunksStored } = await uploadKnowledgeDocument(file, processedDoc, roleKey);
+      setSelectedFile(null);
+      setSuccess(`✓ ${processedDoc.fileName} uploaded securely (${chunksStored} chunks indexed)`);
       await loadDocuments();
     } catch (err) {
       console.error('Upload error:', err);
@@ -130,8 +109,7 @@ export default function KnowledgeBase() {
     if (!confirm('Delete this document and all its indexed chunks?')) return;
 
     try {
-      await deleteDocument(docId, roleKey);
-      await deleteDocumentMetadata(docId, roleKey);
+      await deleteKnowledgeDocument(docId, roleKey);
 
       setSuccess('Document deleted successfully');
       await loadDocuments();

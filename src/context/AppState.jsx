@@ -147,14 +147,15 @@ const fetchSocialPosts = async (supabase, setSocialPosts) => {
   }
 };
 
-const fetchEvents = async (supabase, setEventsList) => {
+const fetchEvents = async (supabase, eventRepository, setEventsList) => {
   try {
     const { data, error } = await supabase.from('events').select('*, event_assignments(user_id)');
     if (error) throw error;
-    setEventsList((data || []).map((event) => ({
+    const events = (data || []).map((event) => ({
       ...event,
       coordinator_user_id: event.event_assignments?.[0]?.user_id || null,
-    })));
+    }));
+    setEventsList(await Promise.all(events.map((event) => eventRepository.resolveEventImage(event))));
   } catch (e) {
     setEventsList([]);
     console.warn('Unable to load authorized events.', e);
@@ -224,8 +225,8 @@ export const AppProvider = ({ children }) => {
     fetchVolunteers(supabase, setVolunteersList);
     fetchInventory(supabase, setInventoryList);
     fetchSocialPosts(supabase, setSocialPosts);
-    fetchEvents(supabase, setEventsList);
-  }, [isAuthenticated, user?.roleKey]);
+    fetchEvents(supabase, eventRepository, setEventsList);
+  }, [eventRepository, isAuthenticated, user?.roleKey]);
 
   // Sync Supabase auth session on mount and listen for changes
   useEffect(() => {
@@ -469,14 +470,24 @@ export const AppProvider = ({ children }) => {
 
   const addEvent = async (event, coordinatorUserId) => {
     const data = await eventRepository.saveEvent({ event, coordinatorUserId });
-    if (data) upsertRecord(setEventsList, { ...data, coordinator_user_id: coordinatorUserId });
-    return { persisted: true, event: data };
+    const resolved = data ? await eventRepository.resolveEventImage({ ...data, coordinator_user_id: coordinatorUserId }) : data;
+    if (resolved) upsertRecord(setEventsList, resolved);
+    return { persisted: true, event: resolved };
   };
 
   const updateEvent = async (id, event, coordinatorUserId) => {
     const data = await eventRepository.saveEvent({ eventId: id, event, coordinatorUserId });
-    if (data) upsertRecord(setEventsList, { ...data, coordinator_user_id: coordinatorUserId });
-    return { persisted: true, event: data };
+    const resolved = data ? await eventRepository.resolveEventImage({ ...data, coordinator_user_id: coordinatorUserId }) : data;
+    if (resolved) upsertRecord(setEventsList, resolved);
+    return { persisted: true, event: resolved };
+  };
+
+  const uploadEventImage = async (eventId, file) => {
+    const uploaded = await eventRepository.uploadEventImage(eventId, file);
+    setEventsList((current) => current.map((event) => event.id === eventId
+      ? { ...event, image_storage_path: uploaded.image_storage_path, image_url: uploaded.image_url }
+      : event));
+    return uploaded;
   };
 
   const deleteEvent = async (id) => {
@@ -550,6 +561,7 @@ export const AppProvider = ({ children }) => {
       listEligibleEventCoordinators,
       addEvent,
       updateEvent,
+      uploadEventImage,
       deleteEvent,
       addLearner
     }}>

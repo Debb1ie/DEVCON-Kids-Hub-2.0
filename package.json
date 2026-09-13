@@ -16,6 +16,7 @@
     "test:event-applications:local": "node tests/event-applications-local-e2e.mjs",
     "test:event-coordinator-flow": "node --test tests/event-coordinator-flow.test.mjs",
     "test:event-coordinator-flow:local": "node tests/event-coordinator-flow-local-e2e.mjs",
+    "test:release-blockers": "node --test tests/release-blockers.test.mjs tests/event-coordinator-flow.test.mjs tests/knowledge-authorization.test.mjs",
     "test:locations": "node --test tests/location-rules.test.mjs",
     "test:locations:ui": "node --test tests/location-ui-static.test.mjs",
     "test:permissions": "node --test tests/permissions.test.mjs tests/rbac-ui-static.test.mjs tests/rbac-migrations-static.test.mjs",

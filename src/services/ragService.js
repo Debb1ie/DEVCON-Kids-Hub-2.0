@@ -26,6 +26,11 @@
 import { supabase } from '../lib/supabase';
 import { assertKnowledgeManager, KnowledgeAuthorizationError } from './knowledgeAuthorization';
 
+const KNOWLEDGE_BUCKET = 'knowledge-base-documents';
+const safeFileName = (name) => (name || 'document').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 120) || 'document';
+const documentType = (file) => file.name.toLowerCase().endsWith('.docx') ? 'docx'
+  : file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'txt';
+
 // --- Mistral Embedding Config (fallback only, remove after A06 verified) ---
 // WHAT: Mistral's embedding API converts text into 1024-dimensional vectors.
 // WHY fallback: The secure path goes through the Edge Function (server-side key).
@@ -379,6 +384,50 @@ export async function listDocuments(role) {
   }
 }
 
+export async function uploadKnowledgeDocument(file, processedDocument, role) {
+  assertKnowledgeManager(role);
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new KnowledgeAuthorizationError();
+
+  const documentId = `doc_${crypto.randomUUID()}`;
+  const storagePath = `sources/${user.id}/${documentId}/${safeFileName(file.name)}`;
+  const embeddedChunks = [];
+  for (const chunk of processedDocument.chunks) {
+    const embedding = await generateEmbedding(chunk.content);
+    embeddedChunks.push({
+      content: chunk.content,
+      page_number: chunk.pageNumber,
+      embedding: embedding.length ? embedding : null,
+    });
+  }
+
+  const upload = await supabase.storage.from(KNOWLEDGE_BUCKET).upload(storagePath, file, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (upload.error) throw new Error('Unable to upload the private source document.');
+
+  try {
+    const { data, error } = await supabase.rpc('finalize_knowledge_document', {
+      document_id: documentId,
+      document_title: processedDocument.fileName,
+      document_file_type: documentType(file),
+      document_total_chunks: processedDocument.totalChunks,
+      document_total_pages: processedDocument.totalPages,
+      document_file_size: file.size,
+      source_storage_path: storagePath,
+      chunks: embeddedChunks,
+    });
+    if (error) throw error;
+    return { documentId, chunksStored: data, storagePath };
+  } catch (error) {
+    await supabase.storage.from(KNOWLEDGE_BUCKET).remove([storagePath]);
+    throw new Error(error?.message?.includes('Knowledge Base')
+      ? error.message
+      : 'Unable to save document metadata and index its contents.', { cause: error });
+  }
+}
+
 export async function createDocumentMetadata(document, role) {
   assertKnowledgeManager(role);
   const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -395,4 +444,21 @@ export async function deleteDocumentMetadata(documentId, role) {
   assertKnowledgeManager(role);
   const { error } = await supabase.from('documents').delete().eq('id', documentId);
   if (error) throw new Error('Unable to delete document metadata.');
+}
+
+export async function deleteKnowledgeDocument(documentId, role) {
+  assertKnowledgeManager(role);
+  const { data: document, error: readError } = await supabase
+    .from('documents')
+    .select('id, storage_bucket, storage_path')
+    .eq('id', documentId)
+    .single();
+  if (readError) throw new Error('Unable to load document metadata.');
+  if (document.storage_bucket && document.storage_path) {
+    const { error: storageError } = await supabase.storage
+      .from(document.storage_bucket)
+      .remove([document.storage_path]);
+    if (storageError) throw new Error('Unable to delete the private source document.');
+  }
+  await deleteDocumentMetadata(documentId, role);
 }

@@ -50,7 +50,7 @@ test('Knowledge Base route, sidebar, page, and services share the Super Admin pe
   assert.match(app, /ProtectedRoute route="\/dashboard\/knowledge-base"/);
   assert.match(sidebar, /AI Knowledge Base.*\/dashboard\/knowledge-base/);
   assert.match(knowledgePage, /listDocuments\(roleKey\)/);
-  assert.match(knowledgePage, /storeDocumentChunks\([^;]+roleKey\)/s);
+  assert.match(knowledgePage, /uploadKnowledgeDocument\([^;]+roleKey\)/s);
   assert.match(ragService, /assertKnowledgeManager\(role\)/);
   assert.match(faqPage, /canManageKnowledge &&/);
 });
