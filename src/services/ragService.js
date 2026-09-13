@@ -394,10 +394,13 @@ export async function uploadKnowledgeDocument(file, processedDocument, role) {
   const embeddedChunks = [];
   for (const chunk of processedDocument.chunks) {
     const embedding = await generateEmbedding(chunk.content);
+    if (embedding.length !== 1024) {
+      throw new Error('Unable to index this document right now. No document data was saved.');
+    }
     embeddedChunks.push({
       content: chunk.content,
       page_number: chunk.pageNumber,
-      embedding: embedding.length ? embedding : null,
+      embedding,
     });
   }
 

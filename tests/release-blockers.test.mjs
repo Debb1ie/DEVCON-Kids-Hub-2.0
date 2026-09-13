@@ -8,6 +8,7 @@ const knowledgePage = readFileSync('src/pages/KnowledgeBase.jsx', 'utf8');
 const ragService = readFileSync('src/services/ragService.js', 'utf8');
 const eventsPage = readFileSync('src/pages/Events.jsx', 'utf8');
 const eventService = readFileSync('src/services/eventService.js', 'utf8');
+const embedFunction = readFileSync('supabase/functions/ai-embed/index.ts', 'utf8');
 
 test('Knowledge Base upload reconciles metadata drift and finalizes source plus chunks atomically', () => {
   assert.match(migration, /alter table public\.documents add column uploaded_by uuid/);
@@ -17,12 +18,21 @@ test('Knowledge Base upload reconciles metadata drift and finalizes source plus 
   assert.match(ragService, /rpc\('finalize_knowledge_document'/);
   assert.match(knowledgePage, /uploadKnowledgeDocument\(file, processedDoc, roleKey\)/);
   assert.doesNotMatch(knowledgePage, /createDocumentMetadata/);
+  assert.match(ragService, /embedding\.length !== 1024/);
 });
 
 test('Knowledge Base source files remain private and Super-Admin-only', () => {
   assert.match(migration, /'knowledge-base-documents', 'knowledge-base-documents', false/);
   assert.match(migration, /if not public\.has_role\(array\['super_admin'\]\)/);
   assert.doesNotMatch(migration, /for (?:insert|update|delete) to anon/i);
+});
+
+test('server-side embedding permits approved roles and denies pending or anonymous callers', () => {
+  assert.match(embedFunction, /client\.auth\.getUser\(\)/);
+  assert.match(embedFunction, /allowed_roles: \['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator', 'volunteer'\]/);
+  assert.doesNotMatch(embedFunction, /pending_volunteer/);
+  assert.match(embedFunction, /Deno\.env\.get\('MISTRAL_API_KEY'\)/);
+  assert.doesNotMatch(embedFunction, /VITE_MISTRAL_API_KEY/);
 });
 
 test('event image validation accepts supported images and rejects unsafe files', () => {
