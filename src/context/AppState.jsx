@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { AUTH_CALLBACK_PATH, buildOAuthRedirectUrl, clearAuthSession } from '../auth/authFlow';
+import { authSessionLifecycle } from '../auth/sessionLifecycle';
 import { createEventRepository } from '../services/eventService';
 
 const AppContext = createContext();
@@ -193,8 +194,11 @@ export const AppProvider = ({ children }) => {
   const [dashboardSettings, setDashboardSettings] = useState(loadDashboardSettings);
 
   const acceptSession = useCallback(async (session) => {
-    if (!session?.user) return false;
+    if (!session?.user || !session?.access_token) return false;
+    authSessionLifecycle.accept(session);
     const profile = await loadUserProfile(session.user);
+    const activeSession = await authSessionLifecycle.requireSession(supabase.auth);
+    if (activeSession?.user?.id !== session.user.id) return false;
     setUser(profile);
     setIsAuthenticated(true);
     setAuthLoading(false);
@@ -240,15 +244,13 @@ export const AppProvider = ({ children }) => {
 
     const syncSession = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        const session = data?.session;
-        if (error) console.warn('[Auth] getSession() error:', error);
+        const session = await authSessionLifecycle.restore(supabase.auth);
         if (session?.user && mounted) {
           await acceptSession(session);
           return;
         }
-      } catch (e) {
-        console.warn('[Auth] getSession() failed immediately:', e);
+      } catch {
+        console.warn('[Auth] Session restoration failed.');
       }
 
       // The public callback route owns the PKCE exchange. Keep the loading gate
@@ -265,8 +267,10 @@ export const AppProvider = ({ children }) => {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (session?.user) {
+          authSessionLifecycle.accept(session);
           void acceptSession(session);
         } else {
+          authSessionLifecycle.clear();
           setIsAuthenticated(false);
           setUser(null);
           finishLoading();
@@ -312,6 +316,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    authSessionLifecycle.clear();
     try {
       await clearAuthSession(supabase.auth);
     } catch (error) {
@@ -529,6 +534,7 @@ export const AppProvider = ({ children }) => {
       eventsList,
       growthData,
       authLoading,
+      authSessionReady: !authLoading,
       isAuthenticated,
       user,
       themeMode,

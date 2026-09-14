@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { authSessionLifecycle } from '../auth/sessionLifecycle';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const edgeChatUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/ai-chat` : null;
@@ -22,7 +23,9 @@ export async function callChatWithContext(userMessage, context = [], history = [
   void context;
   void history;
   if (!edgeChatUrl) throw new ChatServiceError('The AI service is not configured.', 'AI_UNAVAILABLE');
-  const { data: { session } } = await supabase.auth.getSession();
+  // Use the same restored/callback session accepted by AppState. A second
+  // independent getSession() here can race PKCE persistence after navigation.
+  const session = await authSessionLifecycle.requireSession(supabase.auth);
   if (!session?.access_token) throw new ChatServiceError('Please sign in again to use the AI assistant.', 'AUTH_REQUIRED');
 
   let response;

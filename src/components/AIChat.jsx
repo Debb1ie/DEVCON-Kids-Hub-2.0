@@ -16,7 +16,7 @@ const welcomeMessage = () => ({
 });
 
 export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
-  const { user } = useApp();
+  const { user, authSessionReady } = useApp();
   const [messages, setMessages] = useState(() => [welcomeMessage()]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -109,6 +109,10 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
   const handleSendMessage = async (text = input) => {
     if (!text.trim() || loading) return;
+    if (!authSessionReady) {
+      setHistoryError('Your secure session is still loading. Please retry in a moment.');
+      return;
+    }
 
     // Input length guard — prevent massive prompts that exceed TPM budget
     const trimmedText = text.trim().slice(0, 500);
