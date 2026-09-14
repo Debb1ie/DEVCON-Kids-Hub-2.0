@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Send, MessageSquare, Minimize2, Loader, Trash2, Copy, ThumbsUp, ThumbsDown, Check } from 'lucide-react';
 import { callChatWithContext } from '../services/chatService';
-import { retrieveContext } from '../services/ragService';
 import { logQuestion } from '../services/faqService';
 import { supabase } from '../lib/supabase';
+import { useApp } from '../context/AppState';
+import { clearLegacySharedChatHistory, clearPrivateChatHistory, loadPrivateChatHistory } from '../services/chatHistoryService';
 import './AIChat.css';
 
+const welcomeMessage = () => ({
+  id: crypto.randomUUID(),
+  role: 'assistant',
+  content: 'Hi! I\'m the DEVCON Kids AI Assistant. I can help you with:\n• DEVCON Kids mission and core pillars\n• Volunteer onboarding and guidelines\n• Event planning and coordination\n• Knowledge Base uploads and document questions\n• Dashboard access and role-based guidance\n\nTry one of the quick questions below, or ask something in your own words.',
+  timestamp: new Date(),
+  meta: { label: 'Welcome' },
+});
+
 export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      role: 'assistant',
-      content: 'Hi! I\'m the DEVCON Kids AI Assistant. I can help you with:\n• DEVCON Kids mission and core pillars\n• Volunteer onboarding and guidelines\n• Event planning and coordination\n• Knowledge Base uploads and document questions\n• Dashboard access and role-based guidance\n\nTry one of the quick questions below, or ask something in your own words.',
-      timestamp: new Date(),
-      meta: {
-        label: 'Welcome'
-      }
-    }
-  ]);
+  const { user } = useApp();
+  const [messages, setMessages] = useState(() => [welcomeMessage()]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
   const [expanded, setExpanded] = useState(isFullscreen);
   const [copiedId, setCopiedId] = useState(null);
   const [feedbackGiven, setFeedbackGiven] = useState({});
@@ -30,47 +32,32 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   // AbortController for cancelling in-flight streaming requests
   const abortControllerRef = useRef(null);
 
-  // Load chat history from localStorage on mount
+  // Remove the legacy cross-user cache and load only UUID-owned RLS data.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('chatHistory');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.messages?.length > 1) {
-          setMessages(parsed.messages.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
-          sessionIdRef.current = parsed.sessionId || null;
-          messageIdRef.current = Math.max(...parsed.messages.map(m => m.id)) + 1;
-        }
-      }
-    } catch { /* ignore corrupt localStorage */ }
-  }, []);
-
-  // Save chat history to localStorage on change
-  useEffect(() => {
-    if (messages.length > 1) {
-      try {
-        localStorage.setItem('chatHistory', JSON.stringify({
-          sessionId: sessionIdRef.current,
-          messages: messages.filter(m => !m.isStreaming)
-        }));
-      } catch { /* localStorage full or unavailable */ }
-    }
-  }, [messages]);
+    let active = true;
+    clearLegacySharedChatHistory();
+    setHistoryLoading(true);
+    setHistoryError('');
+    setMessages([welcomeMessage()]);
+    sessionIdRef.current = null;
+    loadPrivateChatHistory(user?.id).then((history) => {
+      if (!active) return;
+      sessionIdRef.current = history.sessionId;
+      setMessages(history.messages.length ? [welcomeMessage(), ...history.messages] : [welcomeMessage()]);
+    }).catch(() => active && setHistoryError('Unable to load your private chat history.')).finally(() => active && setHistoryLoading(false));
+    return () => { active = false; };
+  }, [user?.id]);
 
   /**
    * Clear conversation — reset to welcome message, start fresh session
    */
-  const handleClearChat = () => {
-    setMessages([{
-      id: messageIdRef.current++,
-      role: 'assistant',
-      content: 'Hi! I\'m the DEVCON Kids AI Assistant. I can help you with:\n• DEVCON Kids mission and core pillars\n• Volunteer onboarding and guidelines\n• Event planning and coordination\n• Knowledge Base uploads and document questions\n• Dashboard access and role-based guidance\n\nTry one of the quick questions below, or ask something in your own words.',
-      timestamp: new Date(),
-      meta: { label: 'Welcome' }
-    }]);
+  const handleClearChat = async () => {
+    const sessionId = sessionIdRef.current;
     sessionIdRef.current = null;
+    setMessages([welcomeMessage()]);
     setFeedbackGiven({});
-    localStorage.removeItem('chatHistory');
+    try { await clearPrivateChatHistory(sessionId, user?.id); }
+    catch { setHistoryError('Unable to clear your private chat history.'); }
   };
 
   /**
@@ -164,16 +151,12 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
       .slice(-10);
 
     try {
-      const context = await retrieveContext(trimmedText, history);
-      const confidence = context._confidence || { level: 'high', suggestion: null };
-
-      // Check if user cancelled during retrieval
-      if (controller.signal.aborted) return;
-
       let streamedText = '';
       let firstTokenSeen = false;
 
-      const result = await callChatWithContext(trimmedText, context, history, {
+      const result = await callChatWithContext(trimmedText, [], history, {
+        sessionId: sessionIdRef.current,
+        signal: controller.signal,
         onFirstToken: () => {
           firstTokenSeen = true;
           setMessages((prev) => prev.map((msg) => (
@@ -196,6 +179,8 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
       // Don't overwrite if user cancelled mid-stream
       if (controller.signal.aborted) return;
+      sessionIdRef.current = result.sessionId;
+      const confidence = { level: result.sources?.length ? 'high' : 'none', suggestion: null };
 
       const responseTimeMs = Math.max(1, Math.round(performance.now() - requestStartedAt));
       const tokenCount = result.metrics?.outputTokens || Math.max(1, Math.ceil(result.response.length / 4));
@@ -224,17 +209,17 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
       logQuestion(trimmedText, confidence.level).catch(() => {});
     } catch (error) {
       if (controller.signal.aborted) return; // User cancelled — not an error
-      console.error('Chat error:', error);
       // Fix #2: Use captured assistantMessageId, not the ref (prevents race condition)
       setMessages((prev) => prev.map((msg) => (
         msg.id === assistantMessageId
           ? {
               ...msg,
-              content: 'Sorry, I ran into a problem generating that answer. Please try again in a moment.',
+              content: error?.message || 'Unable to connect to the AI service. Please retry.',
               isStreaming: false,
               isError: true,
               meta: {
-                label: 'Unavailable'
+                label: 'Unavailable',
+                retryText: trimmedText,
               }
             }
           : msg
@@ -364,6 +349,11 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           >
             {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
           </button>
+          {msg.isError && msg.meta?.retryText && (
+            <button type="button" className="action-btn" onClick={() => handleSendMessage(msg.meta.retryText)} disabled={loading} title="Retry question">
+              Retry
+            </button>
+          )}
           <button
             className={`action-btn ${feedbackGiven[msg.id] === 'up' ? 'active' : ''}`}
             onClick={() => handleFeedback(msg.id, true)}
@@ -462,6 +452,8 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
   const renderConversation = () => (
     <div className="ai-chat-messages">
+      {historyLoading && <div className="chat-history-state" role="status"><Loader size={16} className="spinner" /> Loading your conversation…</div>}
+      {historyError && <div className="chat-history-state error" role="alert">{historyError}</div>}
       {messages.map(renderMessage)}
       <div ref={messagesEndRef} />
     </div>

@@ -321,6 +321,7 @@ export const AppProvider = ({ children }) => {
     try {
       sessionStorage.removeItem('oauth_in_progress');
       sessionStorage.removeItem('auth_session');
+      localStorage.removeItem('chatHistory');
     } catch {
       // ignore storage cleanup errors
     }
