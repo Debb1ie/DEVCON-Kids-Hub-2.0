@@ -47,15 +47,56 @@ test('initial restoration is shared and does not emit a false signed-out result'
   assert.equal(reads, 1);
 });
 
-test('absent sessions are denied and logout clears the accepted session', async () => {
+test('an initial null is refreshed once at chatbot invocation', async () => {
   const lifecycle = createSessionLifecycle();
-  const auth = { getSession: async () => ({ data: { session: null }, error: null }) };
+  const restoredSession = sessionFor('pkce-user');
+  let reads = 0;
+  const auth = {
+    getSession: async () => {
+      reads += 1;
+      return { data: { session: reads === 1 ? null : restoredSession }, error: null };
+    },
+  };
+
+  assert.equal(await lifecycle.restore(auth), null);
+  assert.equal(await lifecycle.requireSession(auth), restoredSession);
+  assert.equal(reads, 2);
+});
+
+test('a delayed initial null cannot overwrite a newer SIGNED_IN event', async () => {
+  const lifecycle = createSessionLifecycle();
+  let resolveInitial;
+  const auth = {
+    getSession: () => new Promise((resolve) => { resolveInitial = resolve; }),
+  };
+  const restoration = lifecycle.restore(auth);
+  const signedIn = sessionFor('signed-in-user');
+  lifecycle.acceptAuthEvent('SIGNED_IN', signedIn);
+  resolveInitial({ data: { session: null }, error: null });
+
+  assert.equal(await restoration, signedIn);
+  assert.equal(await lifecycle.requireSession(auth), signedIn);
+});
+
+test('TOKEN_REFRESHED replaces the authoritative session', async () => {
+  const lifecycle = createSessionLifecycle();
+  lifecycle.acceptAuthEvent('SIGNED_IN', sessionFor('same-user', 'first-token'));
+  lifecycle.acceptAuthEvent('TOKEN_REFRESHED', sessionFor('same-user', 'refreshed-token'));
+  const active = await lifecycle.requireSession({ getSession: async () => { throw new Error('unexpected read'); } });
+  assert.equal(active.access_token, 'refreshed-token');
+});
+
+test('absent sessions are denied and SIGNED_OUT remains terminal', async () => {
+  const lifecycle = createSessionLifecycle();
+  let reads = 0;
+  const auth = { getSession: async () => { reads += 1; return { data: { session: null }, error: null }; } };
   assert.equal(await lifecycle.requireSession(auth), null);
 
   lifecycle.accept(sessionFor('approved-user'));
   assert.equal((await lifecycle.requireSession(auth))?.user.id, 'approved-user');
-  lifecycle.clear();
+  lifecycle.acceptAuthEvent('SIGNED_OUT', null);
   assert.equal(await lifecycle.requireSession(auth), null);
+  assert.equal(reads, 2, 'SIGNED_OUT must not trigger another restoration read');
 });
 
 test('account switching replaces rather than shares the active session', async () => {

@@ -265,12 +265,11 @@ export const AppProvider = ({ children }) => {
     void syncSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        authSessionLifecycle.acceptAuthEvent(event, session);
         if (session?.user) {
-          authSessionLifecycle.accept(session);
           void acceptSession(session);
         } else {
-          authSessionLifecycle.clear();
           setIsAuthenticated(false);
           setUser(null);
           finishLoading();
