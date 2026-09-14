@@ -86,22 +86,30 @@ for (const role of ['admin', 'chapter_coordinator', 'event_coordinator', 'volunt
 }
 
 for (const role of ['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator', 'volunteer']) {
-  const search = await actors[role].client.rpc('search_knowledge_base', {
+  await expectError(
+    () => actors[role].client.rpc('search_knowledge_base_server', {
+      query_embedding: sharedVector,
+      similarity_threshold: 0.7,
+      match_count: 5,
+    }),
+    `${role} cannot retrieve raw chatbot chunks`,
+  );
+}
+const serverSearch = await root.rpc('search_knowledge_base_server', {
     query_embedding: sharedVector,
     similarity_threshold: 0.7,
     match_count: 5,
-  });
-  assert.ifError(search.error);
-  assert.equal(search.data.length, 1);
-  assert.equal(search.data[0].document_id, documentId);
-  pass(`${role} retrieves the same saved shared knowledge`);
-}
+});
+assert.ifError(serverSearch.error);
+assert.equal(serverSearch.data.length, 1);
+assert.equal(serverSearch.data[0].document_id, documentId);
+pass('Server-side chatbot retrieval uses the saved shared knowledge');
 await expectError(
-  () => actors.pending_volunteer.client.rpc('search_knowledge_base', { query_embedding: sharedVector, similarity_threshold: 0.7, match_count: 5 }),
+  () => actors.pending_volunteer.client.rpc('search_knowledge_base_server', { query_embedding: sharedVector, similarity_threshold: 0.7, match_count: 5 }),
   'Pending Volunteer cannot use chatbot retrieval RPC',
 );
 await expectError(
-  () => anonymous.rpc('search_knowledge_base', { query_embedding: sharedVector, similarity_threshold: 0.7, match_count: 5 }),
+  () => anonymous.rpc('search_knowledge_base_server', { query_embedding: sharedVector, similarity_threshold: 0.7, match_count: 5 }),
   'Anonymous caller cannot use chatbot retrieval RPC',
 );
 
