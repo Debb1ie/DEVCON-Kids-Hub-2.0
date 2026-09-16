@@ -2,10 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppState';
 import { canPerform } from '../auth/permissions';
-import { CalendarDays, Check, ClipboardCheck, ClipboardList, FolderKanban, FolderOpen, Image as ImageIcon, PencilLine, Plus, Trash2, TrendingUp, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, Check, ClipboardCheck, ClipboardList, FolderKanban, FolderOpen, Image as ImageIcon, PencilLine, Plus, Trash2, TrendingUp, UploadCloud, Users, Wallet, X } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 import EventApplicationsPanel from '../components/EventApplicationsPanel';
-import { getEventErrorMessage, validateEventImage } from '../services/eventService';
+import ErrorSummary from '../components/ErrorSummary';
+import InlineAlert from '../components/InlineAlert';
+import PageHeader from '../components/PageHeader';
+import StatusBadge from '../components/StatusBadge';
+import { getEventErrorMessage, getEventValidationIssue, isUuid, isValidIsoDate, resolveCoordinatorSelection, validateEventImage } from '../services/eventService';
+import { advanceEventEditor, EVENT_CREATE_SUBMIT, isIntentionalEventSubmit, shouldPreventImplicitEventSubmit } from '../utils/eventEditorSubmission';
+import { createValidationError, createValidationFocusRequest, scheduleValidationFocus } from '../utils/validationFocus';
 import './Events.css';
 
 const createEmptyForm = () => ({
@@ -53,53 +59,6 @@ const isValidHttpUrl = (value) => {
   }
 };
 
-const isValidDate = (value) => {
-  if (!value) return true;
-  const date = new Date(`${value}T00:00:00`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-};
-
-const buildFolderPreview = (title) => {
-  const folderName = (title || 'New Event').trim() || 'New Event';
-  return {
-    folderPath: `Google Drive/DEVCON Kids/Events/${folderName}`,
-    assetsPath: `Google Drive/DEVCON Kids/Events/${folderName}/Assets`
-  };
-};
-
-const mockEventReports = {
-  1: {
-    eventId: 1,
-    eventName: 'Hour of AI',
-    chapter: 'Manila',
-    date: '2026-06-15',
-    attendance: 72,
-    expectedParticipants: 85,
-    registeredParticipants: 81,
-    outcomes: 'Students completed hands-on AI activities, demonstrated confidence in prompt design, and engaged in collaborative problem-solving throughout the program.',
-    volunteerInvolvement: '7 volunteers supported facilitation, setup, and mentoring, with two lead instructors guiding the hands-on labs.',
-    issues: 'A few learners needed extra help with device setup during the first 20 minutes, and internet connectivity was inconsistent for one station.',
-    followUpActions: ['Share accessibility tips for station setup with facilitators', 'Prepare a simplified onboarding checklist for future runs', 'Review device check-in process before the next cycle'],
-    status: 'Submitted',
-    completion: 88
-  },
-  2: {
-    eventId: 2,
-    eventName: 'STEM CodeCamp',
-    chapter: 'Cebu',
-    date: '2026-07-10',
-    attendance: 46,
-    expectedParticipants: 55,
-    registeredParticipants: 52,
-    outcomes: 'The cohort showed strong engagement with robotics fundamentals and completed project-based challenges with minimal instructor intervention.',
-    volunteerInvolvement: 'Five volunteers coordinated breakout sessions, supported coding exercises, and provided peer mentoring during final demos.',
-    issues: 'One workshop module ran longer than planned, and a few kits required battery replacement before the second session.',
-    followUpActions: ['Shift the pacing for the complex robotics module', 'Pre-test hardware kits before event day', 'Add a backup supplies checklist for volunteers'],
-    status: 'Draft',
-    completion: 64
-  }
-};
-
 export default function Events() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -111,6 +70,7 @@ export default function Events() {
   const canEditReport = (event) => canPerform(roleKey, 'report.edit', permissionContext(event));
   const assignableChapters = (chapters || []).filter((chapter) => chapter.status !== 'inactive'
     && (['super_admin', 'admin'].includes(roleKey) || chapter.id === user?.chapterId));
+  const scopedChapterName = (chapters || []).find((chapter) => chapter.id === user?.chapterId)?.name;
   const [showForm, setShowForm] = useState(() => Boolean(location.state?.openCreateForm && canCreateEvent));
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -125,20 +85,28 @@ export default function Events() {
   const [coordinatorChapterId, setCoordinatorChapterId] = useState('');
   const [coordinatorsLoading, setCoordinatorsLoading] = useState(false);
   const [coordinatorsError, setCoordinatorsError] = useState('');
+  const [coordinatorNotice, setCoordinatorNotice] = useState('');
   const coordinatorRequestRef = useRef(0);
+  const submissionLockRef = useRef(false);
+  const validationFocusRequestRef = useRef(0);
+  const validationFocusCancelRef = useRef(null);
   const [formSuccess, setFormSuccess] = useState('');
   const [deleteSuccess, setDeleteSuccess] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [imagePreviewFailed, setImagePreviewFailed] = useState(false);
   const [selectedImageFile, setSelectedImageFile] = useState(null);
   const [selectedImagePreview, setSelectedImagePreview] = useState('');
-  const [selectedReportEventId, setSelectedReportEventId] = useState(null);
+  const [selectedReportEventId] = useState(null);
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportForm, setReportForm] = useState(createEmptyReport);
   const [reportInitial, setReportInitial] = useState(createEmptyReport);
   const [reportError, setReportError] = useState('');
   const [reportSuccess, setReportSuccess] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [editorStep, setEditorStep] = useState(0);
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [pendingValidationFocus, setPendingValidationFocus] = useState(null);
+  const [imageUploadState, setImageUploadState] = useState('idle');
 
   useEffect(() => {
     if (!deleteSuccess) return undefined;
@@ -187,32 +155,6 @@ export default function Events() {
     ? selectedReportEventId
     : featuredEvent?.id ?? eventsList?.[0]?.id ?? null;
 
-  const selectedReport = useMemo(() => {
-    const sourceEvent = eventsList?.find((event) => Number(event.id) === Number(effectiveReportEventId)) || featuredEvent || eventsList?.[0];
-    const fallback = mockEventReports[Number(sourceEvent?.id ?? 1)] || mockEventReports[1];
-
-    const attendance = Number(fallback.attendance ?? 0);
-    const expectedParticipants = Number(fallback.expectedParticipants ?? fallback.registeredParticipants ?? 0);
-    const registeredParticipants = Number(fallback.registeredParticipants ?? fallback.expectedParticipants ?? 0);
-    const attendanceRate = expectedParticipants > 0 ? Math.round((attendance / expectedParticipants) * 100) : 0;
-
-    return {
-      eventName: sourceEvent?.title || fallback.eventName,
-      chapter: sourceEvent?.chapter || fallback.chapter,
-      date: sourceEvent?.event_date || fallback.date,
-      attendance,
-      expectedParticipants,
-      registeredParticipants,
-      attendanceRate,
-      outcomes: fallback.outcomes,
-      volunteerInvolvement: fallback.volunteerInvolvement,
-      issues: fallback.issues,
-      followUpActions: fallback.followUpActions,
-      status: fallback.status,
-      completion: Number(fallback.completion ?? 0)
-    };
-  }, [eventsList, featuredEvent, effectiveReportEventId]);
-
   const filteredEvents = eventsList?.filter((event) => {
     const searchBlob = `${event.title} ${event.type} ${event.chapter} ${event.coordinator} ${event.description}`.toLowerCase();
     return searchBlob.includes(searchTerm.toLowerCase());
@@ -220,6 +162,12 @@ export default function Events() {
   const totalPages = Math.max(1, Math.ceil(filteredEvents.length / EVENTS_PER_PAGE));
   const activePage = Math.min(currentPage, totalPages);
   const paginatedEvents = filteredEvents.slice((activePage - 1) * EVENTS_PER_PAGE, activePage * EVENTS_PER_PAGE);
+  const selectedCoordinatorOption = resolveCoordinatorSelection({
+    chapterId: form.chapter_id,
+    directoryChapterId: coordinatorChapterId,
+    coordinatorUserId: form.coordinator_user_id,
+    coordinators: eligibleCoordinators,
+  });
 
   const openCreateForm = () => {
     const ownChapter = assignableChapters.find((chapter) => chapter.id === user?.chapterId);
@@ -229,6 +177,10 @@ export default function Events() {
     setInitialForm(newForm);
     setFormError('');
     setFormSuccess('');
+    setEditorStep(0);
+    setValidationErrors([]);
+    setPendingValidationFocus(null);
+    setImageUploadState('idle');
     setImagePreviewFailed(false);
     if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
     setSelectedImageFile(null);
@@ -263,6 +215,10 @@ export default function Events() {
     setInitialForm(eventForm);
     setFormError('');
     setFormSuccess('');
+    setEditorStep(0);
+    setValidationErrors([]);
+    setPendingValidationFocus(null);
+    setImageUploadState('idle');
     setImagePreviewFailed(false);
     if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
     setSelectedImageFile(null);
@@ -273,17 +229,36 @@ export default function Events() {
 
   const hasUnsavedChanges = showForm && JSON.stringify(form) !== JSON.stringify(initialForm);
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedChanges]);
+
   const finishCloseForm = () => {
+    submissionLockRef.current = false;
+    validationFocusRequestRef.current += 1;
+    validationFocusCancelRef.current?.();
+    validationFocusCancelRef.current = null;
+    if (window.location.hash.startsWith('#event-')) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+    }
     setEditingId(null);
     setForm(createEmptyForm());
     setInitialForm(createEmptyForm());
     setFormError('');
+    setValidationErrors([]);
+    setPendingValidationFocus(null);
+    setEditorStep(0);
+    setImageUploadState('idle');
     setImagePreviewFailed(false);
     if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
     setSelectedImageFile(null);
     setSelectedImagePreview('');
     setEligibleCoordinators([]);
     setCoordinatorChapterId('');
+    setCoordinatorNotice('');
     setCoordinatorsError('');
     setShowForm(false);
   };
@@ -296,11 +271,86 @@ export default function Events() {
       if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
       setSelectedImageFile(file);
       setSelectedImagePreview(URL.createObjectURL(file));
+      setImageUploadState('staged');
       setImagePreviewFailed(false);
       setFormError('');
+      clearValidationError('event-image-file');
     } catch (error) {
       event.target.value = '';
-      setFormError(error.message);
+      setValidationErrors([createValidationError({ key: 'event-image-file-invalid', fieldId: 'event-image-file', stage: 1, message: error.message })]);
+    }
+  };
+
+  const removeSelectedImage = () => {
+    if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+    setSelectedImageFile(null);
+    setSelectedImagePreview('');
+    setImagePreviewFailed(false);
+    setImageUploadState('idle');
+  };
+
+  const validationErrorFor = (fieldId) => validationErrors.find((error) => error.fieldId === fieldId)?.message || '';
+  const clearValidationError = (field, isValid = true) => {
+    if (!isValid) return;
+    setValidationErrors((errors) => errors.filter((error) => error.fieldId !== field));
+  };
+  const describedBy = (...ids) => ids.filter(Boolean).join(' ') || undefined;
+  const activateValidationError = (error) => {
+    if (!error?.key || !error?.fieldId || !Number.isInteger(error.stage)) return;
+    validationFocusCancelRef.current?.();
+    const requestId = validationFocusRequestRef.current + 1;
+    validationFocusRequestRef.current = requestId;
+    setPendingValidationFocus(createValidationFocusRequest(error, requestId));
+    setEditorStep(error.stage);
+  };
+
+  useEffect(() => {
+    if (!showForm || !pendingValidationFocus || pendingValidationFocus.stage !== editorStep) return undefined;
+    const requestId = pendingValidationFocus.requestId;
+    const cancel = scheduleValidationFocus({
+      fieldId: pendingValidationFocus.fieldId,
+      isCurrent: () => validationFocusRequestRef.current === requestId,
+      onComplete: (success) => {
+        if (success && validationFocusRequestRef.current === requestId) setPendingValidationFocus(null);
+      },
+    });
+    validationFocusCancelRef.current = cancel;
+    return () => {
+      cancel();
+      if (validationFocusCancelRef.current === cancel) validationFocusCancelRef.current = null;
+    };
+  }, [editorStep, pendingValidationFocus, showForm]);
+
+  const validateStage = (stage) => {
+    const nextErrors = [];
+    if (stage === 0) {
+      if (!form.title.trim()) nextErrors.push(createValidationError({ key: 'event-name-required', fieldId: 'event-name', stage: 0, message: 'Enter an event name.' }));
+      const chapter = assignableChapters.find((item) => item.id === form.chapter_id);
+      if (!chapter) nextErrors.push(createValidationError({ key: 'event-chapter-required', fieldId: 'event-chapter', stage: 0, message: 'Select a valid active chapter or Volunteer Community.' }));
+      if (!isValidIsoDate(form.event_date)) nextErrors.push(createValidationError({ key: 'event-date-invalid', fieldId: 'event-date', stage: 0, message: 'Enter a valid event date.' }));
+    }
+    if (stage === 1) {
+      if (!selectedCoordinatorOption) nextErrors.push(createValidationError({ key: 'event-coordinator-required', fieldId: 'event-coordinator', stage: 1, message: 'Select an active Event Coordinator assigned to this chapter.' }));
+      if (!selectedImageFile && form.image_url.trim() && !isValidHttpUrl(form.image_url.trim())) nextErrors.push(createValidationError({ key: 'event-image-url-invalid', fieldId: 'event-image-url', stage: 1, message: 'Enter a valid HTTP or HTTPS image URL.' }));
+    }
+    setValidationErrors(nextErrors);
+    return nextErrors.length === 0;
+  };
+
+  const moveToStep = (nextStep) => {
+    if (nextStep > editorStep && !validateStage(editorStep)) return;
+    setValidationErrors([]);
+    setEditorStep(nextStep);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleContinue = (event) => {
+    advanceEventEditor(event, editorStep + 1, moveToStep);
+  };
+
+  const handleEventEditorKeyDown = (event) => {
+    if (shouldPreventImplicitEventSubmit({ editorStep, key: event.key, target: event.target })) {
+      event.preventDefault();
     }
   };
 
@@ -316,27 +366,29 @@ export default function Events() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.title.trim()) {
-      setFormError('Enter an event name.');
-      return;
-    }
+    if (isSubmitting || submissionLockRef.current || !isIntentionalEventSubmit({
+      editorStep,
+      submitter: e.nativeEvent?.submitter || e.submitter,
+    })) return;
+
+    if (!validateStage(0) || !validateStage(1)) return;
 
     const selectedChapter = assignableChapters.find((chapter) => chapter.id === form.chapter_id);
-    if (!selectedChapter || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(form.chapter_id)) {
+    if (!selectedChapter || !isUuid(form.chapter_id)) {
       setFormError('Select a valid active chapter or Volunteer Community.');
       return;
     }
 
-    const selectedCoordinator = coordinatorChapterId === form.chapter_id
-      ? eligibleCoordinators.find((coordinator) => coordinator.user_id === form.coordinator_user_id)
-      : null;
-    if (!selectedCoordinator || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(form.coordinator_user_id)) {
+    if (!selectedCoordinatorOption) {
+      setEditorStep(1);
+      setValidationErrors([createValidationError({ key: 'event-coordinator-required', fieldId: 'event-coordinator', stage: 1, message: 'Select an active Event Coordinator assigned to this chapter.' })]);
       setFormError('Select an active Event Coordinator assigned to this chapter.');
       return;
     }
 
-    if (!isValidDate(form.event_date)) {
-      setFormError('Enter a valid event date.');
+    if (!isValidIsoDate(form.event_date)) {
+      setEditorStep(0);
+      setValidationErrors([createValidationError({ key: 'event-date-invalid', fieldId: 'event-date', stage: 0, message: 'Enter a valid event date.' })]);
       return;
     }
 
@@ -347,13 +399,14 @@ export default function Events() {
 
     setFormError('');
     setFormSuccess('');
+    submissionLockRef.current = true;
     setIsSubmitting(true);
     const payload = {
       ...form,
       title: form.title.trim(),
       chapter_id: selectedChapter.id,
       chapter: selectedChapter.name,
-      coordinator: selectedCoordinator.full_name || selectedCoordinator.email,
+      coordinator: selectedCoordinatorOption.full_name || selectedCoordinatorOption.email,
       description: form.description.trim(),
       image_url: form.image_url.trim()
     };
@@ -361,17 +414,20 @@ export default function Events() {
     try {
       let saved;
       if (editingId) {
-        saved = await updateEvent(editingId, payload, form.coordinator_user_id);
+        saved = await updateEvent(editingId, payload, selectedCoordinatorOption.user_id);
         setFormSuccess('Event updated successfully.');
       } else {
-        saved = await addEvent(payload, form.coordinator_user_id);
+        saved = await addEvent(payload, selectedCoordinatorOption.user_id);
         setFormSuccess('Event created successfully.');
       }
 
       if (selectedImageFile) {
         try {
+          setImageUploadState('uploading');
           await uploadEventImage(saved.event.id, selectedImageFile);
+          setImageUploadState('uploaded');
         } catch (imageError) {
+          setImageUploadState('failed');
           setEditingId(saved.event.id);
           setFormError(imageError.message);
           setFormSuccess('The event and coordinator were saved. Retry the image upload from this edit form.');
@@ -388,8 +444,13 @@ export default function Events() {
       setSelectedImagePreview('');
       setShowForm(false);
     } catch (error) {
-      setFormError(getEventErrorMessage(error));
+      const message = getEventErrorMessage(error);
+      const issue = getEventValidationIssue(error);
+      setFormError(message);
+      setValidationErrors(issue ? [createValidationError({ key: `${issue.field}-server`, fieldId: issue.field, stage: issue.stage, message: issue.message })] : []);
+      if (issue) setEditorStep(issue.stage);
     } finally {
+      submissionLockRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -493,7 +554,7 @@ export default function Events() {
   ];
 
   return (
-    <div className="module-page events-page">
+    <div className={`module-page events-page ${showForm ? 'editor-active' : ''}`}>
       {pendingDelete && (
         <ConfirmationModal
           title="Delete event?"
@@ -507,46 +568,38 @@ export default function Events() {
         <ConfirmationModal
           title="Discard changes?"
           message={pendingDiscard === 'event' ? 'You have unsaved event changes.' : 'You have unsaved report changes.'}
+          cancelLabel="Stay"
           confirmLabel="Discard changes"
           onCancel={() => setPendingDiscard(null)}
           onConfirm={confirmDiscard}
+          focusAfterConfirm={pendingDiscard === 'event' ? '#create-event-button' : '#open-legacy-report-button'}
         />
       )}
-      {/* Modal Overlay - excludes sidebar */}
       {showForm && (editingId ? canEditEvent(eventsList.find((event) => event.id === editingId)) : canCreateEvent) && (
-        <div className="event-modal-overlay" onClick={closeForm} />
-      )}
-
-      {/* Modal Container */}
-      {showForm && (editingId ? canEditEvent(eventsList.find((event) => event.id === editingId)) : canCreateEvent) && (
-        <div className="event-modal-container">
-          <div className="event-modal card">
-            <div className="event-form-header">
-              <div className="event-modal-header-content">
-                <div className="event-modal-header-icon">
-                  <CalendarDays size={18} />
-                </div>
-                <div>
-                  <h3>{editingId ? 'Edit Event / CodeCamp' : 'Create Event / CodeCamp'}</h3>
-                  {editingId && <p className="editing-event">Editing: {form.title || 'Untitled event'}</p>}
-                  <p className="text-muted">Saving an event does not create Google resources. The folder is created after the first valid Post Event Report submission.</p>
-                </div>
-              </div>
-              <button type="button" className="modal-close-btn" onClick={closeForm} disabled={isSubmitting} aria-label="Close modal">
-                ✕
+        <section className="event-editor" aria-label={editingId ? 'Edit event' : 'Create event'}>
+          <PageHeader
+            eyebrow={editingId ? 'Edit event' : 'New event'}
+            title={editingId ? 'Edit Event / CodeCamp' : 'Create Event / CodeCamp'}
+            description="Complete all three stages. Nothing is saved until you submit the final review."
+            actions={<button type="button" className="btn-secondary" onClick={closeForm} disabled={isSubmitting}><X size={18} aria-hidden="true" /> Cancel</button>}
+          />
+          <nav className="event-stepper" aria-label="Event editor progress">
+            {['Event details', 'Assignment and media', 'Review and save'].map((label, index) => (
+              <button key={label} type="button" className={index === editorStep ? 'active' : index < editorStep ? 'complete' : ''} onClick={() => index < editorStep && moveToStep(index)} aria-current={index === editorStep ? 'step' : undefined}>
+                <span>{index < editorStep ? <Check size={15} /> : index + 1}</span><strong>{label}</strong>
               </button>
-            </div>
+            ))}
+          </nav>
 
-            <form onSubmit={handleSubmit} className="event-form-grid" aria-describedby={formError ? 'event-form-error' : undefined}>
-              <div className="event-form-section section-details">
-                <div className="event-form-section-header">
-                  <span className="event-section-icon"><CalendarDays size={15} /></span>
-                  <h4>Event Details</h4>
-                </div>
-                <div className="event-form-fields">
+          <form onSubmit={handleSubmit} onKeyDown={handleEventEditorKeyDown} className="event-editor-form" aria-describedby={formError ? 'event-form-error' : undefined} noValidate>
+            <ErrorSummary errors={validationErrors} onActivate={activateValidationError} />
+            {editorStep === 0 && <section className="event-editor-panel" aria-labelledby="event-details-heading">
+              <div className="event-editor-heading"><span>Stage 1 of 3</span><h2 id="event-details-heading">Event details</h2><p>Describe when and where the event will happen.</p></div>
+              <div className="event-form-fields">
                   <div className="form-group">
-                    <label htmlFor="event-name">Event Name</label>
-                    <input id="event-name" className="border-input" type="text" value={form.title} onChange={(e) => { setFormError(''); setForm({ ...form, title: e.target.value }); }} disabled={isSubmitting} aria-invalid={formError === 'Enter an event name.'} required />
+                    <label htmlFor="event-name">Event name <span aria-hidden="true">*</span></label>
+                    <input id="event-name" className="border-input" type="text" value={form.title} onChange={(e) => { setFormError(''); clearValidationError('event-name', Boolean(e.target.value.trim())); setForm({ ...form, title: e.target.value }); }} disabled={isSubmitting} aria-invalid={validationErrorFor('event-name') ? true : undefined} aria-describedby={validationErrorFor('event-name') ? 'event-name-error' : undefined} required />
+                    {validationErrorFor('event-name') && <small id="event-name-error" className="field-error">{validationErrorFor('event-name')}</small>}
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-type">Type</label>
@@ -558,61 +611,69 @@ export default function Events() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label htmlFor="event-chapter">Chapter</label>
-                    <select id="event-chapter" className="border-input" value={form.chapter_id} onChange={(e) => { const selected = assignableChapters.find((chapter) => chapter.id === e.target.value); setFormError(''); setEligibleCoordinators([]); setCoordinatorChapterId(''); setForm((current) => ({ ...current, chapter_id: e.target.value, chapter: selected?.name || '', coordinator_user_id: '', coordinator: '' })); void loadCoordinators(e.target.value); }} disabled={isSubmitting || roleKey === 'chapter_coordinator'} aria-invalid={formError === 'Select a valid active chapter or Volunteer Community.'} required>
+                    <label htmlFor="event-chapter">Chapter <span aria-hidden="true">*</span></label>
+                    <select id="event-chapter" className="border-input" value={form.chapter_id} onChange={(e) => { const selected = assignableChapters.find((chapter) => chapter.id === e.target.value); const hadCoordinator = Boolean(form.coordinator_user_id); setFormError(''); setValidationErrors((errors) => errors.filter((error) => !['event-chapter', 'event-coordinator'].includes(error.fieldId))); setEligibleCoordinators([]); setCoordinatorChapterId(''); setForm((current) => ({ ...current, chapter_id: e.target.value, chapter: selected?.name || '', coordinator_user_id: '', coordinator: '' })); setCoordinatorNotice(hadCoordinator ? 'The previous coordinator was cleared because the chapter changed.' : ''); void loadCoordinators(e.target.value); }} disabled={isSubmitting || roleKey === 'chapter_coordinator'} aria-invalid={validationErrorFor('event-chapter') ? true : undefined} aria-describedby={validationErrorFor('event-chapter') ? 'event-chapter-error' : undefined} required>
                       <option value="">Select an active location</option>
                       {assignableChapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.name}</option>)}
                     </select>
+                    {validationErrorFor('event-chapter') && <small id="event-chapter-error" className="field-error">{validationErrorFor('event-chapter')}</small>}
                   </div>
-                  <div className="form-group">
-                    <label htmlFor="event-coordinator">Coordinator</label>
-                    <select id="event-coordinator" className="border-input" value={form.coordinator_user_id} onChange={(e) => { const selected = eligibleCoordinators.find((coordinator) => coordinator.user_id === e.target.value); setFormError(''); setForm({ ...form, coordinator_user_id: e.target.value, coordinator: selected?.full_name || selected?.email || '' }); }} disabled={isSubmitting || coordinatorsLoading || !form.chapter_id || roleKey === 'event_coordinator'} aria-invalid={formError === 'Select an active Event Coordinator assigned to this chapter.'} required>
-                      <option value="">{!form.chapter_id ? 'Select a chapter first' : coordinatorsLoading ? 'Loading coordinators…' : 'Select an Event Coordinator'}</option>
-                      {eligibleCoordinators.map((coordinator) => <option key={coordinator.user_id} value={coordinator.user_id}>{coordinator.full_name || 'Unnamed user'} — {coordinator.email}</option>)}
-                    </select>
-                    {coordinatorsError && <small className="field-error" role="alert">{coordinatorsError}</small>}
-                    {!coordinatorsLoading && form.chapter_id && !coordinatorsError && eligibleCoordinators.length === 0 && <small>No active Event Coordinators are assigned to this chapter.</small>}
-                  </div>
-                </div>
-              </div>
-              <div className="event-form-section section-schedule">
-                <div className="event-form-section-header">
-                  <span className="event-section-icon"><CalendarDays size={15} /></span>
-                  <h4>Schedule &amp; Status</h4>
-                </div>
-                <div className="event-form-fields">
                   <div className="form-group">
                     <label htmlFor="event-date">Event Date <span className="optional-label">Optional</span></label>
-                    <input id="event-date" type="date" className="border-input" value={form.event_date} onChange={(e) => { setFormError(''); setForm({ ...form, event_date: e.target.value }); }} disabled={isSubmitting} aria-invalid={formError === 'Enter a valid event date.'} />
+                    <input id="event-date" type="date" className="border-input" value={form.event_date} onChange={(e) => { setFormError(''); clearValidationError('event-date', isValidIsoDate(e.target.value)); setForm({ ...form, event_date: e.target.value }); }} disabled={isSubmitting} aria-invalid={validationErrorFor('event-date') ? true : undefined} aria-describedby={validationErrorFor('event-date') ? 'event-date-error' : undefined} />
+                    {validationErrorFor('event-date') && <small id="event-date-error" className="field-error">{validationErrorFor('event-date')}</small>}
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-status">Status</label>
-                    <select id="event-status" className="border-input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} disabled={isSubmitting}>
+                    <select id="event-status" className="border-input" value={form.status} onChange={(e) => { clearValidationError('event-status'); setForm({ ...form, status: e.target.value }); }} disabled={isSubmitting} aria-invalid={validationErrorFor('event-status') ? true : undefined} aria-describedby={validationErrorFor('event-status') ? 'event-status-error' : undefined}>
                       <option>Scheduled</option>
-                      <option>Ongoing</option>
+                      <option>Cancelled</option>
                       <option>Completed</option>
                       <option>Draft</option>
                     </select>
+                    {validationErrorFor('event-status') && <small id="event-status-error" className="field-error">{validationErrorFor('event-status')}</small>}
+                  </div>
+                  <div className="form-group form-group-wide">
+                    <label htmlFor="event-description">Description / caption <span className="optional-label">Optional</span></label>
+                    <textarea id="event-description" className="border-input" rows="5" placeholder="Briefly describe the event, its purpose, and target participants." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={isSubmitting} aria-describedby="event-description-help event-description-count" />
+                    <small id="event-description-help">Briefly describe the event, its purpose, and target participants.</small>
+                    <span id="event-description-count" className="character-count">{form.description.length} characters</span>
+                  </div>
+              </div>
+            </section>}
+
+            {editorStep === 1 && <section className="event-editor-panel" aria-labelledby="event-assignment-heading">
+              <div className="event-editor-heading"><span>Stage 2 of 3</span><h2 id="event-assignment-heading">Assignment and media</h2><p>Assign an eligible coordinator and optionally add a private event image.</p></div>
+              <div className="event-form-fields">
+                <div className="form-group form-group-wide">
+                  <label htmlFor="event-coordinator">Event Coordinator <span aria-hidden="true">*</span></label>
+                  <select id="event-coordinator" className="border-input" value={form.coordinator_user_id} onChange={(e) => { const selected = eligibleCoordinators.find((coordinator) => coordinator.user_id === e.target.value); setFormError(''); clearValidationError('event-coordinator', Boolean(selected)); setCoordinatorNotice(''); setForm({ ...form, coordinator_user_id: e.target.value, coordinator: selected?.full_name || selected?.email || '' }); }} disabled={isSubmitting || coordinatorsLoading || !form.chapter_id || roleKey === 'event_coordinator'} required aria-invalid={validationErrorFor('event-coordinator') ? true : undefined} aria-describedby={describedBy('coordinator-state', validationErrorFor('event-coordinator') && 'event-coordinator-error')}>
+                    <option value="">{!form.chapter_id ? 'Select a chapter first' : coordinatorsLoading ? 'Loading coordinators…' : 'Select an Event Coordinator'}</option>
+                    {eligibleCoordinators.map((coordinator) => <option key={coordinator.user_id} value={coordinator.user_id}>{coordinator.full_name || 'Unnamed user'} — {coordinator.email}</option>)}
+                  </select>
+                  {validationErrorFor('event-coordinator') && <small id="event-coordinator-error" className="field-error">{validationErrorFor('event-coordinator')}</small>}
+                  <div id="coordinator-state" aria-live="polite">
+                    {coordinatorsLoading && <small>Loading active coordinators for {form.chapter}…</small>}
+                    {coordinatorNotice && <small>{coordinatorNotice}</small>}
+                    {coordinatorsError && <small className="field-error">{coordinatorsError}</small>}
+                    {!coordinatorsLoading && form.chapter_id && !coordinatorsError && eligibleCoordinators.length === 0 && <small>No active Event Coordinators are assigned to this chapter.</small>}
+                    {form.coordinator_user_id && <small>Selected: {form.coordinator}</small>}
                   </div>
                 </div>
-              </div>
-              <div className="event-form-section section-content">
-                <div className="event-form-section-header">
-                  <span className="event-section-icon"><ImageIcon size={15} /></span>
-                  <h4>Content</h4>
-                </div>
-                <div className="event-form-fields">
                   <div className="form-group form-group-wide">
                     <label htmlFor="event-image-file">Event image <span className="optional-label">Optional</span></label>
-                    <input id="event-image-file" className="border-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleEventImageSelect} disabled={isSubmitting} />
-                    <small>PNG, JPG, JPEG, or WebP · maximum 10 MB · stored privately.</small>
+                    <div className="event-upload-control"><UploadCloud size={24} aria-hidden="true" /><div><strong>{selectedImageFile ? selectedImageFile.name : 'Choose an event image'}</strong><span>PNG, JPG, JPEG, or WebP · maximum 10 MB · stored privately</span></div><label className="btn-secondary" htmlFor="event-image-file">{selectedImageFile ? 'Replace image' : 'Choose file'}</label></div>
+                    <input id="event-image-file" className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleEventImageSelect} disabled={isSubmitting} aria-invalid={validationErrorFor('event-image-file') ? true : undefined} aria-describedby={describedBy('event-image-file-help', validationErrorFor('event-image-file') && 'event-image-file-error')} />
+                    <small id="event-image-file-help">Choose one supported image up to 10 MB.</small>
+                    {validationErrorFor('event-image-file') && <small id="event-image-file-error" className="field-error">{validationErrorFor('event-image-file')}</small>}
                   </div>
                   <div className="form-group form-group-wide">
                     <label htmlFor="event-image-url">Image URL fallback <span className="optional-label">Optional</span></label>
-                    <input id="event-image-url" className="border-input" type="url" placeholder="https://example.com/event-image.jpg" value={form.image_url} onChange={(e) => { setFormError(''); setImagePreviewFailed(false); setForm({ ...form, image_url: e.target.value }); }} disabled={isSubmitting} aria-describedby="event-image-help" aria-invalid={formError === 'Image URL must start with http:// or https://.'} />
+                    <input id="event-image-url" className="border-input" type="url" placeholder="https://example.com/event-image.jpg" value={form.image_url} onChange={(e) => { setFormError(''); clearValidationError('event-image-url', !e.target.value.trim() || isValidHttpUrl(e.target.value.trim())); setImagePreviewFailed(false); setForm({ ...form, image_url: e.target.value }); }} disabled={isSubmitting} aria-describedby={describedBy('event-image-help', validationErrorFor('event-image-url') && 'event-image-url-error')} aria-invalid={validationErrorFor('event-image-url') ? true : undefined} />
                     <small id="event-image-help">Used only when no uploaded image is selected.</small>
+                    {validationErrorFor('event-image-url') && <small id="event-image-url-error" className="field-error">{validationErrorFor('event-image-url')}</small>}
                   </div>
-                  <div className="event-image-preview" aria-live="polite">
+                  <div className="event-image-preview event-image-preview-16-9" aria-live="polite">
                     {(selectedImagePreview || (form.image_url.trim() && isValidHttpUrl(form.image_url.trim()))) && !imagePreviewFailed ? (
                       <img src={selectedImagePreview || form.image_url.trim()} alt="Event image preview" onError={() => setImagePreviewFailed(true)} />
                     ) : (
@@ -622,44 +683,55 @@ export default function Events() {
                       </div>
                     )}
                   </div>
-                  <div className="form-group form-group-wide">
-                    <label htmlFor="event-description">Description / Caption <span className="optional-label">Optional</span></label>
-                    <textarea id="event-description" className="border-input" rows="4" placeholder="Briefly describe the event, its purpose, and target participants." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} disabled={isSubmitting} aria-describedby="event-description-help event-description-count" />
-                    <small id="event-description-help">Briefly describe the event, its purpose, and target participants.</small>
-                    <span id="event-description-count" className="character-count">{form.description.length} characters</span>
-                  </div>
-                </div>
+                  {selectedImageFile && <div className="event-file-meta"><span>{selectedImageFile.type}</span><span>{(selectedImageFile.size / 1024 / 1024).toFixed(2)} MB</span><span>{imageUploadState === 'staged' ? 'Staged locally' : imageUploadState}</span><button type="button" className="btn-tertiary" onClick={removeSelectedImage} disabled={isSubmitting}>Remove</button></div>}
+                  {imageUploadState === 'uploading' && <div className="upload-progress" role="progressbar" aria-label="Uploading event image" aria-valuetext="Uploading privately"><span /></div>}
               </div>
-              <div className="event-form-section section-folders">
-                <div className="event-section-heading">
-                  <div className="event-form-section-header">
-                    <span className="event-section-icon"><FolderKanban size={15} /></span>
-                    <h4>Planned Google Drive Path</h4>
-                  </div>
-                  <span>Preview only — nothing is created on save</span>
-                </div>
-                <div className="folder-preview">
-                  <div>
-                    <span>Google folder</span>
-                    <strong>{buildFolderPreview(form.title).folderPath}</strong>
-                  </div>
-                  <div>
-                    <span>Assets folder</span>
-                    <strong>{buildFolderPreview(form.title).assetsPath}</strong>
-                  </div>
-                </div>
+              <InlineAlert>Saving this event does not create a Google Drive folder. The event folder is created after the first valid Post Event Report is submitted.</InlineAlert>
+            </section>}
+
+            {editorStep === 2 && <section className="event-editor-panel" aria-labelledby="event-review-heading">
+              <div className="event-editor-heading"><span>Stage 3 of 3</span><h2 id="event-review-heading">Review and save</h2><p>Confirm the operational details before saving.</p></div>
+              <div className="event-review-sections">
+                <section className="event-review-section" aria-labelledby="review-event-heading">
+                  <h3 id="review-event-heading">Event information</h3>
+                  <dl>
+                    <div><dt>Event</dt><dd>{form.title || 'Not provided'}</dd></div>
+                    <div><dt>Type</dt><dd>{form.type}</dd></div>
+                    <div><dt>Date</dt><dd>{form.event_date || 'Not scheduled'}</dd></div>
+                    <div><dt>Status</dt><dd><StatusBadge status={form.status} /></dd></div>
+                  </dl>
+                </section>
+                <section className="event-review-section" aria-labelledby="review-assignment-heading">
+                  <h3 id="review-assignment-heading">Chapter and assignment</h3>
+                  <dl>
+                    <div><dt>Chapter</dt><dd>{form.chapter || 'Not selected'}</dd></div>
+                    <div><dt>Coordinator</dt><dd>{selectedCoordinatorOption ? `${selectedCoordinatorOption.full_name || 'Unnamed user'} — ${selectedCoordinatorOption.email}` : 'Not selected'}</dd></div>
+                  </dl>
+                </section>
+                <section className="event-review-section" aria-labelledby="review-content-heading">
+                  <h3 id="review-content-heading">Content and media</h3>
+                  <dl>
+                    <div><dt>Image</dt><dd>{selectedImageFile ? `${selectedImageFile.name} (staged)` : form.image_url || 'No image'}</dd></div>
+                    <div><dt>Description</dt><dd>{form.description || 'No description provided'}</dd></div>
+                  </dl>
+                </section>
               </div>
-              <div className="event-form-actions">
-                <button type="submit" className="btn-primary" disabled={isSubmitting}>
-                  <Check size={16} />
-                  {isSubmitting ? 'Saving...' : editingId ? 'Update Event' : 'Save Event'}
-                </button>
-                <button type="button" className="btn-secondary" onClick={closeForm} disabled={isSubmitting}>Cancel</button>
-              </div>
-              {formError && <p id="event-form-error" className="event-feedback error form-error" role="alert">{formError}</p>}
-            </form>
-          </div>
-        </div>
+              {(selectedImagePreview || (form.image_url.trim() && isValidHttpUrl(form.image_url.trim()))) && <div className="event-image-preview event-image-preview-16-9"><img src={selectedImagePreview || form.image_url.trim()} alt="Review of selected event" /></div>}
+              <InlineAlert>Saving creates or updates the event and its coordinator assignment atomically. It does not queue Google Workspace automation.</InlineAlert>
+            </section>}
+
+            <footer className="event-editor-actions">
+              <button type="button" className="btn-secondary" onClick={() => editorStep === 0 ? closeForm() : moveToStep(editorStep - 1)} disabled={isSubmitting}><ArrowLeft size={18} /> {editorStep === 0 ? 'Cancel' : 'Back'}</button>
+              <span>Stage {editorStep + 1} of 3</span>
+              {editorStep < 2 ? (
+                <button key={`event-editor-continue-${editorStep}`} type="button" className="btn-primary" onClick={handleContinue}>Continue <ArrowRight size={18} /></button>
+              ) : (
+                <button key="event-editor-create-submit" id={EVENT_CREATE_SUBMIT.id} name={EVENT_CREATE_SUBMIT.name} value={EVENT_CREATE_SUBMIT.value} type="submit" className="btn-primary" disabled={isSubmitting}><Check size={18} /> {isSubmitting ? 'Saving…' : editingId ? 'Save changes' : 'Create event'}</button>
+              )}
+            </footer>
+            {formError && <InlineAlert id="event-form-error" tone="error">{formError}</InlineAlert>}
+          </form>
+        </section>
       )}
 
       {/* Post-Event Report collection modal */}
@@ -826,152 +898,20 @@ export default function Events() {
         </div>
       )}
 
-      <div className="module-header">
-        <div className="module-title">
-          <div className="module-icon" style={{ background: 'var(--gradient-purple)', color: 'white' }}>
-            <CalendarDays size={24} />
-          </div>
-          <div>
-            <h2>Events & CodeCamps</h2>
-            <p className="text-muted">Coordinate cycle programs, including Hour of AI, and generate Google Drive folder blueprints for each event.</p>
-          </div>
-        </div>
-        {canCreateEvent && (
-          <button className="btn-primary" onClick={openCreateForm} type="button">
-            <Plus size={20} />
-            Create Event
-          </button>
-        )}
-      </div>
-
-      {featuredEvent && (
-        <div className="card featured-event-card animate-fade-in">
-          <div className="featured-event-copy">
-            <div className="featured-pill">Main Course Solution</div>
-            <h3>Hour of AI is the flagship cycle program for kids</h3>
-            <p>
-              Coordinators can create, track, and package every Hour of AI run here, with its own image holder,
-              captions, and Google Drive folder structure for admin and coordinator visibility.
-            </p>
-            <div className="featured-meta">
-              <span><FolderOpen size={14} /> {featuredEvent.google_folder_name || 'Hour of AI'}</span>
-              <span><FolderKanban size={14} /> {featuredEvent.google_folder_status || 'Ready for Google Drive sync'}</span>
-            </div>
-          </div>
-          <div className="featured-event-image">
-            {featuredEvent.image_url ? (
-              <img src={featuredEvent.image_url} alt={featuredEvent.title} />
-            ) : (
-              <div className="featured-placeholder">
-                <ImageIcon size={42} />
-                <span>Event image holder</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <PageHeader
+        eyebrow="Programs"
+        title="Events & CodeCamps"
+        description="Plan events, assign eligible coordinators, and track delivery within your authorized scope."
+        scope={['super_admin', 'admin'].includes(roleKey) ? 'National scope' : scopedChapterName ? `${scopedChapterName} chapter` : 'Assigned events'}
+        actions={canCreateEvent && <button id="create-event-button" className="btn-primary" onClick={openCreateForm} type="button"><Plus size={18} /> Create event</button>}
+      />
 
       <EventApplicationsPanel events={eventsList || []} />
 
-      {eventsList && eventsList.length > 0 && (
-        <section className="card event-report-shell">
-          <div className="event-report-header">
-            <div className="module-title report-title">
-              <div className="module-icon" style={{ background: 'var(--gradient-purple)', color: 'white' }}>
-                <CalendarDays size={20} />
-              </div>
-              <div>
-                <h3>Post-Event Reporting</h3>
-                <p className="text-muted">Quick review summary for event outcomes and follow-up actions.</p>
-              </div>
-            </div>
-
-            <div className="report-select-wrap">
-              <label htmlFor="report-event-select">Selected event</label>
-              <div className="report-event-select-wrapper">
-                <CalendarDays size={16} className="report-event-icon" aria-hidden="true" />
-                <select
-                  id="report-event-select"
-                  className="report-event-select"
-                  value={effectiveReportEventId ?? ''}
-                  onChange={(e) => setSelectedReportEventId(e.target.value)}
-                >
-                  {eventsList.map((event) => (
-                    <option key={event.id} value={event.id}>{event.title}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            {canEditReport(eventsList.find((event) => Number(event.id) === Number(effectiveReportEventId))) && (
-              <button type="button" className="btn-primary" onClick={openReportForm}>
-                <Plus size={18} />
-                New Report
-              </button>
-            )}
-          </div>
-
-          <div className="report-summary-grid">
-            <div className="report-summary-card">
-              <span className="report-label">Event name</span>
-              <strong>{selectedReport.eventName}</strong>
-            </div>
-            <div className="report-summary-card">
-              <span className="report-label">Chapter</span>
-              <strong>{selectedReport.chapter}</strong>
-            </div>
-            <div className="report-summary-card">
-              <span className="report-label">Date</span>
-              <strong>{selectedReport.date || 'Date pending'}</strong>
-            </div>
-            <div className="report-summary-card">
-              <span className="report-label">Attendance</span>
-              <strong>{selectedReport.attendance}</strong>
-            </div>
-            <div className="report-summary-card">
-              <span className="report-label">Expected / Registered</span>
-              <strong>{selectedReport.expectedParticipants} / {selectedReport.registeredParticipants}</strong>
-            </div>
-            <div className="report-summary-card">
-              <span className="report-label">Attendance rate</span>
-              <strong>{selectedReport.attendanceRate}%</strong>
-            </div>
-          </div>
-
-          <div className="report-detail-grid">
-            <div className="report-panel">
-              <h4>Outcomes / Impact</h4>
-              <p>{selectedReport.outcomes}</p>
-            </div>
-            <div className="report-panel">
-              <h4>Volunteer involvement</h4>
-              <p>{selectedReport.volunteerInvolvement}</p>
-            </div>
-            <div className="report-panel">
-              <h4>Issues / challenges</h4>
-              <p>{selectedReport.issues}</p>
-            </div>
-            <div className="report-panel">
-              <h4>Follow-up actions</h4>
-              <ul>
-                {selectedReport.followUpActions.map((action) => (
-                  <li key={action}>{action}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <div className="report-status-row">
-            <div className="report-status-card">
-              <span className="report-label">Completion</span>
-              <strong>{selectedReport.completion}%</strong>
-            </div>
-            <div className="report-status-card status-card">
-              <span className="report-label">Report status</span>
-              <strong className={`report-status-badge report-status-${selectedReport.status.toLowerCase()}`}>{selectedReport.status}</strong>
-            </div>
-          </div>
-        </section>
-      )}
+      {eventsList?.length > 0 && <section className="event-report-link" aria-labelledby="event-report-link-title">
+        <div><h2 id="event-report-link-title">Post Event Reports</h2><p>Submit and review verified attendance, finance, impact, and documentation in the dedicated reporting workflow.</p></div>
+        <div className="event-report-link-actions"><button type="button" className="btn-secondary" onClick={() => navigate('/dashboard/post-event-report')}>Open reports <ArrowRight size={18} /></button>{canEditReport(eventsList.find((event) => Number(event.id) === Number(effectiveReportEventId))) && <button id="open-legacy-report-button" type="button" className="btn-tertiary" onClick={openReportForm}>Open legacy quick report</button>}</div>
+      </section>}
 
       {formSuccess && <div className="event-feedback success" role="status">{formSuccess}</div>}
       {deleteSuccess && <div className="event-feedback success" role="status">{deleteSuccess}</div>}
@@ -1009,7 +949,7 @@ export default function Events() {
                     <span>Image holder</span>
                   </div>
                 )}
-                <span className={`event-status-pill status-${(event.status || 'Draft').toLowerCase()}`}>{event.status || 'Draft'}</span>
+                <StatusBadge status={event.status || 'Draft'} />
               </div>
 
               <div className="event-card-body">
@@ -1018,9 +958,6 @@ export default function Events() {
                     <p className="event-type">{event.type}</p>
                     <h3>{event.title}</h3>
                   </div>
-                  {(event.title || '').toLowerCase().includes('hour of ai') && (
-                    <span className="hour-of-ai-chip">Highlighted</span>
-                  )}
                 </div>
 
                 <p className="event-description">{event.description}</p>

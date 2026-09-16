@@ -69,39 +69,6 @@ body.dark-mode .logo-container h2 {
    Collapse / expand button
    ========================================================= */
 
-.sidebar-toggle {
-    position: absolute;
-    top: 1.3rem;
-    right: -20px;
-    width: 40px;
-    height: 40px;
-    display: grid;
-    place-items: center;
-    color: var(--primary-purple);
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    border-radius: 50%;
-    box-shadow: var(--shadow-sm);
-    z-index: 2;
-    transition:
-        background-color var(--transition-fast),
-        color var(--transition-fast),
-        transform var(--transition-fast),
-        box-shadow var(--transition-fast);
-}
-
-.sidebar-toggle:hover {
-    background: var(--primary-purple);
-    color: white;
-    box-shadow: var(--shadow-md);
-    transform: scale(1.06);
-}
-
-.sidebar-toggle:focus-visible {
-    outline: 3px solid rgba(139, 92, 246, 0.35);
-    outline-offset: 3px;
-}
-
 /* =========================================================
    Navigation
    ========================================================= */
@@ -454,10 +421,40 @@ body.dark-mode .logo-container h2 {
     gap: 0.45rem;
 }
 
+/* Controlled redesign: operational navigation shell. */
+.sidebar {
+    width: 17.5rem;
+    color: var(--text-primary);
+    background: var(--surface-default);
+    border-right: 1px solid var(--border-default);
+    box-shadow: none;
+}
+
+.sidebar-header { min-height: 6rem; padding: var(--space-3); border-bottom: 1px solid var(--border-default); }
+.logo-container { min-width: 0; justify-content: center; }
+.brand-logo-surface { display: flex; align-items: center; justify-content: center; max-width: 8.5rem; max-height: 4.5rem; padding: .375rem; overflow: hidden; background: var(--brand-white); border: 1px solid var(--border-default); border-radius: var(--radius-control); }
+.brand-logo-surface img { display: block; width: auto; height: auto; max-width: 100%; max-height: 3.75rem; object-fit: contain; }
+.sidebar-nav { padding: var(--space-4) var(--space-3); gap: var(--space-6); }
+.nav-section { gap: var(--space-2); }
+.nav-section-links { gap: var(--space-1); }
+.nav-item { min-height: 2.875rem; padding: .7rem .8rem; color: var(--text-secondary); font-size: .9375rem; border-radius: var(--radius-control); }
+.nav-item:hover { color: var(--text-primary); background: var(--surface-muted); transform: none; }
+.nav-item.active { color: var(--action-primary-pressed); background: var(--selected-navigation); box-shadow: inset 3px 0 0 var(--brand-purple); }
+body.dark-mode .nav-item.active { color: var(--brand-white); }
+.nav-active-dot { display: none; }
+.sidebar-footer { border-top: 1px solid var(--border-default); }
+.user-chapter { overflow: hidden; color: var(--text-secondary); font-size: .875rem; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-overlay { padding: 0; border: 0; border-radius: 0; background: var(--overlay); backdrop-filter: none; }
+
+@media (min-width: 769px) {
+    .sidebar.collapsed { width: 4.75rem; }
+    .sidebar.collapsed .brand-logo-surface { width: 2.75rem; height: 2.75rem; padding: .25rem; }
+}
+
 .nav-section-label {
     margin: 0 0.25rem;
     color: var(--text-muted);
-    font-size: 0.68rem;
+    font-size: 0.875rem;
     font-weight: 700;
     letter-spacing: 0.09em;
     text-transform: uppercase;

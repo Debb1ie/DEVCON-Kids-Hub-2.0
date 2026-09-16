@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 // Kenneth's AI-route icons + Precious's panel-collapse toggle icons combined
 import {
@@ -14,35 +13,34 @@ import {
   HelpCircle,
   FileText,
   UserCog,
-  PanelLeftClose,
-  PanelLeftOpen,
   CloudCog,
 } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import { canAccessRoute } from '../auth/permissions';
+import logo from '../assets/devcon-kids-logo.jpg';
 import './Sidebar.css';
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate, collapsed = false }) {
   const { user, roleKey } = useApp();
-  const [collapsed, setCollapsed] = useState(false);
-
   const visible = (link) => canAccessRoute(roleKey, link.path);
-  const workspaceLinks = [
-    { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
+  const operationsLinks = [
+    { name: 'Overview', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'Chapters', path: '/dashboard/chapters', icon: <MapPin size={20} /> },
     { name: 'Volunteers', path: '/dashboard/volunteers', icon: <Users size={20} /> },
     { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
     { name: 'Events & CodeCamps', path: '/dashboard/events', icon: <CalendarDays size={20} /> },
     { name: 'Post Event Report', path: '/dashboard/post-event-report', icon: <FileText size={20} /> },
     { name: 'Event Checklist', path: '/dashboard/event-checklist', icon: <ClipboardList size={20} /> },
-    { name: 'AI Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
   ].filter(visible);
 
-  // Admin-only links — visible only to Superadmin users
+  const knowledgeLinks = [
+    { name: 'AI Knowledge Base', path: '/dashboard/knowledge-base', icon: <Database size={20} /> },
+    { name: 'FAQ Builder', path: '/dashboard/faq-suggestions', icon: <HelpCircle size={20} /> },
+    { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Brain size={20} /> },
+  ].filter(visible);
+
   const adminLinks = [
         { name: 'User Management', path: '/dashboard/users', icon: <UserCog size={20} /> },
-        { name: 'AI Settings', path: '/dashboard/ai-settings', icon: <Brain size={20} /> },
-        { name: 'FAQ Builder', path: '/dashboard/faq-suggestions', icon: <HelpCircle size={20} /> },
         { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
         { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
         { name: 'Integrations', path: '/dashboard/integrations', icon: <CloudCog size={20} /> },
@@ -54,29 +52,22 @@ export default function Sidebar() {
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-container">
-          <div className="logo-icon">{'</>'}</div>
-          <h2>DEVCON <span>Kids</span></h2>
+          <span className="brand-logo-surface"><img src={logo} alt="DEVCON Kids" /></span>
         </div>
 
-        {/* Precious's accessible collapse toggle with panel icons */}
-        <button
-          type="button"
-          className="sidebar-toggle"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-        </button>
       </div>
 
       <nav className="sidebar-nav" aria-label="Main navigation">
-        <NavSection label="Workspace" links={workspaceLinks} collapsed={collapsed} />
+        <NavSection label="Operations" links={operationsLinks} collapsed={collapsed} onNavigate={onNavigate} />
+
+        {knowledgeLinks.length > 0 && <NavSection label="Knowledge and AI" links={knowledgeLinks} collapsed={collapsed} onNavigate={onNavigate} />}
 
         {adminLinks.length > 0 && (
           <NavSection
             label="Administration"
             links={adminLinks}
             collapsed={collapsed}
+            onNavigate={onNavigate}
           />
         )}
       </nav>
@@ -88,6 +79,7 @@ export default function Sidebar() {
           <div className="user-info">
             <span className="user-name">{displayName}</span>
             <span className="user-role">{user?.role || 'Visitor'}</span>
+            {user?.chapterId && <span className="user-chapter">Chapter-scoped access</span>}
           </div>
         </div>
       </div>
@@ -95,7 +87,7 @@ export default function Sidebar() {
   );
 }
 
-function NavSection({ label, links, collapsed }) {
+function NavSection({ label, links, collapsed, onNavigate }) {
   return (
     <div className="nav-section">
       <p className="nav-section-label">{label}</p>
@@ -110,6 +102,7 @@ function NavSection({ label, links, collapsed }) {
             className={({ isActive }) =>
               `nav-item ${isActive ? 'active' : ''}`
             }
+            onClick={onNavigate}
           >
             <span className="nav-icon" aria-hidden="true">{link.icon}</span>
             <span className="nav-text">{link.name}</span>

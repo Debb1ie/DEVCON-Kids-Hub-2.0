@@ -1,13 +1,9 @@
 import {
-  Bell,
-  BellRing,
   BookOpen,
   CalendarDays,
-  CalendarPlus,
   LogOut,
   Menu,
   Moon,
-  Package,
   Search,
   SearchX,
   Sun,
@@ -19,29 +15,16 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppState';
 import './Topbar.css';
 
-const INITIAL_NOTIFICATIONS = [
-  { id: 'volunteer-added', type: 'volunteer', title: 'New Volunteer Added', time: '2 hours ago' },
-  { id: 'event-created', type: 'event', title: 'Event Created', detail: 'Hour of AI Workshop', time: '5 hours ago' },
-  { id: 'inventory-alert', type: 'inventory', title: 'Inventory Low Stock Alert', time: '1 day ago' },
-];
-
 const RESULT_TYPE_DETAILS = {
   chapter: { label: 'Chapter', icon: BookOpen },
   volunteer: { label: 'Volunteer', icon: UserRound },
   event: { label: 'Event', icon: CalendarDays },
 };
 
-const NOTIFICATION_ICONS = {
-  volunteer: UserRound,
-  event: CalendarPlus,
-  inventory: Package,
-};
-
-export default function Topbar({ toggleSidebar }) {
+export default function Topbar({ toggleSidebar, menuButtonRef, navigationExpanded }) {
   const navigate = useNavigate();
   const {
     logout,
-    isSuperadmin,
     user,
     themeMode,
     toggleThemeMode,
@@ -51,16 +34,13 @@ export default function Topbar({ toggleSidebar }) {
   } = useApp();
 
   const searchContainerRef = useRef(null);
-  const notificationsRef = useRef(null);
   const searchInputRef = useRef(null);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedResultIndex, setSelectedResultIndex] = useState(-1);
 
   const displayName = user?.name || user?.email || 'Visitor';
-  const userRole = user?.role || (isSuperadmin ? 'Super Admin' : 'Team Member');
+  const userRole = user?.role || 'Team Member';
   const themeLabel = themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
 
   // Only recalculate search data when the query or searchable lists change.
@@ -78,7 +58,7 @@ export default function Topbar({ toggleSidebar }) {
           type: 'chapter',
           id: chapter.id,
           title: chapter.name,
-          subtitle: `${chapter.learners || 0} learners`,
+          subtitle: chapter.status === 'inactive' ? 'Inactive chapter' : 'Chapter directory',
           path: '/dashboard/chapters',
         });
       }
@@ -118,9 +98,6 @@ export default function Topbar({ toggleSidebar }) {
         setShowSearchResults(false);
       }
 
-      if (!notificationsRef.current?.contains(event.target)) {
-        setShowNotifications(false);
-      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -176,19 +153,18 @@ export default function Topbar({ toggleSidebar }) {
     navigate('/login', { replace: true });
   };
 
-  const handleNewWorkshop = () => {
-    navigate('/dashboard/events', { state: { openCreateForm: true } });
-  };
-
   return (
     <header className="topbar">
       <div className="topbar-left">
         <button
           type="button"
+          ref={menuButtonRef}
           className="menu-toggle"
           onClick={toggleSidebar}
-          aria-label="Toggle sidebar"
-          title="Toggle sidebar"
+          aria-label={navigationExpanded ? 'Close navigation' : 'Open navigation'}
+          title={navigationExpanded ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={navigationExpanded}
+          aria-controls="primary-navigation"
         >
           <Menu size={24} aria-hidden="true" />
         </button>
@@ -267,90 +243,17 @@ export default function Topbar({ toggleSidebar }) {
       </div>
 
       <div className="topbar-right">
-        <button
-          type="button"
-          className="topbar-icon-btn theme-toggle-btn"
-          onClick={toggleThemeMode}
-          aria-label={themeLabel}
-          title={themeLabel}
-        >
-          {themeMode === 'dark' ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
-        </button>
-
-        <div className="notifications-container" ref={notificationsRef}>
-          <button
-            type="button"
-            className="topbar-icon-btn"
-            onClick={() => setShowNotifications((isOpen) => !isOpen)}
-            aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ''}`}
-            aria-expanded={showNotifications}
-            aria-controls="notifications-panel"
-            title="Notifications"
-          >
-            <Bell size={20} aria-hidden="true" />
-            {notifications.length > 0 && <span className="badge">{notifications.length}</span>}
-          </button>
-
-          {showNotifications && (
-            <div id="notifications-panel" className="notifications-panel" role="dialog" aria-label="Notifications">
-              <div className="notifications-header">
-                <h3>Notifications</h3>
-                <div className="notifications-actions">
-                  {notifications.length > 0 && (
-                    <button type="button" className="mark-read-btn" onClick={() => setNotifications([])}>
-                      Mark all as read
-                    </button>
-                  )}
-                  <button type="button" className="notifications-close-btn" onClick={() => setShowNotifications(false)} aria-label="Close notifications" title="Close notifications">
-                    <X size={18} aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="notifications-list">
-                {notifications.length > 0 ? (
-                  notifications.map((notification) => {
-                    const NotificationIcon = NOTIFICATION_ICONS[notification.type] || BellRing;
-
-                    return (
-                      <div className="notification-item" key={notification.id}>
-                        <span className="notification-icon" aria-hidden="true"><NotificationIcon size={17} /></span>
-                        <div className="notification-content">
-                          <p><strong>{notification.title}</strong>{notification.detail && ` — ${notification.detail}`}</p>
-                          <small>{notification.time}</small>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="notifications-empty" role="status">
-                    <span aria-hidden="true">🎉</span>
-                    <p>You&apos;re all caught up!</p>
-                    <small>No new notifications.</small>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {isSuperadmin && (
-          <button type="button" className="btn-primary topbar-primary-btn" onClick={handleNewWorkshop}>
-            + New Workshop
-          </button>
-        )}
-
-        <div className="topbar-user" title={`${displayName} — ${userRole}`}>
-          <span className="topbar-avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>
-          <span className="topbar-user-details">
-            <span className="topbar-user-label">{displayName}</span>
-            <span className="topbar-user-role">{userRole}</span>
-          </span>
-        </div>
-
-        <button type="button" className="topbar-icon-btn" onClick={handleLogout} aria-label="Log out" title="Log out">
-          <LogOut size={20} aria-hidden="true" />
-        </button>
+        <details className="account-menu">
+          <summary aria-label={`Open account menu for ${displayName}`}>
+            <span className="topbar-avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>
+            <span className="topbar-user-details"><span className="topbar-user-label">{displayName}</span><span className="topbar-user-role">{userRole}</span></span>
+          </summary>
+          <div className="account-menu-panel">
+            <div><strong>{displayName}</strong><span>{userRole}</span></div>
+            <button type="button" onClick={toggleThemeMode}>{themeMode === 'dark' ? <Sun size={18} /> : <Moon size={18} />} {themeLabel}</button>
+            <button type="button" onClick={handleLogout}><LogOut size={18} /> Log out</button>
+          </div>
+        </details>
       </div>
     </header>
   );

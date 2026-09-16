@@ -9,6 +9,51 @@ const EVENT_ERROR_MESSAGES = [
 
 export const MAX_EVENT_IMAGE_SIZE = 10 * 1024 * 1024;
 const EVENT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export const isUuid = (value) => typeof value === 'string' && UUID_PATTERN.test(value);
+
+export const isValidIsoDate = (value) => {
+  if (value === '') return true;
+  if (typeof value !== 'string') return false;
+  const match = ISO_DATE_PATTERN.exec(value);
+  if (!match) return false;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  return candidate.getUTCFullYear() === year
+    && candidate.getUTCMonth() === month - 1
+    && candidate.getUTCDate() === day;
+};
+
+export const resolveCoordinatorSelection = ({ chapterId, directoryChapterId, coordinatorUserId, coordinators = [] }) => {
+  if (!isUuid(chapterId) || chapterId !== directoryChapterId || !isUuid(coordinatorUserId)) return null;
+  return coordinators.find((coordinator) => coordinator.user_id === coordinatorUserId) || null;
+};
+
+export const buildEventRpcArgs = ({ eventId = null, event, coordinatorUserId }) => ({
+  target_event_id: eventId,
+  target_chapter_id: event.chapter_id,
+  target_coordinator_id: coordinatorUserId,
+  event_title: event.title,
+  event_type: event.type || null,
+  event_description: event.description || null,
+  event_image_url: event.image_url || null,
+  event_status_value: event.status,
+  event_date_value: event.event_date || null,
+});
+
+export const getEventValidationIssue = (error) => {
+  const details = `${error?.message || ''} ${error?.details || ''}`;
+  if (details.includes('Event title is required')) return { field: 'event-name', stage: 0, message: 'Enter an event name.' };
+  if (details.includes('Event chapter must reference an active directory location')) return { field: 'event-chapter', stage: 0, message: 'Select a valid active chapter or Volunteer Community.' };
+  if (details.includes('Coordinator must be an active approved Event Coordinator in the selected chapter')) return { field: 'event-coordinator', stage: 1, message: 'Select an active Event Coordinator assigned to this chapter.' };
+  if (details.includes('Invalid event status')) return { field: 'event-status', stage: 0, message: 'Select a valid event status.' };
+  return null;
+};
 
 export const validateEventImage = (file) => {
   if (!file || !EVENT_IMAGE_TYPES.has(file.type)) {
@@ -37,17 +82,10 @@ export const createEventRepository = (client) => ({
   },
 
   async saveEvent({ eventId = null, event, coordinatorUserId }) {
-    const { data, error } = await client.rpc('save_event_with_coordinator', {
-      target_event_id: eventId,
-      target_chapter_id: event.chapter_id,
-      target_coordinator_id: coordinatorUserId,
-      event_title: event.title,
-      event_type: event.type || null,
-      event_description: event.description || null,
-      event_image_url: event.image_url || null,
-      event_status_value: event.status,
-      event_date_value: event.event_date || null,
-    });
+    const { data, error } = await client.rpc(
+      'save_event_with_coordinator',
+      buildEventRpcArgs({ eventId, event, coordinatorUserId }),
+    );
     if (error) throw error;
     return data;
   },
