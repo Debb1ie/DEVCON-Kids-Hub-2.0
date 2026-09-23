@@ -4,6 +4,8 @@ import { useApp } from '../context/AppState';
 import { canPerform } from '../auth/permissions';
 import { processDocument, validateDocumentFile } from '../services/documentService';
 import { deleteKnowledgeDocument, listDocuments, uploadKnowledgeDocument } from '../services/ragService';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
 import './KnowledgeBase.css';
 
 const formatFileSize = (bytes) => {
@@ -58,7 +60,7 @@ export default function KnowledgeBase() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -67,7 +69,7 @@ export default function KnowledgeBase() {
     setSelectedFile(file);
     setError('');
     setSuccess('');
-  }
+  };
 
   const handleFileUpload = async () => {
     if (!selectedFile || uploading) return;
@@ -121,56 +123,79 @@ export default function KnowledgeBase() {
 
   return (
     <div className="knowledge-base-page">
-      <h1>{canManageKnowledge ? 'Knowledge Base Management' : 'Knowledge Base'}</h1>
-      <p className="subtitle">{canManageKnowledge ? 'Upload and manage documents for AI knowledge grounding' : 'Browse approved resources used by the DEVCON Kids assistant'}</p>
+      <PageHeader
+        eyebrow="Intelligence"
+        title={canManageKnowledge ? 'Knowledge Base Management' : 'Knowledge Base'}
+        description={
+          canManageKnowledge
+            ? 'Upload and manage documents for AI knowledge grounding'
+            : 'Browse approved resources used by the DEVCON Kids assistant'
+        }
+      />
 
       {error && <div className="alert alert-error" role="alert" aria-live="assertive">{error}</div>}
       {success && <div className="alert alert-success" role="status" aria-live="polite">{success}</div>}
 
-      {canManageKnowledge && <div className="upload-section">
-        <div className="upload-box">
-          <div className="upload-icon"><Upload size={32} aria-hidden="true" /></div>
-          <h3>Upload Documents</h3>
-          <p>Choose a PDF, DOCX, or TXT file to add it to the AI knowledge base.</p>
-          <input
-            id="knowledge-base-file"
-            ref={fileInputRef}
-            type="file"
-            onChange={handleFileSelect}
-            disabled={uploading}
-            accept=".pdf,.docx,.txt"
-            className="file-input"
-            aria-describedby="upload-requirements"
-          />
-          <p id="upload-requirements" className="upload-requirements">Supported formats: PDF, DOCX, TXT · Maximum file size: 50MB</p>
-          <label
-            htmlFor="knowledge-base-file"
-            className={`upload-btn select-file-btn ${uploading ? 'is-disabled' : ''}`}
-            role="button"
-            tabIndex={uploading ? -1 : 0}
-            aria-disabled={uploading}
-            onKeyDown={(event) => {
-              if (!uploading && (event.key === 'Enter' || event.key === ' ')) {
-                event.preventDefault();
-                fileInputRef.current?.click();
-              }
-            }}
-          >
-            Select File
-          </label>
-          {selectedFile && <div className="selected-file" aria-live="polite"><FileText size={20} aria-hidden="true" /><div><span>Selected file</span><strong>{selectedFile.name}</strong><small>{getFileTypeLabel(selectedFile)} · {formatFileSize(selectedFile.size)}</small></div></div>}
-          <button type="button" className="upload-btn process-upload-btn" onClick={handleFileUpload} disabled={!selectedFile || uploading}>
-            {uploading ? (
-              <>
-                <Loader size={16} className="spinner" />
-                Processing...
-              </>
-            ) : (
-              'Upload Document'
+      {canManageKnowledge && (
+        <div className="upload-section">
+          <div className="upload-box">
+            <div className="upload-icon"><Upload size={32} aria-hidden="true" /></div>
+            <h3>Upload Documents</h3>
+            <p>Choose a PDF, DOCX, or TXT file to add it to the AI knowledge base.</p>
+            <input
+              id="knowledge-base-file"
+              ref={fileInputRef}
+              type="file"
+              onChange={handleFileSelect}
+              disabled={uploading}
+              accept=".pdf,.docx,.txt"
+              className="file-input"
+              aria-describedby="upload-requirements"
+            />
+            <p id="upload-requirements" className="upload-requirements">Supported formats: PDF, DOCX, TXT · Maximum file size: 50MB</p>
+            <label
+              htmlFor="knowledge-base-file"
+              className={`upload-btn select-file-btn ${uploading ? 'is-disabled' : ''}`}
+              role="button"
+              tabIndex={uploading ? -1 : 0}
+              aria-disabled={uploading}
+              onKeyDown={(event) => {
+                if (!uploading && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+            >
+              Select File
+            </label>
+            {selectedFile && (
+              <div className="selected-file" aria-live="polite">
+                <FileText size={20} aria-hidden="true" />
+                <div>
+                  <span>Selected file</span>
+                  <strong>{selectedFile.name}</strong>
+                  <small>{getFileTypeLabel(selectedFile)} · {formatFileSize(selectedFile.size)}</small>
+                </div>
+              </div>
             )}
-          </button>
+            <button
+              type="button"
+              className="upload-btn process-upload-btn"
+              onClick={handleFileUpload}
+              disabled={!selectedFile || uploading}
+            >
+              {uploading ? (
+                <>
+                  <Loader size={16} className="spinner" />
+                  Processing...
+                </>
+              ) : (
+                'Upload Document'
+              )}
+            </button>
+          </div>
         </div>
-      </div>}
+      )}
 
       <div className="documents-section">
         <h2>Uploaded Documents ({documents.length})</h2>
@@ -181,11 +206,15 @@ export default function KnowledgeBase() {
             <p>Loading documents...</p>
           </div>
         ) : documents.length === 0 ? (
-          <div className="empty-state">
-            <FileText size={48} />
-            <p>No documents uploaded yet</p>
-            <small>Upload documents to build your AI knowledge base</small>
-          </div>
+          <EmptyState
+            icon={FileText}
+            title="No documents uploaded yet"
+            description={
+              canManageKnowledge
+                ? 'Upload documents to build your AI knowledge base.'
+                : 'No approved knowledge resources are currently available.'
+            }
+          />
         ) : (
           <div className="documents-table">
             <table>
@@ -200,7 +229,7 @@ export default function KnowledgeBase() {
                 </tr>
               </thead>
               <tbody>
-                {documents.map(doc => (
+                {documents.map((doc) => (
                   <tr key={doc.id}>
                     <td className="title-cell">
                       <span className="document-title-content">
@@ -211,14 +240,15 @@ export default function KnowledgeBase() {
                     <td>{doc.file_type.toUpperCase()}</td>
                     <td>{doc.total_chunks}</td>
                     <td>{doc.total_pages}</td>
-                    {canManageKnowledge && <td>
-                      {new Date(doc.created_at).toLocaleDateString()}
-                    </td>}
+                    {canManageKnowledge && (
+                      <td>{new Date(doc.created_at).toLocaleDateString()}</td>
+                    )}
                     <td>
                       <button
                         onClick={() => handleDeleteDocument(doc.id)}
                         className="delete-btn"
                         title="Delete document"
+                        type="button"
                       >
                         <Trash2 size={16} />
                       </button>

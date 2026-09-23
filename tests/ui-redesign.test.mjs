@@ -97,7 +97,7 @@ test('one consistent hamburger controls navigation with a 44 by 44 hit area', ()
   assert.doesNotMatch(sidebar, /PanelLeftClose|PanelLeftOpen|sidebar-toggle/);
 });
 
-test('official square lockup keeps its intrinsic ratio inside a bounded brand area', () => {
+test('official transparent mark keeps its intrinsic ratio inside a bounded brand area', () => {
   assert.match(sidebarCss, /\.brand-logo-surface img[^\n]*width: auto[^\n]*height: auto[^\n]*object-fit: contain/);
   assert.doesNotMatch(sidebarCss, /\.brand-logo-surface img[^\n]*(object-fit: cover|transform: scale)/);
 });

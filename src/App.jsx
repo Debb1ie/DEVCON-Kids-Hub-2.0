@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppState';
 import Layout from './components/Layout';
+import LoadingScreen from './components/LoadingScreen';
+import NotFound from './components/NotFound';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
@@ -25,7 +27,7 @@ import { canAccessRoute, defaultRouteForRole } from './auth/permissions';
 import './index.css';
 
 function AuthLoading() {
-  return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem' }}>Loading authentication…</div>;
+  return <LoadingScreen />;
 }
 
 function PublicOnlyRoute({ children, authenticatedDestination = '/dashboard' }) {
@@ -38,18 +40,7 @@ function ProtectedRoute({ children, route = null }) {
   const { isAuthenticated, authLoading, isPendingVolunteer, roleKey } = useApp();
 
   if (authLoading)
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-        }}
-      >
-        Loading authentication…
-      </div>
-    );
+    return <LoadingScreen />;
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -151,7 +142,7 @@ function AppRoutes() {
           <Route path="integrations" element={<ProtectedRoute route="/dashboard/integrations"><IntegrationSettings /></ProtectedRoute>} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

@@ -5,18 +5,21 @@
   --brand-orange: #ea641d;
   --brand-purple: #7f08ff;
   --brand-green: #71b406;
-  --surface-page: #f8f8fa;
+  --surface-page: #f5f2f8;
   --surface-default: #ffffff;
   --surface-elevated: #ffffff;
-  --surface-muted: #f2f1f5;
-  --text-primary: #464646;
-  --text-secondary: #66616b;
-  --text-disabled: #918c96;
-  --border-default: #ddd9e2;
-  --border-strong: #aaa4b0;
-  --action-primary: #6200ea;
-  --action-primary-hover: #512da8;
-  --action-primary-pressed: #4527a0;
+  --surface-muted: #eee9f2;
+  --surface-subtle: #faf8fc;
+  --text-primary: #28242f;
+  --text-secondary: #655e70;
+  --text-disabled: #857e8e;
+  --text-on-accent: #ffffff;
+  --border-default: #d9d2e1;
+  --border-strong: #9a90a3;
+  --border-danger: #d92d20;
+  --action-primary: #7f08ff;
+  --action-primary-hover: #6500cc;
+  --action-primary-pressed: #5200a8;
   --action-secondary: #ffffff;
   --state-success: #33691e;
   --state-success-surface: #f1f8e9;
@@ -24,10 +27,12 @@
   --state-warning-surface: #fff3e0;
   --state-danger: #b42318;
   --state-danger-surface: #fff1f0;
+  --state-danger-hover: #912018;
   --state-information: #4527a0;
   --state-information-surface: #ede7f6;
   --focus-ring: #7f08ff;
   --selected-navigation: #ede7f6;
+  --accent-subtle: #f1e8fb;
   --disabled-control: #e5e2e8;
   --overlay: rgba(24, 23, 27, 0.72);
   --skeleton: #e8e5eb;
@@ -52,6 +57,9 @@
   --bg-card: var(--surface-default);
   --bg-sidebar: var(--surface-default);
   --bg-surface: var(--surface-muted);
+  --surface-card: var(--surface-default);
+  --card-bg: var(--surface-default);
+  --border-color: var(--border-default);
   --text-main: var(--text-primary);
   --text-muted: var(--text-secondary);
   --primary-purple: var(--action-primary);
@@ -65,30 +73,84 @@
 }
 
 body.dark-mode {
-  --surface-page: #18171b;
-  --surface-default: #222126;
-  --surface-elevated: #2b2930;
-  --surface-muted: #302e35;
-  --text-primary: #f7f6f8;
-  --text-secondary: #c8c4cc;
-  --text-disabled: #817c86;
-  --border-default: #46424b;
-  --border-strong: #6a6470;
-  --action-primary: #b388ff;
-  --action-primary-hover: #d1c4e9;
-  --action-primary-pressed: #9575cd;
-  --action-secondary: #2b2930;
+  --surface-page: #19151f;
+  --surface-default: #241f2b;
+  --surface-elevated: #2d2735;
+  --surface-muted: #352e3d;
+  --surface-subtle: #2a2431;
+  --text-primary: #f8f5fa;
+  --text-secondary: #c9c1d1;
+  --text-disabled: #8e8498;
+  --text-on-accent: #ffffff;
+  --border-default: #4b4254;
+  --border-strong: #756a7f;
+  --border-danger: #f97066;
+  --action-primary: #c49aff;
+  --action-primary-hover: #d8bdff;
+  --action-primary-pressed: #a66cff;
+  --action-secondary: #2d2735;
   --state-success: #aed581;
   --state-success-surface: #26371f;
   --state-warning: #ffb74d;
   --state-warning-surface: #402919;
   --state-danger: #fda29b;
   --state-danger-surface: #402221;
+  --state-danger-hover: #ffb4ad;
   --state-information: #d1c4e9;
   --state-information-surface: #35284a;
-  --focus-ring: #d1c4e9;
-  --selected-navigation: #4527a0;
+  --focus-ring: #c49aff;
+  --selected-navigation: #48266b;
+  --accent-subtle: #3c2852;
   --disabled-control: #3b3840;
   --overlay: rgba(0, 0, 0, 0.78);
   --skeleton: #39363e;
+  /* Rebind compatibility aliases in the active theme scope. Custom-property
+     aliases computed on :root otherwise retain their light-theme values. */
+  --bg-main: var(--surface-page);
+  --bg-card: var(--surface-default);
+  --bg-sidebar: var(--surface-default);
+  --bg-surface: var(--surface-muted);
+  --surface-card: var(--surface-default);
+  --card-bg: var(--surface-default);
+  --border-color: var(--border-default);
+  --text-main: var(--text-primary);
+  --text-muted: var(--text-secondary);
+  --primary-purple: var(--action-primary);
+  --primary-purple-dark: var(--action-primary-hover);
+  --accent-green: var(--brand-green);
+  --accent-yellow: var(--brand-yellow);
+  --accent-orange: var(--brand-orange);
+  --success: var(--state-success);
+  --warning: var(--state-warning);
+  --error: var(--state-danger);
+}
+
+/* =============================================================
+   Alias tokens — derived from the brand kit above.
+   Page CSS must reference these; do not add raw hex values.
+   ============================================================= */
+:root {
+  /* Motion */
+  --transition-fast: 0.15s ease-in-out;
+  --transition-normal: 0.3s ease-in-out;
+
+  /* Shadow scale */
+  --shadow-sm: 0 1px 2px rgba(24, 23, 27, 0.06);
+  --shadow-md: 0 4px 12px rgba(24, 23, 27, 0.10);
+  --shadow-lg: 0 10px 28px rgba(24, 23, 27, 0.14);
+
+  /* Radius shortcuts (map to named radii above) */
+  --border-radius-sm: var(--radius-control);
+  --border-radius-md: var(--radius-panel);
+  --border-radius-lg: var(--radius-dialog);
+
+  /* Brand gradient (uses brand-purple + deep pressed purple) */
+  --gradient-purple: linear-gradient(135deg, var(--brand-purple), var(--action-primary-pressed));
+
+  /* Purple range (deepPurple scale from tokens.json) */
+  --primary-purple-light: #b388ff;   /* deepPurple A100 */
+
+  /* Green scale extras (lightGreen from tokens.json) */
+  --accent-green-dark:  #558b2f;     /* lightGreen 800  */
+  --accent-green-light: #aed581;     /* lightGreen 300  */
 }

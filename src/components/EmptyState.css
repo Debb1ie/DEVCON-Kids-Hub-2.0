@@ -1,0 +1,82 @@
+/* =========================================================
+   EmptyState — reusable per-section empty data state
+   Uses: src/styles/tokens.css custom properties only.
+   ========================================================= */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+  border-radius: var(--radius-panel);
+}
+
+/* Compact variant for inline tables / panels */
+.empty-state--sm {
+  padding: var(--space-6) var(--space-4);
+  gap: var(--space-2);
+}
+
+/* ── Icon badge ─────────────────────────────────────────────── */
+
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  border-radius: var(--radius-panel);
+}
+
+.empty-state--sm .empty-state-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+/* ── Copy ───────────────────────────────────────────────────── */
+
+.empty-state-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 24rem;
+}
+
+.empty-state-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.empty-state--sm .empty-state-title {
+  font-size: 0.875rem;
+}
+
+.empty-state-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.empty-state--sm .empty-state-description {
+  font-size: 0.8125rem;
+}
+
+/* ── Actions ────────────────────────────────────────────────── */
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}

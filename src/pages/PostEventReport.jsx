@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, FileText, Image, Loader2, Pencil, Plus, Save, Trash2, UploadCloud } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ExternalLink, FileText, Image, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import { postEventReportRepository, validateReportFile } from '../services/postEventReportService';
+import { reportAutomationService } from '../services/reportAutomationService';
+import PageHeader from '../components/PageHeader';
 import './PostEventReport.css';
 
 const STEPS = ['General Information', 'Attendance', 'Finance', 'Impact and Documentation', 'Review and Submit'];
@@ -11,7 +13,7 @@ const LABELS = { draft: 'Draft', submitted: 'Submitted', needs_revision: 'Needs 
 const money = (value) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0);
 
 export default function PostEventReport() {
-  const { eventsList = [], isAdmin, user } = useApp();
+  const { eventsList = [], isAdmin, user, roleKey } = useApp();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(EMPTY);
   const [reportId, setReportId] = useState(null);
@@ -24,6 +26,7 @@ export default function PostEventReport() {
   const [errors, setErrors] = useState({});
   const [notice, setNotice] = useState('Select an event to load or create its local report.');
   const [busy, setBusy] = useState(false);
+  const [automation, setAutomation] = useState(null);
   const fileInput = useRef(null);
   const editable = status === 'draft' || status === 'needs_revision';
   const expenses = useMemo(() => transactions.reduce((sum, item) => sum + Number(item.amount || 0), 0), [transactions]);
@@ -33,7 +36,7 @@ export default function PostEventReport() {
 
   const loadEvent = async (eventId) => {
     const event = eventsList.find((item) => String(item.id) === eventId);
-    if (!event) { setForm(EMPTY); setReportId(null); setTransactions([]); setFiles([]); return; }
+    if (!event) { setForm(EMPTY); setReportId(null); setTransactions([]); setFiles([]); setAutomation(null); return; }
     setBusy(true); setNotice('Loading report…');
     try {
       const data = await postEventReportRepository.loadByEvent(event.id);
@@ -42,6 +45,7 @@ export default function PostEventReport() {
       setReportId(report?.id || null); setStatus(report?.status || 'draft');
       setTransactions((data?.transactions || []).map((item) => ({ id: item.id, description: item.description, category: item.expense_category, amount: Number(item.amount), persisted: true })));
       setFiles((data?.attachments || []).map((item) => ({ ...item, persisted: true, name: item.file_name, type: item.file_type, size: item.file_size })));
+      setAutomation(report?.id ? await reportAutomationService.load(report.id) : null);
       setNotice(data ? 'Report loaded from local Supabase.' : 'No report exists yet. Save to create a draft.');
     } catch (error) { setNotice(error.message); }
     finally { setBusy(false); }
@@ -105,11 +109,27 @@ export default function PostEventReport() {
 
   const review = async (action) => {
     const note = window.prompt(action === 'revision' ? 'Reason for revision:' : 'Optional approval notes:'); if (action === 'revision' && !note?.trim()) return;
-    setBusy(true); try { const updated = action === 'revision' ? await postEventReportRepository.requestRevision(reportId, note.trim()) : await postEventReportRepository.approve(reportId, note?.trim() || null); setStatus(updated.status); setNotice(action === 'revision' ? 'Revision requested.' : 'Report approved.'); } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+    setBusy(true); try { const updated = action === 'revision' ? await postEventReportRepository.requestRevision(reportId, note.trim()) : await postEventReportRepository.approve(reportId, note?.trim() || null); setStatus(updated.status); setAutomation(updated.status === 'approved' ? await reportAutomationService.load(reportId) : null); setNotice(action === 'revision' ? 'Revision requested.' : 'Report approved and queued for export.'); } catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  };
+
+  const exportReport = async () => {
+    setBusy(true); setNotice(automation?.status === 'failed' ? 'Retrying report export…' : 'Exporting approved report…');
+    try { const result = await reportAutomationService.export(reportId); setAutomation(result); setNotice(result?.status === 'completed' ? 'Report export completed.' : 'Report export is processing.'); }
+    catch (error) { setNotice(error.message); try { setAutomation(await reportAutomationService.load(reportId)); } catch { /* status remains visible */ } }
+    finally { setBusy(false); }
   };
 
   return <div className="post-report-page">
-    <header className="report-hero"><div><p className="report-eyebrow"><FileText size={15}/> Event reporting</p><h1>Post Event Report</h1><p>Capture attendance, finances, impact, and private supporting documentation.</p></div><span className={`report-status status-${status.replace('_','-')}`}>{LABELS[status]}</span></header>
+    <PageHeader
+      eyebrow="Event Reporting"
+      title="Post Event Report"
+      description="Capture attendance, finances, impact, and private supporting documentation."
+      actions={
+        <span className={`report-status status-${status.replace('_', '-')}`}>
+          {LABELS[status]}
+        </span>
+      }
+    />
     <nav className="report-steps" aria-label="Report progress">{STEPS.map((label,index)=><button key={label} type="button" className={index===step?'active':index<step?'complete':''} onClick={()=>index<=step&&setStep(index)}><span>{index<step?<Check size={15}/>:index+1}</span><strong>{label}</strong></button>)}</nav>
     {notice&&<div className="report-notice" role="status">{busy&&<Loader2 className="spin" size={16}/>} {notice}</div>}
     <main className="report-panel card"><div className="report-panel-heading"><div><span>Step {step+1} of 5</span><h2>{STEPS[step]}</h2></div><button className="btn-secondary" type="button" disabled={busy||!editable} onClick={persistDraft}><Save size={17}/> Save draft</button></div>
@@ -117,7 +137,7 @@ export default function PostEventReport() {
       {step===1&&<Attendance form={form} update={update} errors={errors} editable={editable}/>}
       {step===2&&<Finance form={form} update={update} errors={errors} editable={editable} transaction={transaction} setTransaction={setTransaction} addTransaction={addTransaction} transactions={transactions} setTransactions={setTransactions} edit={(item)=>{setTransaction({description:item.description,category:item.category,amount:String(item.amount)});setEditingTransaction(item.id);}} expenses={expenses} balance={balance}/>}
       {step===3&&<Impact form={form} update={update} errors={errors} editable={editable} files={files} category={fileCategory} setCategory={setFileCategory} fileInput={fileInput} chooseFiles={chooseFiles} uploadFiles={uploadFiles} preview={preview} removeFile={removeFile} busy={busy}/>}
-      {step===4&&<ReviewPage form={form} expenses={expenses} balance={balance} transactions={transactions} files={files} setStep={setStep} status={status} isAdmin={isAdmin} review={review}/>}
+      {step===4&&<ReviewPage form={form} expenses={expenses} balance={balance} transactions={transactions} files={files} setStep={setStep} status={status} isAdmin={isAdmin} review={review} automation={automation} exportReport={exportReport} busy={busy} canExport={['super_admin','admin','chapter_coordinator','event_coordinator'].includes(roleKey)}/>}
       <footer className="report-actions"><button type="button" className="btn-secondary" disabled={step===0||busy} onClick={()=>setStep((current)=>current-1)}><ChevronLeft size={17}/> Back</button><span>Required fields are marked *</span>{step<4?<button type="button" className="btn-primary" disabled={busy} onClick={goNext}>Continue <ChevronRight size={17}/></button>:editable&&<button type="button" className="btn-primary" disabled={busy} onClick={submit}><Check size={17}/> {status==='needs_revision'?'Resubmit report':'Submit report'}</button>}</footer>
     </main>
   </div>;
@@ -129,4 +149,4 @@ const Attendance=({form,update,errors,editable})=><div className="report-grid">{
 const Finance=({form,update,errors,editable,transaction,setTransaction,addTransaction,transactions,setTransactions,edit,expenses,balance})=><div className="finance-layout"><div className="report-grid"><Field label="Approved budget" required error={errors.budget}><input disabled={!editable} type="number" min="0" step="0.01" value={form.budget} onChange={(e)=>update('budget',e.target.value)}/></Field></div><section className="transaction-card"><div className="section-title"><div><h3>Expense transactions</h3><p>Add each expense manually.</p></div></div><div className="transaction-form"><input disabled={!editable} placeholder="Description" value={transaction.description} onChange={(e)=>setTransaction({...transaction,description:e.target.value})}/><select disabled={!editable} value={transaction.category} onChange={(e)=>setTransaction({...transaction,category:e.target.value})}><option value="">Category</option>{['venue','food','transport','materials','other'].map((item)=><option key={item}>{item}</option>)}</select><input disabled={!editable} type="number" min="0.01" step="0.01" placeholder="Amount" value={transaction.amount} onChange={(e)=>setTransaction({...transaction,amount:e.target.value})}/><button disabled={!editable} type="button" className="btn-primary" onClick={addTransaction}><Plus size={17}/> Add/update</button></div>{transactions.length===0?<div className="empty-state">No expenses added yet.</div>:<div className="transaction-list">{transactions.map((item)=><div key={item.id}><span><strong>{item.description}</strong><small>{item.category}</small></span><b>{money(item.amount)}</b><button disabled={!editable} type="button" onClick={()=>edit(item)}><Pencil size={16}/></button><button disabled={!editable} type="button" onClick={()=>setTransactions((current)=>current.filter((entry)=>entry.id!==item.id))}><Trash2 size={16}/></button></div>)}</div>}</section><div className="finance-summary"><span>Budget<strong>{money(form.budget)}</strong></span><span>Expenses<strong>{money(expenses)}</strong></span><span className={balance<0?'negative':''}>Remaining<strong>{money(balance)}</strong></span></div></div>;
 const Impact=({form,update,errors,editable,files,category,setCategory,fileInput,chooseFiles,uploadFiles,preview,removeFile,busy})=><div className="impact-layout"><div className="report-grid">{[['keyLearnings','Key learnings'],['challenges','Challenges'],['communityImpact','Community impact'],['recommendations','Recommendations']].map(([key,label])=><Field key={key} label={label} required={key==='keyLearnings'||key==='communityImpact'} error={errors[key]}><textarea disabled={!editable} rows="4" value={form[key]} onChange={(e)=>update(key,e.target.value)}/></Field>)}<Field label="Participant satisfaction"><select disabled={!editable} value={form.satisfaction} onChange={(e)=>update('satisfaction',e.target.value)}><option value="">Not collected</option>{['excellent','good','fair','poor'].map((item)=><option key={item}>{item}</option>)}</select></Field></div><section className="attachment-section"><div className="section-title"><div><h3>Private attachments</h3><p>Upload intents authorize each path before permanent metadata is stored.</p></div><div className="attachment-controls"><select disabled={!editable} value={category} onChange={(e)=>setCategory(e.target.value)}><option value="event_photo">Event photo</option><option value="event_documentation">Documentation</option><option value="attendance">Attendance</option><option value="finance_support">Finance receipt</option><option value="impact_report">Impact report</option></select><button disabled={!editable} type="button" className="btn-secondary" onClick={()=>fileInput.current?.click()}><UploadCloud size={17}/> Choose</button><input ref={fileInput} hidden multiple type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={chooseFiles}/><button disabled={!editable||busy||!files.some((item)=>!item.persisted)} type="button" className="btn-primary" onClick={uploadFiles}>Upload staged</button></div></div>{files.length===0?<div className="empty-state"><Image size={26}/> No attachments yet.</div>:<div className="file-grid">{files.map((item)=><article key={item.id}>{item.localUrl&&item.type.startsWith('image/')?<img src={item.localUrl} alt=""/>:<FileText size={30}/>}<div><strong>{item.name}</strong><small>{item.category} · {(item.size/1024).toFixed(1)} KB</small></div><button type="button" onClick={()=>preview(item)}>Preview</button><button disabled={!editable} type="button" onClick={()=>removeFile(item)}><Trash2 size={16}/></button></article>)}</div>}</section></div>;
 const Review=({title,items,onEdit})=><section className="review-card"><div className="section-title"><h3>{title}</h3><button type="button" onClick={onEdit}><Pencil size={15}/> View</button></div><dl>{items.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value||'Not provided'}</dd></div>)}</dl></section>;
-const ReviewPage=({form,expenses,balance,transactions,files,setStep,status,isAdmin,review})=><div className="review-layout"><div className="review-banner"><Check size={22}/><div><strong>Review before submission</strong><p>Submission becomes read-only until an authorized reviewer requests revision.</p></div></div><Review title="General information" items={[["Event",form.eventName],["Chapter",form.chapter],["Date",form.eventDate],["Venue",form.venue]]} onEdit={()=>setStep(0)}/><Review title="Attendance" items={[["Registered",form.registered],["Attended",form.attended],["Children",form.children],["Volunteers",form.volunteers]]} onEdit={()=>setStep(1)}/><Review title="Finance" items={[["Budget",money(form.budget)],["Expenses",money(expenses)],["Remaining",money(balance)],["Transactions",transactions.length]]} onEdit={()=>setStep(2)}/><Review title="Impact and documentation" items={[["Community impact",form.communityImpact],["Key learnings",form.keyLearnings],["Attachments",files.length]]} onEdit={()=>setStep(3)}/><section className="approval-card"><div><strong>Admin review status: {LABELS[status]}</strong><p>Submitters cannot approve their own reports.</p></div>{isAdmin&&status==='submitted'&&<div className="review-actions"><button className="btn-secondary" type="button" onClick={()=>review('revision')}>Request revision</button><button className="btn-primary" type="button" onClick={()=>review('approve')}>Approve</button></div>}</section></div>;
+const ReviewPage=({form,expenses,balance,transactions,files,setStep,status,isAdmin,review,automation,exportReport,busy,canExport})=><div className="review-layout"><div className="review-banner"><Check size={22}/><div><strong>Review before submission</strong><p>Submission becomes read-only until an authorized reviewer requests revision.</p></div></div><Review title="General information" items={[["Event",form.eventName],["Chapter",form.chapter],["Date",form.eventDate],["Venue",form.venue]]} onEdit={()=>setStep(0)}/><Review title="Attendance" items={[["Registered",form.registered],["Attended",form.attended],["Children",form.children],["Volunteers",form.volunteers]]} onEdit={()=>setStep(1)}/><Review title="Finance" items={[["Budget",money(form.budget)],["Expenses",money(expenses)],["Remaining",money(balance)],["Transactions",transactions.length]]} onEdit={()=>setStep(2)}/><Review title="Impact and documentation" items={[["Community impact",form.communityImpact],["Key learnings",form.keyLearnings],["Attachments",files.length]]} onEdit={()=>setStep(3)}/><section className="approval-card"><div><strong>Admin review status: {LABELS[status]}</strong><p>Submitters cannot approve their own reports.</p></div>{isAdmin&&status==='submitted'&&<div className="review-actions"><button className="btn-secondary" type="button" onClick={()=>review('revision')}>Request revision</button><button className="btn-primary" type="button" onClick={()=>review('approve')}>Approve</button></div>}</section>{status==='approved'&&canExport&&<section className={`automation-card automation-${automation?.status||'pending'}`}><div><strong>Report export: {(automation?.status||'pending').replace('_',' ')}</strong><p>{automation?.safe_error_message||'Approved report data and private attachments are exported through the secured server workflow.'}</p>{automation?.attempt_count>0&&<small>Attempts: {automation.attempt_count} of 5</small>}</div><div className="review-actions">{automation?.drive_folder_url&&<a className="btn-secondary" href={automation.drive_folder_url} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Drive folder</a>}{automation?.final_export_url&&<a className="btn-secondary" href={automation.final_export_url} target="_blank" rel="noreferrer"><FileText size={16}/> Final export</a>}{automation?.status!=='completed'&&<button className="btn-primary" type="button" disabled={busy||automation?.status==='processing'||automation?.attempt_count>=5} onClick={exportReport}><RefreshCw className={busy?'spin':''} size={16}/>{automation?.status==='failed'?'Retry export':'Export approved report'}</button>}</div></section>}</div>;

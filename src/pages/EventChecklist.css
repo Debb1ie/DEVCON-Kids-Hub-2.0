@@ -1,0 +1,204 @@
+.event-checklist-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+.checklist-selector-card {
+  background: var(--surface-default);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-panel);
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.checklist-selector-card h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary);
+}
+
+.checklist-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-default);
+  background: var(--surface-default);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.checklist-select:focus {
+  border-color: var(--brand-purple);
+  box-shadow: 0 0 0 3px rgba(127, 8, 255, 0.15);
+}
+
+.checklist-generate-btn {
+  margin-top: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checklist-tasks-card {
+  background: var(--surface-default);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-panel);
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.checklist-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.checklist-header-row h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.checklist-source-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brand-purple);
+  background: var(--state-information-surface);
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 8, 255, 0.2);
+}
+
+.checklist-progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-default);
+}
+
+.checklist-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--brand-purple);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.checklist-phase-group {
+  margin-bottom: 1.5rem;
+}
+
+.checklist-phase-title {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.5rem 0;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.checklist-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease;
+}
+
+.checklist-item-row:hover {
+  background: var(--surface-muted);
+}
+
+.checklist-checkbox {
+  width: 19px;
+  height: 19px;
+  accent-color: var(--brand-purple);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.checklist-task-label {
+  flex: 1;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+  transition: color 0.15s ease;
+}
+
+.checklist-task-label.done {
+  text-decoration: line-through;
+  color: var(--text-disabled);
+}
+
+.checklist-item-delete {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.checklist-item-delete:hover {
+  color: var(--state-danger);
+  background: var(--state-danger-surface);
+}
+
+.checklist-manual-add {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.checklist-manual-input {
+  flex: 1;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-default);
+  background: var(--surface-default);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.checklist-manual-input:focus {
+  border-color: var(--brand-purple);
+  box-shadow: 0 0 0 3px rgba(127, 8, 255, 0.15);
+}
+
+.checklist-error {
+  color: var(--state-danger);
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .checklist-manual-add {
+    flex-direction: column;
+  }
+
+  .checklist-manual-add button {
+    width: 100%;
+  }
+}

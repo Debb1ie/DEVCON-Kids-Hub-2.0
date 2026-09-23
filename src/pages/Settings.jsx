@@ -1,5 +1,6 @@
 import { useApp } from '../context/AppState';
-import { Palette, Sparkles, BellRing, RefreshCcw, MoonStar, SunMedium, PanelTop } from 'lucide-react';
+import { Sparkles, BellRing, RefreshCcw, MoonStar, SunMedium, PanelTop } from 'lucide-react';
+import PageHeader from '../components/PageHeader';
 import './Settings.css';
 
 export default function Settings() {
@@ -22,26 +23,23 @@ export default function Settings() {
 
   return (
     <div className="settings-page">
-      <div className="settings-page-hero card">
-        <div>
-          <div className="eyebrow">
-            <Palette size={14} /> Workspace settings
+      <PageHeader
+        eyebrow="Workspace settings"
+        title="Dashboard Settings"
+        description="Adjust the dashboard layout, theme, and the controls that stay visible by default."
+        actions={
+          <div className="settings-page-hero-meta">
+            <div className="meta-pill">
+              <Sparkles size={16} />
+              <span>{activeSettingsCount} dashboard options active</span>
+            </div>
+            <div className="meta-pill">
+              <BellRing size={16} />
+              <span>{user?.role || 'Visitor'} access</span>
+            </div>
           </div>
-          <h1>Dashboard Settings</h1>
-          <p>Adjust the dashboard layout, theme, and the controls that stay visible by default.</p>
-        </div>
-
-        <div className="settings-page-hero-meta">
-          <div className="meta-pill">
-            <Sparkles size={16} />
-            <span>{activeSettingsCount} dashboard options active</span>
-          </div>
-          <div className="meta-pill">
-            <BellRing size={16} />
-            <span>{user?.role || 'Visitor'} access</span>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="settings-page-grid">
         <section className="card settings-panel">
@@ -100,24 +98,11 @@ export default function Settings() {
 
             <label className="toggle-row">
               <div>
-                <strong>Show growth chart</strong>
-                <span>Keep the impact chart visible on the dashboard.</span>
+                <strong>Chapter overview</strong>
+                <span>Keep chapter location metrics visible.</span>
               </div>
               <input
-                id="setting-growth-chart"
-                type="checkbox"
-                checked={dashboardSettings.showGrowthChart}
-                onChange={(e) => updateDashboardSetting('showGrowthChart', e.target.checked)}
-              />
-            </label>
-
-            <label className="toggle-row">
-              <div>
-                <strong>Show chapter overview</strong>
-                <span>Display the chapter performance list.</span>
-              </div>
-              <input
-                id="setting-chapter-overview"
+                id="setting-show-chapters"
                 type="checkbox"
                 checked={dashboardSettings.showChapterOverview}
                 onChange={(e) => updateDashboardSetting('showChapterOverview', e.target.checked)}
@@ -126,11 +111,24 @@ export default function Settings() {
 
             <label className="toggle-row">
               <div>
-                <strong>Show course spotlight</strong>
-                <span>Keep the Hour of AI spotlight visible.</span>
+                <strong>Growth chart</strong>
+                <span>Show cumulative program reach over time.</span>
               </div>
               <input
-                id="setting-course-spotlight"
+                id="setting-show-growth"
+                type="checkbox"
+                checked={dashboardSettings.showGrowthChart}
+                onChange={(e) => updateDashboardSetting('showGrowthChart', e.target.checked)}
+              />
+            </label>
+
+            <label className="toggle-row">
+              <div>
+                <strong>Featured workshops</strong>
+                <span>Keep spotlight programs on the dashboard.</span>
+              </div>
+              <input
+                id="setting-show-spotlight"
                 type="checkbox"
                 checked={dashboardSettings.showCourseSpotlight}
                 onChange={(e) => updateDashboardSetting('showCourseSpotlight', e.target.checked)}
@@ -139,11 +137,11 @@ export default function Settings() {
 
             <label className="toggle-row">
               <div>
-                <strong>Show quick actions</strong>
-                <span>Keep the dashboard action buttons visible.</span>
+                <strong>Quick actions</strong>
+                <span>Direct navigation to high-frequency admin actions.</span>
               </div>
               <input
-                id="setting-quick-actions"
+                id="setting-show-actions"
                 type="checkbox"
                 checked={dashboardSettings.showQuickActions}
                 onChange={(e) => updateDashboardSetting('showQuickActions', e.target.checked)}
@@ -154,22 +152,43 @@ export default function Settings() {
 
         <section className="card settings-panel">
           <div className="section-head">
-            <h2>Live Summary</h2>
-            <span className="section-note">Saved locally</span>
+            <h2>Summary &amp; Reset</h2>
+            <span className="section-note">Safe to restore</span>
           </div>
 
           <div className="summary-list">
-            <div><strong>Theme</strong><span>{themeMode}</span></div>
-            <div><strong>Compact cards</strong><span>{dashboardSettings.compactCards ? 'On' : 'Off'}</span></div>
-            <div><strong>Growth chart</strong><span>{dashboardSettings.showGrowthChart ? 'Visible' : 'Hidden'}</span></div>
-            <div><strong>Chapter overview</strong><span>{dashboardSettings.showChapterOverview ? 'Visible' : 'Hidden'}</span></div>
-            <div><strong>Course spotlight</strong><span>{dashboardSettings.showCourseSpotlight ? 'Visible' : 'Hidden'}</span></div>
-            <div><strong>Quick actions</strong><span>{dashboardSettings.showQuickActions ? 'Visible' : 'Hidden'}</span></div>
+            <div className="summary-row">
+              <span>Selected theme</span>
+              <strong>{themeMode === 'dark' ? 'Dark' : 'Light'}</strong>
+            </div>
+            <div className="summary-row">
+              <span>Compact cards</span>
+              <strong>{dashboardSettings.compactCards ? 'Enabled' : 'Disabled'}</strong>
+            </div>
+            <div className="summary-row">
+              <span>Chapter cards</span>
+              <strong>{dashboardSettings.showChapterOverview ? 'Visible' : 'Hidden'}</strong>
+            </div>
+            <div className="summary-row">
+              <span>Growth chart</span>
+              <strong>{dashboardSettings.showGrowthChart ? 'Visible' : 'Hidden'}</strong>
+            </div>
+            <div className="summary-row">
+              <span>Featured workshops</span>
+              <strong>{dashboardSettings.showCourseSpotlight ? 'Visible' : 'Hidden'}</strong>
+            </div>
+            <div className="summary-row">
+              <span>Quick actions</span>
+              <strong>{dashboardSettings.showQuickActions ? 'Visible' : 'Hidden'}</strong>
+            </div>
           </div>
 
-          <button type="button" className="btn-secondary reset-dashboard-btn" onClick={resetDashboardSettings}>
-            <RefreshCcw size={16} />
-            Reset dashboard defaults
+          <button
+            type="button"
+            className="btn-secondary reset-button"
+            onClick={resetDashboardSettings}
+          >
+            <RefreshCcw size={16} /> Reset dashboard to default
           </button>
         </section>
       </div>

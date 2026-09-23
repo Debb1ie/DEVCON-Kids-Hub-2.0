@@ -945,7 +945,7 @@ export default function Events() {
                   <img src={event.image_url} alt={event.title} />
                 ) : (
                   <div className="event-placeholder">
-                    <ImageIcon size={34} color="#9ca3af" />
+                    <ImageIcon size={34} />
                     <span>Image holder</span>
                   </div>
                 )}
@@ -998,7 +998,7 @@ export default function Events() {
 
           {filteredEvents.length === 0 && (
             <div className="empty-state card" style={{ gridColumn: '1 / -1' }}>
-              <CalendarDays size={48} color="#9ca3af" style={{ margin: '0 auto 1rem' }} />
+              <CalendarDays size={48} style={{ margin: '0 auto 1rem' }} />
               <h3>{searchTerm ? 'No events match your search.' : 'No events have been created yet.'}</h3>
               <p className="text-muted">{searchTerm ? 'Try another keyword or clear your search.' : 'Create Hour of AI or another codecamp to generate its folder blueprint.'}</p>
               {searchTerm && <button type="button" className="btn-secondary" onClick={() => setSearchTerm('')}>Clear Search</button>}

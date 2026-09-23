@@ -91,13 +91,12 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   };
 
   // Suggested prompts based on context
-  const suggestedPrompts = [
-    'Tell me about DEVCON Kids mission',
-    'What can the dashboard pages do?',
-    'How do I onboard a new volunteer?',
-    'What is the process for creating an event?',
-    'What are the volunteer guidelines?'
-  ];
+  const roleKey = user?.roleKey || 'pending_volunteer';
+  const suggestedPrompts = roleKey === 'volunteer'
+    ? ['Show my recent events.', 'Explain how Post Event Reports work.', 'What are the volunteer guidelines?']
+    : roleKey === 'event_coordinator'
+      ? ['Show my recent events.', 'Which Post Event Reports are still incomplete?', 'Summarize approved event impact.']
+      : ['Which Post Event Reports are still incomplete?', 'Summarize approved event impact.', 'How many learners were reported this month?', 'Explain how Post Event Reports work.'];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -317,9 +316,9 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
       {msg.citations && msg.citations.length > 0 && (!msg.confidence || msg.confidence.level === 'high' || msg.confidence.level === 'medium') && (
         <div className="message-citations">
           <strong>Sources:</strong>
-          {[...new Map(msg.citations.map(c => [c.title, c])).values()].map((c, idx) => (
-            <div key={c.documentId || idx} className="citation">
-              [{idx + 1}] {c.title}
+          {[...new Map(msg.citations.map(c => [`${c.type || ''}:${c.id || c.documentId || c.title}`, c])).values()].map((c, idx) => (
+            <div key={c.id || c.documentId || idx} className="citation">
+              {c.route ? <a href={c.route}>[{idx + 1}] {c.title}</a> : <span>[{idx + 1}] {c.title}{c.pageNumber ? `, page ${c.pageNumber}` : ''}</span>}
             </div>
           ))}
         </div>
@@ -419,7 +418,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           aria-label="Message the DEVCON Kids AI assistant"
           type="text"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => setInput(e.target.value.slice(0, 500))}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
           placeholder="Ask me anything..."
           disabled={loading}

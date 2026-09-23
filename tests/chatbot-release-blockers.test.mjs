@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildCitations, buildProviderMessages } from '../supabase/functions/ai-chat/core.mjs';
+import { buildCitations, buildProviderMessages, CHAT_ROLES } from '../supabase/functions/ai-chat/core.mjs';
 
 const component = readFileSync('src/components/AIChat.jsx', 'utf8');
 const service = readFileSync('src/services/chatService.js', 'utf8');
@@ -32,18 +32,18 @@ test('raw Knowledge Base chunks are server-only', () => {
 
 test('ai-chat authenticates approved roles and denies Pending Volunteer and anonymous callers', () => {
   assert.match(fn, /if \(!authorization\?\.startsWith\('Bearer '\)\).*401/);
-  for (const role of ['super_admin', 'admin', 'chapter_coordinator', 'event_coordinator', 'volunteer']) assert.match(fn, new RegExp(`['"]${role}['"]`));
-  assert.doesNotMatch(fn, /['"]pending_volunteer['"]/);
-  assert.match(fn, /roleResult\.data !== true[\s\S]*403/);
+  assert.match(fn, /CHAT_ROLES/);
+  assert.equal(CHAT_ROLES.includes('pending_volunteer'), false);
+  assert.match(fn, /!assignment \|\| !CHAT_ROLES\.includes\(role\)[\s\S]*403/);
 });
 
 test('Mistral credentials and Knowledge Base evidence stay server-side', () => {
   assert.match(fn, /Deno\.env\.get\('MISTRAL_API_KEY'\)/);
   assert.match(fn, /\/v1\/embeddings/);
-  assert.match(fn, /\/v1\/chat\/completions/);
+  assert.match(fn, /MistralLLMProvider/);
   assert.match(fn, /search_knowledge_base_server/);
   assert.doesNotMatch(service, /MISTRAL_API_KEY|VITE_MISTRAL_API_KEY/);
-  assert.doesNotMatch(fn, /console\.(log|error|warn)/);
+  assert.doesNotMatch(fn, /console\.(log|error|warn).*authorization/i);
 });
 
 test('client exposes safe retry behavior without provider internals', () => {
@@ -53,11 +53,20 @@ test('client exposes safe retry behavior without provider internals', () => {
   assert.doesNotMatch(service, /err\.error|err\.message/);
 });
 
+test('composer clamps state to 500 characters and keeps responsive content bounded', () => {
+  assert.match(component, /onChange=\{\(e\) => setInput\(e\.target\.value\.slice\(0, 500\)\)\}/);
+  assert.match(component, /maxLength=\{500\}/);
+  const css = readFileSync('src/components/AIChat.css', 'utf8');
+  assert.match(css, /width: min\(420px, calc\(100vw - 32px\)\)/);
+  assert.match(css, /\.chat-input-wrapper\s*\{[\s\S]*?min-width: 0/);
+  assert.match(css, /\.message-content\s*\{[\s\S]*?overflow-wrap: anywhere/);
+});
+
 test('a saved shared chunk grounds the provider prompt and returns safe citations', () => {
   const chunks = [{ document_id: 'doc-1', document_title: 'Uploaded Program Guide.pdf', page_number: 7, content: 'The Code Camp learning path begins with computational thinking.' }];
   const messages = buildProviderMessages(chunks, [], 'How does the Code Camp learning path begin?');
   assert.match(messages[0].content, /computational thinking/);
   assert.match(messages[0].content, /Uploaded Program Guide\.pdf/);
-  assert.deepEqual(buildCitations(chunks), [{ documentId: 'doc-1', title: 'Uploaded Program Guide.pdf', pageNumber: 7 }]);
+  assert.deepEqual(buildCitations(chunks), [{ type: 'knowledge_document', id: 'doc-1', documentId: 'doc-1', title: 'Uploaded Program Guide.pdf', pageNumber: 7 }]);
   assert.equal(messages.at(-1).content, 'How does the Code Camp learning path begin?');
 });

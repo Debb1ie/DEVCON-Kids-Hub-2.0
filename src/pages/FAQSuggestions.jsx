@@ -3,6 +3,8 @@ import { XCircle, Trash2, Loader, HelpCircle, TrendingUp, AlertTriangle, Sparkle
 import { getFAQSuggestions, updateSuggestionStatus, updateSuggestionAnswer, deleteSuggestion, getQuestionStats, generateFAQAnswer, addFAQToKnowledgeBase } from '../services/faqService';
 import { canPerform } from '../auth/permissions';
 import { useApp } from '../context/AppState';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
 import './FAQSuggestions.css';
 
 export default function FAQSuggestions() {
@@ -102,14 +104,11 @@ export default function FAQSuggestions() {
 
   return (
     <div className="faq-suggestions-page">
-      <div className="faq-header">
-        <div>
-          <h1>FAQ Auto-Builder</h1>
-          <p className="faq-subtitle">
-            Questions are tracked automatically. When a topic is asked 3+ times, it appears here as a suggestion.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Intelligence"
+        title="FAQ Auto-Builder"
+        description="Questions are tracked automatically. When a topic is asked 3+ times, it appears here as a suggestion."
+      />
 
       {/* Stats Cards */}
       <div className="faq-stats">
@@ -147,6 +146,7 @@ export default function FAQSuggestions() {
         {['pending', 'approved', 'dismissed', 'all'].map((f) => (
           <button
             key={f}
+            type="button"
             className={`filter-btn ${filter === f ? 'active' : ''}`}
             onClick={() => setFilter(f)}
           >
@@ -163,15 +163,15 @@ export default function FAQSuggestions() {
             <span>Loading suggestions...</span>
           </div>
         ) : suggestions.length === 0 ? (
-          <div className="faq-empty">
-            <HelpCircle size={48} />
-            <h3>No suggestions yet</h3>
-            <p>
-              {filter === 'pending'
+          <EmptyState
+            icon={HelpCircle}
+            title="No suggestions yet"
+            description={
+              filter === 'pending'
                 ? 'When users ask the chatbot similar questions 3+ times, suggestions will appear here.'
-                : `No ${filter} suggestions found.`}
-            </p>
-          </div>
+                : `No ${filter} suggestions found.`
+            }
+          />
         ) : (
           suggestions.map((suggestion) => (
             <div key={suggestion.id} className={`faq-card ${suggestion.status}`}>
@@ -235,6 +235,7 @@ export default function FAQSuggestions() {
                 {suggestion.status === 'pending' && (
                   <>
                     <button
+                      type="button"
                       className="faq-action-btn approve"
                       onClick={() => handleApprove(suggestion.id)}
                       disabled={actionLoading === suggestion.id || generatingId === suggestion.id}
@@ -244,6 +245,7 @@ export default function FAQSuggestions() {
                       <span>Approve & Generate</span>
                     </button>
                     <button
+                      type="button"
                       className="faq-action-btn dismiss"
                       onClick={() => handleDismiss(suggestion.id)}
                       disabled={actionLoading === suggestion.id}
@@ -256,6 +258,7 @@ export default function FAQSuggestions() {
                 )}
                 {canManageKnowledge && (editingAnswer[suggestion.id] || suggestion.suggested_answer) && suggestion.status === 'approved' && (
                   <button
+                    type="button"
                     className="faq-action-btn add-kb"
                     onClick={() => handleAddToKB(suggestion.id)}
                     disabled={addingToKB === suggestion.id || !(editingAnswer[suggestion.id] || suggestion.suggested_answer)}
@@ -266,6 +269,7 @@ export default function FAQSuggestions() {
                   </button>
                 )}
                 <button
+                  type="button"
                   className="faq-action-btn delete"
                   onClick={() => handleDelete(suggestion.id)}
                   disabled={actionLoading === suggestion.id}

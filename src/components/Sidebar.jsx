@@ -14,10 +14,11 @@ import {
   FileText,
   UserCog,
   CloudCog,
+  ShieldCheck,
 } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import { canAccessRoute } from '../auth/permissions';
-import logo from '../assets/devcon-kids-logo.jpg';
+import logo from '../assets/devcon-kids-logo.png';
 import './Sidebar.css';
 
 export default function Sidebar({ onNavigate, collapsed = false }) {
@@ -41,7 +42,7 @@ export default function Sidebar({ onNavigate, collapsed = false }) {
 
   const adminLinks = [
         { name: 'User Management', path: '/dashboard/users', icon: <UserCog size={20} /> },
-        { name: 'Admin', path: '/dashboard/admin', icon: <Settings size={20} /> },
+        { name: 'Admin', path: '/dashboard/admin', icon: <ShieldCheck size={20} /> },
         { name: 'Settings', path: '/dashboard/settings', icon: <Settings size={20} /> },
         { name: 'Integrations', path: '/dashboard/integrations', icon: <CloudCog size={20} /> },
       ].filter(visible);
@@ -52,7 +53,8 @@ export default function Sidebar({ onNavigate, collapsed = false }) {
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-container">
-          <span className="brand-logo-surface"><img src={logo} alt="DEVCON Kids" /></span>
+          <span className="brand-logo-surface"><img src={logo} alt="DEVCON Kids Hub" /></span>
+          <span className="brand-wordmark" aria-hidden="true">DEVCON Kids</span>
         </div>
 
       </div>

@@ -6,10 +6,12 @@
  * - Manage task status (todo/in_progress/done)
  */
 import { useEffect, useState } from 'react';
-import { ClipboardList, Sparkles, Loader, Check, Plus, Trash2 } from 'lucide-react';
+import { ClipboardList, Sparkles, Loader, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppState';
-import './Events.css';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
+import './EventChecklist.css';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -24,29 +26,49 @@ export default function EventChecklist() {
 
   // Load tasks when event changes
   useEffect(() => {
-    if (selectedEventId) loadTasks(selectedEventId);
-    else setTasks([]);
-  }, [selectedEventId]);
+    if (!selectedEventId) return;
+    let active = true;
 
-  async function loadTasks(eventId) {
-    setLoading(true);
-    // Real DB events (UUID): load from Supabase
-    if (typeof eventId === 'string' && eventId.length > 10) {
-      const { data, error } = await supabase
-        .from('event_tasks')
-        .select('*')
-        .eq('event_id', eventId)
-        .order('sort_order', { ascending: true });
-      if (!error) { setTasks(data || []); setLoading(false); return; }
+    async function fetchTasks(eventId) {
+      setLoading(true);
+      // Real DB events (UUID): load from Supabase
+      if (typeof eventId === 'string' && eventId.length > 10) {
+        const { data, error: fetchErr } = await supabase
+          .from('event_tasks')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('sort_order', { ascending: true });
+        if (active) {
+          if (!fetchErr) {
+            setTasks(data || []);
+          } else {
+            setTasks([]);
+          }
+          setLoading(false);
+        }
+        return;
+      }
+      // Fallback events: load from localStorage
+      try {
+        const saved = localStorage.getItem(`event_tasks_${eventId}`);
+        if (active && saved) {
+          setTasks(JSON.parse(saved));
+          setLoading(false);
+          return;
+        }
+      } catch { /* ignore */ }
+      if (active) {
+        setTasks([]);
+        setLoading(false);
+      }
     }
-    // Fallback events: load from localStorage
-    try {
-      const saved = localStorage.getItem(`event_tasks_${eventId}`);
-      if (saved) { setTasks(JSON.parse(saved)); setLoading(false); return; }
-    } catch { /* ignore */ }
-    setTasks([]);
-    setLoading(false);
-  }
+
+    void fetchTasks(selectedEventId);
+
+    return () => {
+      active = false;
+    };
+  }, [selectedEventId]);
 
   // Save fallback event tasks to localStorage when they change
   useEffect(() => {
@@ -210,30 +232,27 @@ export default function EventChecklist() {
   }, {});
 
   return (
-    <div className="module-page">
-      <div className="module-header">
-        <div className="module-title">
-          <div className="module-icon" style={{ background: '#8B5CF6', color: 'white' }}>
-            <ClipboardList size={24} />
-          </div>
-          <div>
-            <h2>Event Prep Checklist</h2>
-            <p className="text-muted">Generate and manage preparation tasks for DEVCON Kids events.</p>
-          </div>
-        </div>
-      </div>
+    <div className="event-checklist-page">
+      <PageHeader
+        eyebrow="Operations"
+        title="Event Prep Checklist"
+        description="Generate and manage preparation tasks for DEVCON Kids events."
+      />
 
       {/* Event selector */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
+      <div className="checklist-selector-card">
         <h3>Select Event</h3>
         <select
-          className="border-input"
-          style={{ width: '100%', marginTop: '0.75rem' }}
+          className="checklist-select"
           value={selectedEventId}
-          onChange={(e) => setSelectedEventId(e.target.value)}
+          onChange={(e) => {
+            const id = e.target.value;
+            setSelectedEventId(id);
+            if (!id) setTasks([]);
+          }}
         >
           <option value="">-- Choose an event --</option>
-          {eventsList.map(ev => (
+          {eventsList.map((ev) => (
             <option key={ev.id} value={String(ev.id)}>
               {ev.title} ({ev.type || 'Event'}) — {ev.event_date || 'No date'} — {ev.chapter || 'No chapter'}
             </option>
@@ -242,69 +261,89 @@ export default function EventChecklist() {
 
         {selectedEvent && !loading && (
           <button
-            className="btn-primary"
-            style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            className="btn-primary checklist-generate-btn"
             onClick={handleGenerate}
             disabled={generating}
+            type="button"
           >
-            {generating ? <><Loader size={16} className="spinner" /> Generating...</> : <><Sparkles size={16} /> {tasks.length > 0 ? 'Generate More Tasks' : 'Generate Checklist'}</>}
+            {generating ? (
+              <>
+                <Loader size={16} className="spinner" /> Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles size={16} /> {tasks.length > 0 ? 'Generate More Tasks' : 'Generate Checklist'}
+              </>
+            )}
           </button>
         )}
 
-        {error && <p style={{ color: 'var(--error)', marginTop: '0.5rem', fontSize: '0.85rem' }}>{error}</p>}
+        {error && <p className="checklist-error">{error}</p>}
       </div>
 
       {/* Task list */}
-      {loading && <div className="card"><p>Loading tasks...</p></div>}
+      {loading && (
+        <div className="checklist-tasks-card">
+          <p className="text-muted">Loading tasks...</p>
+        </div>
+      )}
 
       {selectedEventId && tasks.length > 0 && (
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3>Tasks ({completedCount}/{tasks.length} done)</h3>
+        <div className="checklist-tasks-card">
+          <div className="checklist-header-row">
+            <h3>
+              Tasks ({completedCount}/{tasks.length} done)
+            </h3>
             {tasks.length > 0 && (
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                {tasks[0]?.generated_by === 'ai' ? '✨ AI generated' : tasks[0]?.generated_by === 'template' ? '📋 Template' : '✏️ Manual'}
+              <span className="checklist-source-badge">
+                {tasks[0]?.generated_by === 'ai'
+                  ? '✨ AI generated'
+                  : tasks[0]?.generated_by === 'template'
+                  ? '📋 Template'
+                  : '✏️ Manual'}
               </span>
             )}
           </div>
 
           {/* Progress bar */}
-          <div style={{ height: '6px', borderRadius: '3px', background: 'var(--border-subtle)', marginBottom: '1.5rem' }}>
-            <div style={{ height: '100%', borderRadius: '3px', background: '#8B5CF6', width: `${tasks.length > 0 ? (completedCount / tasks.length) * 100 : 0}%`, transition: 'width 0.3s' }} />
+          <div className="checklist-progress-bar">
+            <div
+              className="checklist-progress-fill"
+              style={{
+                width: `${tasks.length > 0 ? (completedCount / tasks.length) * 100 : 0}%`,
+              }}
+            />
           </div>
 
           {Object.entries(grouped).map(([phase, items]) => (
-            <div key={phase} style={{ marginBottom: '1.25rem' }}>
-              <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>{phase}</h4>
+            <div key={phase} className="checklist-phase-group">
+              <h4 className="checklist-phase-title">{phase}</h4>
               {items.map((task) => (
-                <div
-                  key={task.id}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0',
-                    borderBottom: '1px solid var(--border-subtle)'
-                  }}
-                >
+                <div key={task.id} className="checklist-item-row">
                   <input
                     type="checkbox"
                     checked={task.status === 'done'}
                     onChange={() => toggleStatus(task)}
-                    style={{ width: '18px', height: '18px', accentColor: '#8B5CF6', cursor: 'pointer' }}
-                    aria-label={`Mark "${task.task}" as ${task.status === 'done' ? 'incomplete' : 'complete'}`}
+                    className="checklist-checkbox"
+                    aria-label={`Mark "${task.task}" as ${
+                      task.status === 'done' ? 'incomplete' : 'complete'
+                    }`}
                   />
-                  <span style={{
-                    flex: 1,
-                    textDecoration: task.status === 'done' ? 'line-through' : 'none',
-                    color: task.status === 'done' ? 'var(--text-muted)' : 'var(--text-main)'
-                  }}>
+                  <span
+                    className={`checklist-task-label ${
+                      task.status === 'done' ? 'done' : ''
+                    }`}
+                  >
                     {task.task}
                   </span>
                   <button
+                    type="button"
                     onClick={() => deleteTask(task.id)}
-                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                    className="checklist-item-delete"
                     title="Delete task"
                     aria-label={`Delete task: ${task.task}`}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               ))}
@@ -312,40 +351,65 @@ export default function EventChecklist() {
           ))}
 
           {/* Add manual task */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+          <div className="checklist-manual-add">
             <input
-              className="border-input"
-              style={{ flex: 1 }}
+              className="checklist-manual-input"
               placeholder="Add a task manually..."
               value={newTask}
               onChange={(e) => setNewTask(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addManualTask()}
               aria-label="New task text"
             />
-            <button className="btn-secondary" onClick={addManualTask} disabled={!newTask.trim()} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Plus size={14} /> Add
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={addManualTask}
+              disabled={!newTask.trim()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={15} /> Add
             </button>
           </div>
         </div>
       )}
 
       {selectedEventId && tasks.length === 0 && !loading && !generating && (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-          <p style={{ color: 'var(--text-muted)' }}>No tasks yet. Generate a checklist or add tasks manually.</p>
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'center' }}>
-            <input
-              className="border-input"
-              placeholder="Or add a task manually..."
-              value={newTask}
-              onChange={(e) => setNewTask(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addManualTask()}
-              aria-label="New task text"
-            />
-            <button className="btn-secondary" onClick={addManualTask} disabled={!newTask.trim()}>
-              <Plus size={14} /> Add
-            </button>
-          </div>
-        </div>
+        <EmptyState
+          icon={Sparkles}
+          title="No checklist tasks yet"
+          description="Click 'Generate Checklist' above to auto-generate tasks, or add tasks manually below."
+          actions={
+            <div
+              className="checklist-manual-add"
+              style={{ maxWidth: '480px', margin: '0 auto', width: '100%' }}
+            >
+              <input
+                className="checklist-manual-input"
+                placeholder="Or add a task manually..."
+                value={newTask}
+                onChange={(e) => setNewTask(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addManualTask()}
+                aria-label="New task text"
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={addManualTask}
+                disabled={!newTask.trim()}
+              >
+                <Plus size={15} /> Add
+              </button>
+            </div>
+          }
+        />
+      )}
+
+      {!selectedEventId && (
+        <EmptyState
+          icon={ClipboardList}
+          title="No event selected"
+          description="Choose an event from the dropdown above to manage its preparation checklist."
+        />
       )}
     </div>
   );

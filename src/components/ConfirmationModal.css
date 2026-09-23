@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 1500;
-  background: rgba(15, 23, 42, 0.38);
+  background: var(--overlay);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   animation: fadeIn 0.2s ease-in-out;
@@ -36,8 +36,8 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: rgba(249, 115, 22, 0.12);
-  color: var(--accent-orange);
+  background: var(--state-warning-surface);
+  color: var(--state-warning);
 }
 
 .confirmation-modal h3 {
@@ -63,18 +63,22 @@
 .confirmation-modal-confirm {
   min-height: 38px;
   padding: 0.5rem 0.9rem;
-  border: 1px solid #DC2626;
+  border: 1px solid var(--state-danger);
   border-radius: var(--border-radius-sm);
-  background: #DC2626;
-  color: white;
+  background: var(--state-danger);
+  color: var(--text-on-accent);
   font: inherit;
   font-size: 0.88rem;
   font-weight: 600;
 }
 
 .confirmation-modal-confirm:hover:not(:disabled) {
-  background: #B91C1C;
-  border-color: #B91C1C;
+  background: var(--state-danger-hover);
+  border-color: var(--state-danger-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirmation-modal-overlay { animation: none; }
 }
 
 .confirmation-modal-confirm:disabled {

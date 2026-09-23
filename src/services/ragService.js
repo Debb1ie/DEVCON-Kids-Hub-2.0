@@ -1,7 +1,6 @@
 /**
  * Vector Embedding & RAG Service
  * Routes through Supabase Edge Function (ai-embed) for embeddings and search.
- * Falls back to direct Mistral call if Edge Function is unavailable (transitional).
  * 
  * A06: Server-side Mistral via Edge Function.
  * 
@@ -31,17 +30,6 @@ const safeFileName = (name) => (name || 'document').replace(/[^A-Za-z0-9._-]+/g,
 const documentType = (file) => file.name.toLowerCase().endsWith('.docx') ? 'docx'
   : file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'txt';
 
-// --- Mistral Embedding Config (fallback only, remove after A06 verified) ---
-// WHAT: Mistral's embedding API converts text into 1024-dimensional vectors.
-// WHY fallback: The secure path goes through the Edge Function (server-side key).
-// This direct path exists only while we transition — once Edge Functions are verified,
-// VITE_MISTRAL_API_KEY will be removed from the client.
-// Embeddings require the authenticated server-side Edge Function. Never read a
-// private Mistral credential from Vite's browser environment.
-const MISTRAL_API_KEY = null;
-const MISTRAL_EMBED_MODEL = 'mistral-embed';
-const MISTRAL_EMBED_URL = 'https://api.mistral.ai/v1/embeddings';
-
 // WHAT: Edge Function URL for server-side embedding.
 // WHY: Same pattern as chatService — derive from Supabase URL for env portability.
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -49,7 +37,7 @@ const EDGE_EMBED_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/ai-embed` : 
 
 /**
  * Generate a 1024-dim embedding vector.
- * Tries Edge Function first, falls back to direct Mistral.
+ * Uses the authenticated Edge Function; provider credentials remain server-side.
  * Returns [] on any failure (graceful degradation).
  * 
  * ### What this does:
@@ -88,44 +76,7 @@ export async function generateEmbedding(text) {
     }
   }
 
-  // Fallback: direct Mistral call (used when no Supabase session or Edge Function unavailable)
-  if (!MISTRAL_API_KEY) {
-    console.warn('[ragService] No embedding source available — need either a Supabase session (for Edge Function) or VITE_MISTRAL_API_KEY.');
-    return [];
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    const response = await fetch(MISTRAL_EMBED_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${MISTRAL_API_KEY}`
-      },
-      body: JSON.stringify({ model: MISTRAL_EMBED_MODEL, input: [text] }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      throw new Error(`Mistral embedding error (${response.status}): ${errorBody?.message || 'Unknown'}`);
-    }
-
-    const data = await response.json();
-    const embedding = data?.data?.[0]?.embedding;
-    return embedding?.length > 0 ? embedding : [];
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      console.warn('[ragService] Mistral embedding request timed out.');
-    } else {
-      console.error('[ragService] Embedding generation error:', error.message);
-    }
-    return [];
-  }
+  return [];
 }
 
 /**

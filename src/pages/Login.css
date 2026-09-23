@@ -4,118 +4,95 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--gradient-purple);
-  padding: 1rem;
+  background:
+    radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--action-primary) 10%, transparent), transparent 28rem),
+    var(--surface-page);
+  padding: 1.5rem;
 }
 
 .login-card {
   width: 100%;
-  max-width: 470px;
-  padding: 2rem 2.5rem;
-  background: var(--bg-card);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-lg);
+  max-width: 460px;
+  padding: 2.25rem 2.5rem;
+  background: var(--surface-elevated);
+  border-radius: var(--radius-lg, var(--border-radius-lg));
+  box-shadow: var(--shadow-md);
+  border: 0;
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.login-header .brand-logo-surface.login-logo {
+  margin: 0 auto 1.25rem;
+  width: min(100%, 12rem);
+  height: 6.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-header .brand-logo-surface.login-logo img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 .login-header .logo-icon {
-  margin: 0 auto 1rem;
-  background: var(--gradient-purple);
-  color: white;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--border-radius-md);
+  margin: 0 auto 1.25rem;
+  background: var(--brand-purple-surface);
+  color: var(--brand-purple);
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md, var(--border-radius-md));
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
   font-size: 1.25rem;
+  border: 1px solid var(--brand-purple-border);
 }
 
 .login-header h2 {
-  font-size: 1.75rem;
-  color: var(--primary-purple-dark);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--brand-purple);
   margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
 }
 
 .login-header h2 span {
-  color: var(--accent-green);
+  color: var(--brand-green);
+}
+
+.login-header h1 {
+  margin: 0.75rem 0 0.45rem;
+  color: var(--text-main);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .login-header p {
   color: var(--text-muted);
   font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 .error-message {
-  background-color: #FEE2E2;
-  color: #DC2626;
-  padding: 0.75rem;
-  border-radius: var(--border-radius-sm);
+  background-color: var(--state-danger-surface, #ffeef0);
+  color: var(--state-danger, #d62035);
+  border: 1px solid var(--state-danger-border, #fca5a5);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md, var(--border-radius-sm));
   margin-bottom: 1.5rem;
   font-size: 0.9rem;
   text-align: center;
-}
-
-.login-form .form-group {
-  margin-bottom: 1.25rem;
-}
-
-.password-toggle { flex: 0 0 auto; padding: 0 1rem; color: var(--primary-purple); font-weight: 600; font-size: 0.82rem; }
-.password-toggle:focus-visible { outline: 3px solid rgba(139, 92, 246, 0.35); outline-offset: 2px; }
-
-.login-form label {
-  display: block;
-  margin-bottom: 0.5rem;
   font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--text-main);
-}
-
-.login-form input {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: 1px solid rgba(0,0,0,0.1);
-  border-radius: var(--border-radius-sm);
-  font-family: var(--font-body);
-  font-size: 1rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.login-form input:focus {
-  outline: none;
-  border-color: var(--primary-purple);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
-}
-
-.login-btn {
-  width: 100%;
-  margin-top: 0.5rem;
-  font-size: 1rem;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  margin: 1.5rem 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  border-bottom: 1px solid rgba(0,0,0,0.1);
-}
-
-.divider span {
-  padding: 0 1rem;
 }
 
 .google-btn {
@@ -126,49 +103,52 @@
   justify-content: center;
   gap: 0.75rem;
   font-size: 0.95rem;
+  font-weight: 600;
   color: var(--text-main);
-  border-color: rgba(0,0,0,0.1);
+  background: var(--surface-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.google-btn:hover {
-  background: #F9FAFB;
-  color: var(--text-main);
-  border-color: rgba(0,0,0,0.2);
+.google-btn:hover:not(:disabled) {
+  background: var(--surface-subtle);
+  border-color: var(--brand-purple-border);
+  color: var(--brand-purple);
 }
 
-/* Polished login-card controls while preserving the purple page background. */
-.login-card { border: 1px solid rgba(255, 255, 255, 0.3); }
-.login-header h2 { font-size: 1.35rem; }
-.login-header h1 { margin: 1rem 0 0.45rem; color: var(--text-main); font-size: 1.7rem; }
-.login-input-wrap {
-  display: flex;
-  align-items: center;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: var(--border-radius-sm);
-  background: var(--bg-main);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+.google-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 42%, transparent);
 }
-.login-input-wrap > svg {
-  flex: 0 0 3rem;
-  color: var(--text-muted);
-  pointer-events: none;
+
+.google-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
-.login-input-wrap input {
-  flex: 1;
-  min-width: 0;
+
+.login-btn {
   width: 100%;
-  padding: 0.75rem 1rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  min-height: 48px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
-.login-input-wrap input:focus { box-shadow: none; }
-.login-input-wrap:focus-within { border-color: var(--primary-purple); box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1); }
-.login-input-wrap:focus-within > svg { color: var(--primary-purple); }
-.login-btn { min-height: 48px; justify-content: center; }
 
 @media (max-width: 480px) {
-  .login-container { padding: 0.75rem; }
-  .login-card { padding: 1.75rem 1.25rem; }
-  .login-header h1 { font-size: 1.5rem; }
+  .login-container {
+    padding: 0.75rem;
+  }
+
+  .login-card {
+    padding: 1.75rem 1.25rem;
+  }
+
+  .login-header h1 {
+    font-size: 1.5rem;
+  }
 }

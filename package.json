@@ -22,9 +22,11 @@
     "test:permissions": "node --test tests/permissions.test.mjs tests/rbac-ui-static.test.mjs tests/rbac-migrations-static.test.mjs",
     "test:post-report:local": "node tests/post-event-report-local-e2e.mjs",
     "test:google-workspace": "node --test tests/google-workspace-automation.test.mjs",
+    "test:report-automation": "node --test tests/report-export-automation.test.mjs",
     "test:google-workspace:local": "node tests/google-workspace-local-e2e.mjs",
     "test:chatbot-release-blockers": "node --test tests/chatbot-release-blockers.test.mjs",
-    "test:chat-auth-boundary": "node --test tests/chat-auth-boundary.test.mjs"
+    "test:chat-auth-boundary": "node --test tests/chat-auth-boundary.test.mjs",
+    "test:devcon-assistant": "node --test tests/devcon-assistant.test.mjs tests/chatbot-release-blockers.test.mjs tests/chat-auth-boundary.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

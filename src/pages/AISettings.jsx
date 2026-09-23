@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Settings, Save, RotateCcw, Sparkles, ShieldCheck, Bot, BrainCircuit, Database } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import PageHeader from '../components/PageHeader';
 import './AISettings.css';
 
 const defaultSettings = {
@@ -165,14 +166,18 @@ export default function AISettings() {
 
   return (
     <div className="ai-settings-page">
-      <div className="settings-hero card">
-        <div className="settings-hero-copy"><div className="eyebrow"><Settings size={14} /> AI control center</div><h1>AI Settings &amp; Configuration</h1><p>Manage chatbot behavior, knowledge retrieval, and guardrails from one place.</p></div>
-        <div className="settings-hero-stats" aria-label="Current AI settings summary">
-          <div className="stat-pill"><Sparkles size={16} /><span>{enabledFeatures} features active</span></div>
-          <div className="stat-pill"><ShieldCheck size={16} /><span>{settings.rateLimit || '—'} req/hr cap</span></div>
-          <div className="stat-pill"><Bot size={16} /><span>{Number(settings.temperatureLevel).toFixed(1)} creativity</span></div>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Intelligence"
+        title="AI Settings & Configuration"
+        description="Manage chatbot behavior, knowledge retrieval, and guardrails from one place."
+        actions={
+          <div className="settings-hero-stats" aria-label="Current AI settings summary">
+            <div className="stat-pill"><Sparkles size={16} /><span>{enabledFeatures} features active</span></div>
+            <div className="stat-pill"><ShieldCheck size={16} /><span>{settings.rateLimit || '—'} req/hr cap</span></div>
+            <div className="stat-pill"><Bot size={16} /><span>{Number(settings.temperatureLevel).toFixed(1)} creativity</span></div>
+          </div>
+        }
+      />
 
       {feedback && <div className={`alert alert-${feedback.type}`} role={feedback.type === 'error' ? 'alert' : 'status'} aria-live="polite">{feedback.message}{feedback.type === 'success' && lastSavedAt ? ` Saved at ${lastSavedAt}.` : ''}</div>}
 

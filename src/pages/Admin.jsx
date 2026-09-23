@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppState';
-import { Users, Package, ShieldCheck, Download, LogIn, UserPlus, Boxes } from 'lucide-react';
+import { Users, Package, Download, LogIn, UserPlus, Boxes } from 'lucide-react';
+import PageHeader from '../components/PageHeader';
 import './Admin.css';
 
 export default function Admin() {
@@ -69,38 +70,36 @@ export default function Admin() {
 
   return (
     <div className="admin-page">
-      <div className="admin-hero card">
-        <div>
-          <div className="eyebrow admin-eyebrow">
-            <ShieldCheck size={14} /> Operations console
-          </div>
-          <h1>Admin Dashboard</h1>
-          <p>Manage volunteers, inventory, and account access from one organized workspace.</p>
-        </div>
-        <div className="admin-hero-stats">
-          <div className="admin-stat">
-            <Users size={18} />
-            <div>
-              <strong>{volunteersList?.length || 0}</strong>
-              <span>Volunteers</span>
+      <PageHeader
+        eyebrow="Operations Console"
+        title="Admin Dashboard"
+        description="Manage volunteers, inventory, and account access from one organized workspace."
+        actions={
+          <div className="admin-hero-stats">
+            <div className="admin-stat">
+              <Users size={18} />
+              <div>
+                <strong>{volunteersList?.length || 0}</strong>
+                <span>Volunteers</span>
+              </div>
+            </div>
+            <div className="admin-stat">
+              <Boxes size={18} />
+              <div>
+                <strong>{inventoryList?.length || 0}</strong>
+                <span>Inventory types</span>
+              </div>
+            </div>
+            <div className="admin-stat">
+              <Package size={18} />
+              <div>
+                <strong>{totalInventoryStock}</strong>
+                <span>Total units</span>
+              </div>
             </div>
           </div>
-          <div className="admin-stat">
-            <Boxes size={18} />
-            <div>
-              <strong>{inventoryList?.length || 0}</strong>
-              <span>Inventory types</span>
-            </div>
-          </div>
-          <div className="admin-stat">
-            <Package size={18} />
-            <div>
-              <strong>{totalInventoryStock}</strong>
-              <span>Total units</span>
-            </div>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="admin-grid">
         <section className="admin-section card">

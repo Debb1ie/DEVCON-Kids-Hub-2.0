@@ -523,8 +523,8 @@
 }
 
 .report-status-draft {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  background: rgba(232, 202, 4, 0.15);
+  color: #8c7800;
 }
 
 .event-form-card {
@@ -670,8 +670,8 @@
   align-items: center;
   white-space: nowrap;
   border-radius: 999px;
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  background: rgba(232, 202, 4, 0.15);
+  color: #8c7800;
   padding: 0.35rem 0.7rem;
   font-size: 0.75rem;
   font-weight: 700;
@@ -704,13 +704,13 @@
 }
 
 .small-action.danger {
-  border-color: rgba(220, 38, 38, 0.35);
-  color: #b91c1c;
+  border-color: rgba(234, 100, 29, 0.35);
+  color: var(--state-danger);
 }
 
 .small-action.danger:hover {
-  background: rgba(220, 38, 38, 0.08);
-  color: #991b1b;
+  background: var(--state-danger-surface);
+  color: var(--state-danger);
 }
 
 @media (max-width: 900px) {

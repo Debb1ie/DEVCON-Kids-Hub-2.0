@@ -137,8 +137,34 @@ test('chat remains server-side and never logs authorization material', async () 
     readFile('src/services/chatHistoryService.js', 'utf8'),
   ]);
   assert.match(service, /authSessionLifecycle\.requireSession/);
+  assert.match(service, /auth\.getSession\(\)/);
+  assert.match(service, /auth\.refreshSession\(\)/);
+  assert.match(service, /Authorization: `Bearer \$\{session\.access_token\}`/);
   assert.doesNotMatch(service, /localStorage|sessionStorage|console\./);
   assert.doesNotMatch(component, /retrieveContext|knowledge_base.*select/i);
   assert.match(history, /eq\('user_id', userId\)/);
   assert.doesNotMatch(`${component}\n${service}`, /console\.(?:log|error).*Authorization/i);
+});
+
+test('chat invocation refreshes missing or expired sessions and never persists tokens itself', async () => {
+  const service = await readFile('src/services/chatService.js', 'utf8');
+  assert.match(service, /!session\?\.access_token \|\| expiresSoon/);
+  assert.match(service, /if \(refreshed\.error \|\| !refreshed\.data\?\.session\?\.access_token\) return null/);
+  assert.match(service, /throw new ChatServiceError\('Please sign in again to use the AI assistant\.'/);
+  assert.doesNotMatch(service, /setItem\(|access_token.*(?:localStorage|sessionStorage)/);
+});
+
+test('edge function verifies caller identity before creating its service-role client', async () => {
+  const fn = await readFile('supabase/functions/ai-chat/index.ts', 'utf8');
+  const callerVerification = fn.indexOf('userClient.auth.getUser(accessToken)');
+  const serviceClient = fn.indexOf("createClient(supabaseUrl, serviceKey");
+  assert.ok(callerVerification >= 0 && serviceClient > callerVerification);
+  assert.match(fn, /AUTH_REQUIRED/);
+  assert.match(fn, /INVALID_JWT/);
+  assert.match(fn, /USER_LOOKUP_FAILED/);
+  assert.match(fn, /ROLE_DENIED/);
+  assert.match(fn, /CHAT_ROLES\.includes\(role\)/);
+  assert.match(fn, /userClient\.auth\.getUser\(accessToken\)/);
+  assert.match(fn, /Authorization: authorization/);
+  assert.doesNotMatch(fn, /server\.auth\.getUser/);
 });
