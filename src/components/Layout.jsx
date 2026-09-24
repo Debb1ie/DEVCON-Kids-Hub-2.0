@@ -8,7 +8,6 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia('(max-width: 768px)').matches);
-  const [aiChatOpen, setAIChatOpen] = useState(false);
   const menuButtonRef = useRef(null);
   const navigationRef = useRef(null);
   const mainContentRef = useRef(null);
@@ -76,9 +75,7 @@ export default function Layout() {
         </div>
       </main>
 
-      {/* AI Chat Widget */}
-      {!aiChatOpen && <AIChat onOpen={() => setAIChatOpen(true)} />}
-      {aiChatOpen && <AIChat isFullscreen={true} onClose={() => setAIChatOpen(false)} />}
+      <AIChat />
     </div>
   );
 }

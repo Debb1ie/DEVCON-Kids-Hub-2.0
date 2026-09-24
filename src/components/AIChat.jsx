@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Send, MessageSquare, Minimize2, Loader, Trash2, Copy, ThumbsUp, ThumbsDown, Check } from 'lucide-react';
+import { X, Send, MessageSquare, Maximize2, Minimize2, Loader, Trash2, Copy, ThumbsUp, ThumbsDown, Check, Bot, FileText } from 'lucide-react';
 import { callChatWithContext } from '../services/chatService';
 import { logQuestion } from '../services/faqService';
 import { supabase } from '../lib/supabase';
@@ -10,22 +10,28 @@ import './AIChat.css';
 const welcomeMessage = () => ({
   id: crypto.randomUUID(),
   role: 'assistant',
-  content: 'Hi! I\'m the DEVCON Kids AI Assistant. I can help you with:\n• DEVCON Kids mission and core pillars\n• Volunteer onboarding and guidelines\n• Event planning and coordination\n• Knowledge Base uploads and document questions\n• Dashboard access and role-based guidance\n\nTry one of the quick questions below, or ask something in your own words.',
+  content: 'Hi! How can I help?',
   timestamp: new Date(),
   meta: { label: 'Welcome' },
 });
 
-export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
+export default function AIChat() {
   const { user, authSessionReady } = useApp();
   const [messages, setMessages] = useState(() => [welcomeMessage()]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState('');
-  const [expanded, setExpanded] = useState(isFullscreen);
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(() => sessionStorage.getItem('devcon-assistant-mode') === 'expanded');
+  const [hasNewResponse, setHasNewResponse] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
   const [feedbackGiven, setFeedbackGiven] = useState({});
   const messagesEndRef = useRef(null);
+  const messagesRef = useRef(null);
+  const launcherRef = useRef(null);
+  const composerRef = useRef(null);
+  const wasNearBottomRef = useRef(true);
   const messageIdRef = useRef(1000);
   const activeAssistantMessageRef = useRef(null);
   const sessionIdRef = useRef(null);
@@ -36,6 +42,8 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   useEffect(() => {
     let active = true;
     clearLegacySharedChatHistory();
+    // State is reset here because the authenticated owner changed.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHistoryLoading(true);
     setHistoryError('');
     setMessages([welcomeMessage()]);
@@ -98,13 +106,47 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
       ? ['Show my recent events.', 'Which Post Event Reports are still incomplete?', 'Summarize approved event impact.']
       : ['Which Post Event Reports are still incomplete?', 'Summarize approved event impact.', 'How many learners were reported this month?', 'Explain how Post Event Reports work.'];
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (wasNearBottomRef.current) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        setHasNewResponse(false);
+      } else if (messages.length > 1) {
+        setHasNewResponse(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [messages]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    sessionStorage.setItem('devcon-assistant-mode', expanded ? 'expanded' : 'compact');
+  }, [expanded]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        window.setTimeout(() => launcherRef.current?.focus(), 0);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    window.setTimeout(() => composerRef.current?.focus(), 0);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
+
+  const closeAssistant = () => {
+    setOpen(false);
+    window.setTimeout(() => launcherRef.current?.focus(), 0);
+  };
+
+  const handleConversationScroll = (event) => {
+    const element = event.currentTarget;
+    const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 72;
+    wasNearBottomRef.current = nearBottom;
+    if (nearBottom) setHasNewResponse(false);
+  };
 
   const handleSendMessage = async (text = input) => {
     if (!text.trim() || loading) return;
@@ -147,7 +189,6 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const requestStartedAt = performance.now();
     // Fix #3: Filter history to exclude empty/streaming messages before sending to LLM
     const history = messages
       .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content && !m.isStreaming)
@@ -185,9 +226,6 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
       sessionIdRef.current = result.sessionId;
       const confidence = { level: result.sources?.length ? 'high' : 'none', suggestion: null };
 
-      const responseTimeMs = Math.max(1, Math.round(performance.now() - requestStartedAt));
-      const tokenCount = result.metrics?.outputTokens || Math.max(1, Math.ceil(result.response.length / 4));
-
       setMessages((prev) => prev.map((msg) => (
         msg.id === assistantMessageId
           ? {
@@ -198,11 +236,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
               timestamp: new Date(),
               confidence,
               meta: {
-                label: `${responseTimeMs} ms`,
-                responseTimeMs,
-                tokenCount,
-                model: result.model,
-                apiUsed: result.apiUsed
+                label: 'Complete'
               }
             }
           : msg
@@ -210,14 +244,14 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
       // FAQ Auto-Builder: log the question with confidence (non-blocking)
       logQuestion(trimmedText, confidence.level).catch(() => {});
-    } catch (error) {
+    } catch {
       if (controller.signal.aborted) return; // User cancelled — not an error
       // Fix #2: Use captured assistantMessageId, not the ref (prevents race condition)
       setMessages((prev) => prev.map((msg) => (
         msg.id === assistantMessageId
           ? {
               ...msg,
-              content: error?.message || 'Unable to connect to the AI service. Please retry.',
+              content: 'The AI assistant is temporarily unavailable. Please try again shortly.',
               isStreaming: false,
               isError: true,
               meta: {
@@ -300,11 +334,13 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
 
   const renderMessage = (msg) => (
     <div key={msg.id} className={`message ${msg.role} ${msg.isError ? 'error' : ''}`}>
+      {msg.role === 'assistant' && <div className="message-avatar" aria-hidden="true"><Bot size={16} /></div>}
+      <div className="message-body">
       <div className={`message-content ${msg.role === 'assistant' ? 'markdown-content' : ''}`}>
         {msg.role === 'assistant' && msg.isStreaming && !msg.content ? (
-          <div className="typing-indicator">
-            <Loader size={16} className="spinner" />
-            <span>Thinking...</span>
+          <div className="typing-indicator" role="status" aria-label="Checking Hub data">
+            <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
+            <span className="typing-label">Checking Hub data…</span>
           </div>
         ) : msg.role === 'assistant' ? (
           renderMarkdown(msg.content)
@@ -315,10 +351,11 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
       {/* Show sources only when confidence is not 'none' or 'low' and there are citations */}
       {msg.citations && msg.citations.length > 0 && (!msg.confidence || msg.confidence.level === 'high' || msg.confidence.level === 'medium') && (
         <div className="message-citations">
-          <strong>Sources:</strong>
+          <strong>Sources · {msg.citations.length}</strong>
           {[...new Map(msg.citations.map(c => [`${c.type || ''}:${c.id || c.documentId || c.title}`, c])).values()].map((c, idx) => (
             <div key={c.id || c.documentId || idx} className="citation">
-              {c.route ? <a href={c.route}>[{idx + 1}] {c.title}</a> : <span>[{idx + 1}] {c.title}{c.pageNumber ? `, page ${c.pageNumber}` : ''}</span>}
+              <FileText size={14} aria-hidden="true" />
+              {c.route ? <a href={c.route}>{c.title}<small>{c.type || 'Hub source'}{c.pageNumber ? ` · Page ${c.pageNumber}` : ''}</small></a> : <span>{c.title}<small>{c.type || 'Hub source'}{c.pageNumber ? ` · Page ${c.pageNumber}` : ''}</small></span>}
             </div>
           ))}
         </div>
@@ -349,6 +386,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
             className={`action-btn ${copiedId === msg.id ? 'active' : ''}`}
             onClick={() => handleCopy(msg.id, msg.content)}
             title="Copy response"
+            aria-label="Copy response"
           >
             {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
           </button>
@@ -361,6 +399,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
             className={`action-btn ${feedbackGiven[msg.id] === 'up' ? 'active' : ''}`}
             onClick={() => handleFeedback(msg.id, true)}
             title="Good response"
+            aria-label="Good response"
             disabled={!!feedbackGiven[msg.id]}
           >
             <ThumbsUp size={14} />
@@ -369,6 +408,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
             className={`action-btn ${feedbackGiven[msg.id] === 'down' ? 'active' : ''}`}
             onClick={() => handleFeedback(msg.id, false)}
             title="Bad response"
+            aria-label="Bad response"
             disabled={!!feedbackGiven[msg.id]}
           >
             <ThumbsDown size={14} />
@@ -386,13 +426,14 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           </span>
         ) : null}
       </div>
+      </div>
     </div>
   );
 
   const renderQuickQuestions = () => (
     messages.length === 1 ? (
       <div className="suggested-prompts">
-        <p>Quick questions:</p>
+        <p>Ask about DEVCON Kids events, chapters, reports, impact data, or Hub resources.</p>
         <div className="prompts-grid">
           {suggestedPrompts.map((prompt, idx) => (
             <button
@@ -414,13 +455,22 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     <div className="chat-input-form">
       {/* Kenneth's char counter wrapper + stop button; Precious's aria attributes */}
       <div className="chat-input-wrapper">
-        <input
+        <textarea
+          ref={composerRef}
           aria-label="Message the DEVCON Kids AI assistant"
-          type="text"
           value={input}
           onChange={(e) => setInput(e.target.value.slice(0, 500))}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-          placeholder="Ask me anything..."
+          onInput={(e) => {
+            e.target.style.height = 'auto';
+            e.target.style.height = `${Math.min(e.target.scrollHeight, 112)}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+          placeholder="Ask about events, reports, or impact…"
           disabled={loading}
           maxLength={500}
         />
@@ -435,7 +485,6 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
           className="send-btn"
           title="Stop generating"
           aria-label="Stop generating"
-          style={{ background: '#ef4444' }}
         >
           <X size={20} />
         </button>
@@ -454,7 +503,7 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
   );
 
   const renderConversation = () => (
-    <div className="ai-chat-messages">
+    <div className="ai-chat-messages" ref={messagesRef} onScroll={handleConversationScroll}>
       {historyLoading && <div className="chat-history-state" role="status"><Loader size={16} className="spinner" /> Loading your conversation…</div>}
       {historyError && <div className="chat-history-state error" role="alert">{historyError}</div>}
       {messages.map(renderMessage)}
@@ -462,45 +511,14 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     </div>
   );
 
-  if (expanded && !isFullscreen) {
-    return (
-      <div className="ai-chat-fullscreen">
-        <div className="ai-chat-header">
-          <h2>DEVCON Kids AI Assistant</h2>
-          <div className="ai-header-actions">
-            <button onClick={handleClearChat} className="icon-btn" title="Clear conversation">
-              <Trash2 size={20} />
-            </button>
-            <button onClick={() => setExpanded(false)} className="icon-btn" title="Minimize">
-              <Minimize2 size={20} />
-            </button>
-            <button onClick={onClose} className="icon-btn" title="Close">
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        {renderConversation()}
-
-        <div className="ai-chat-input-area">
-          {renderQuickQuestions()}
-          {renderComposer()}
-        </div>
-      </div>
-    );
-  }
-
-// Floating widget (collapsed)
-  if (!isFullscreen) {
+  if (!open) {
     return (
       <div className="ai-chat-widget">
         <button
-          onClick={() => {
-            setExpanded(true);
-            if (onOpen) onOpen();
-          }}
+          ref={launcherRef}
+          onClick={() => setOpen(true)}
           className="chat-toggle-btn"
-          title="Open AI Assistant"
+          aria-label="Open DEVCON Kids Assistant"
         >
           <MessageSquare size={24} />
         </button>
@@ -508,28 +526,35 @@ export default function AIChat({ isFullscreen = false, onClose, onOpen }) {
     );
   }
 
-  // Fullscreen mode
   return (
-    <div className="ai-chat-fullscreen-page">
+    <section className={`ai-chat-shell ${expanded ? 'is-expanded' : 'is-compact'}`} aria-label="DEVCON Kids Assistant">
       <div className="ai-chat-header">
-        <h2>DEVCON Kids AI Assistant</h2>
+        <div className="assistant-identity">
+          <span className="assistant-avatar" aria-hidden="true"><Bot size={20} /></span>
+          <div><h2>DEVCON Kids Assistant</h2><p>Hub AI <span>•</span> Ready</p></div>
+        </div>
         <div className="ai-header-actions">
-          <button onClick={handleClearChat} className="icon-btn" title="Clear conversation">
+          {expanded && <button type="button" onClick={handleClearChat} className="icon-btn" aria-label="Clear conversation" title="Clear conversation">
             <Trash2 size={20} />
+          </button>}
+          <button type="button" onClick={() => setExpanded(value => !value)} className="icon-btn" aria-label={expanded ? 'Return to compact view' : 'Expand assistant'} title={expanded ? 'Return to compact view' : 'Expand assistant'}>
+            {expanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
           </button>
-          <button onClick={onClose} className="icon-btn">
+          <button type="button" onClick={closeAssistant} className="icon-btn" aria-label="Close assistant" title="Close assistant">
             <X size={20} />
           </button>
         </div>
       </div>
-
-      {renderConversation()}
-
-      <div className="ai-chat-input-area">
-        {renderQuickQuestions()}
-        {renderComposer()}
+      <div className="ai-chat-workspace">
+        {renderConversation()}
+        {hasNewResponse && <button type="button" className="new-response-btn" onClick={() => { wasNearBottomRef.current = true; messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); setHasNewResponse(false); }}>↓ New response</button>}
+        <div className="ai-chat-input-area">
+          {renderQuickQuestions()}
+          {renderComposer()}
+          <p className="composer-note">AI can make mistakes. Verify important information.</p>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
