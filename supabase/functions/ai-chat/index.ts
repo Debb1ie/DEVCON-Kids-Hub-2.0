@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
-import { actionRefusal, buildCitations, buildProviderMessages, buildStructuredSources, CHAT_ROLES, classifyQuery, completeWithFailover, filterAuthorizedRecords, GroqLLMProvider, isPromptInjection, MistralLLMProvider, resolveRole, runProviderHealth } from './core.mjs';
+import { actionRefusal, buildCitations, buildProviderMessages, buildStructuredSources, CHAT_ROLES, classifyQuery, completeWithFailover, deduplicateCitations, filterAuthorizedRecords, GroqLLMProvider, MistralLLMProvider, resolveRole, runProviderHealth, securityRefusal } from './core.mjs';
 
 const corsHeaders = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, apikey, content-type, x-client-info, x-supabase-api-version', 'access-control-allow-methods': 'POST, OPTIONS' };
 const json = (status: number, body: Record<string, unknown>) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'content-type': 'application/json', 'cache-control': 'no-store' } });
@@ -16,8 +16,8 @@ Deno.serve(async (request) => {
   try {
     const authorization = request.headers.get('authorization');
     if (!authorization?.startsWith('Bearer ')) return json(401, { error: 'Authentication required.', code: 'AUTH_REQUIRED', requestId });
-    const supabaseUrl = Deno.env.get('SUPABASE_URL'); const anonKey = Deno.env.get('SUPABASE_ANON_KEY'); const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'); const mistralKey = Deno.env.get('MISTRAL_API_KEY');
-    if (!supabaseUrl || !anonKey || !serviceKey || !mistralKey) return json(503, { error: 'The AI service is temporarily unavailable.', code: 'AI_UNAVAILABLE', requestId });
+    const supabaseUrl = Deno.env.get('SUPABASE_URL'); const anonKey = Deno.env.get('SUPABASE_ANON_KEY'); const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !anonKey || !serviceKey) return json(503, { error: 'The AI service is temporarily unavailable.', code: 'AI_UNAVAILABLE', requestId });
     const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false, autoRefreshToken: false } });
     // This client intentionally has no persisted server session. Pass the
     // incoming browser JWT explicitly so getUser validates that caller rather
@@ -37,6 +37,34 @@ Deno.serve(async (request) => {
     const assignment = resolveRole(roleResult.data || []); role = assignment?.role || 'pending_volunteer';
     if (!assignment || !CHAT_ROLES.includes(role)) return json(403, { error: 'The AI assistant is unavailable for this account.', code: 'ROLE_DENIED', requestId });
 
+    let sessionId = requestedSessionId;
+    if (sessionId) {
+      const owned = await server.from('ai_chat_sessions').select('id').eq('id', sessionId).eq('user_id', user.id).maybeSingle();
+      if (owned.error || !owned.data) return json(403, { error: 'Conversation access was denied.', code: 'SESSION_DENIED', requestId });
+    } else {
+      const created = await server.from('ai_chat_sessions').insert({ user_id: user.id, title: message.slice(0, 120) }).select('id').single();
+      if (created.error) { requestLog({ requestId, userId, role, event: 'session_create_failed', errorCode: created.error.code || null, safeError: created.error.message?.slice(0, 160) || null }); return json(503, { error: 'Unable to start the conversation.', code: 'HISTORY_UNAVAILABLE', requestId }); }
+      sessionId = created.data.id;
+    }
+    const securityPolicy = securityRefusal(message);
+    if (securityPolicy) {
+      const citations: never[] = [];
+      const persisted = await server.from('ai_chat_messages').insert([{ session_id: sessionId, user_id: user.id, role: 'user', content: message, citations: [] }, { session_id: sessionId, user_id: user.id, role: 'assistant', content: securityPolicy.response, citations }]);
+      if (persisted.error) { requestLog({ requestId, userId, role, category, event: 'message_persist_failed', errorCode: persisted.error.code || null, safeError: persisted.error.message?.slice(0, 160) || null }); return json(503, { error: 'The response could not be saved. Please retry.', code: 'HISTORY_UNAVAILABLE', requestId }); }
+      await server.from('ai_chat_sessions').update({ updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', user.id);
+      requestLog({ requestId, userId, role, category, policy: 'security_refusal', retrievalCount: 0, latencyMs: Date.now() - started, success: true, provider: 'deterministic' });
+      return json(200, { sessionId, response: securityPolicy.response, citations, model: 'policy-router', provider: 'deterministic', fallbackUsed: false, category, requestId });
+    }
+    const refusal = actionRefusal(message);
+    if (refusal) {
+      const citations = [{ type: 'platform_route', id: refusal.route, title: refusal.route.split('/').at(-1)?.replaceAll('-', ' ') || 'Dashboard', route: refusal.route }];
+      await server.from('ai_chat_messages').insert([{ session_id: sessionId, user_id: user.id, role: 'user', content: message, citations: [] }, { session_id: sessionId, user_id: user.id, role: 'assistant', content: refusal.response, citations }]);
+      requestLog({ requestId, userId, role, category, retrievalCount: 0, latencyMs: Date.now() - started, success: true, provider: 'deterministic' });
+      return json(200, { sessionId, response: refusal.response, citations, model: 'policy-router', provider: 'deterministic', fallbackUsed: false, category, requestId });
+    }
+
+    const mistralKey = Deno.env.get('MISTRAL_API_KEY');
+    if (!mistralKey) return json(503, { error: 'The AI service is temporarily unavailable.', code: 'AI_UNAVAILABLE', requestId });
     const model = Deno.env.get('MISTRAL_CHAT_MODEL') || 'mistral-small-latest';
     const groqKey = Deno.env.get('GROQ_API_KEY'); const groqModel = Deno.env.get('GROQ_CHAT_MODEL') || 'openai/gpt-oss-20b';
     if (body?.providerHealth === true) {
@@ -55,24 +83,6 @@ Deno.serve(async (request) => {
       requestLog({ requestId, userId, role, event: 'provider_health_completed', health });
       return json(200, { requestId, health });
     }
-
-    let sessionId = requestedSessionId;
-    if (sessionId) {
-      const owned = await server.from('ai_chat_sessions').select('id').eq('id', sessionId).eq('user_id', user.id).maybeSingle();
-      if (owned.error || !owned.data) return json(403, { error: 'Conversation access was denied.', code: 'SESSION_DENIED', requestId });
-    } else {
-      const created = await server.from('ai_chat_sessions').insert({ user_id: user.id, title: message.slice(0, 120) }).select('id').single();
-      if (created.error) { requestLog({ requestId, userId, role, event: 'session_create_failed', errorCode: created.error.code || null, safeError: created.error.message?.slice(0, 160) || null }); return json(503, { error: 'Unable to start the conversation.', code: 'HISTORY_UNAVAILABLE', requestId }); }
-      sessionId = created.data.id;
-    }
-    const refusal = actionRefusal(message);
-    if (refusal) {
-      const citations = [{ type: 'platform_route', id: refusal.route, title: refusal.route.split('/').at(-1)?.replaceAll('-', ' ') || 'Dashboard', route: refusal.route }];
-      await server.from('ai_chat_messages').insert([{ session_id: sessionId, user_id: user.id, role: 'user', content: message, citations: [] }, { session_id: sessionId, user_id: user.id, role: 'assistant', content: refusal.response, citations }]);
-      requestLog({ requestId, userId, role, category, retrievalCount: 0, latencyMs: Date.now() - started, success: true, provider: 'deterministic' });
-      return json(200, { sessionId, response: refusal.response, citations, model: 'policy-router', category, requestId });
-    }
-    if (isPromptInjection(message)) return json(400, { error: 'I can’t follow requests to reveal prompts, secrets, or bypass access controls. Ask a DEVCON Kids operational question instead.', code: 'UNSAFE_QUERY', requestId });
 
     const assignments = role === 'event_coordinator' ? await server.from('event_assignments').select('event_id').eq('user_id', user.id).eq('assignment_role', 'event_coordinator') : { data: [], error: null };
     if (assignments.error) return json(503, { error: 'Unable to resolve event access.', code: 'AUTHORIZATION_UNAVAILABLE', requestId });
@@ -125,7 +135,7 @@ Deno.serve(async (request) => {
       return json(503, { error: 'The AI assistant is temporarily unavailable. Please try again shortly.', code: 'LLM_UNAVAILABLE', requestId });
     }
     const answer = completion.text;
-    const citations = [...buildStructuredSources(structured), ...buildCitations(chunks)].slice(0, 8);
+    const citations = deduplicateCitations([...buildStructuredSources(structured), ...buildCitations(chunks)]).slice(0, 8);
     const persisted = await server.from('ai_chat_messages').insert([{ session_id: sessionId, user_id: user.id, role: 'user', content: message, citations: [] }, { session_id: sessionId, user_id: user.id, role: 'assistant', content: answer.slice(0, 12000), citations }]);
     if (persisted.error) { requestLog({ requestId, userId, role, event: 'message_persist_failed', errorCode: persisted.error.code || null, safeError: persisted.error.message?.slice(0, 160) || null }); return json(503, { error: 'The answer was generated but could not be saved. Please retry.', code: 'HISTORY_UNAVAILABLE', requestId }); }
     await server.from('ai_chat_sessions').update({ updated_at: new Date().toISOString() }).eq('id', sessionId).eq('user_id', user.id);

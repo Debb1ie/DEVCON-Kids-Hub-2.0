@@ -6,7 +6,7 @@ export const safeTitle = (value) => String(value || '').replace(/[\r\n\t]/g, ' '
 export const safeText = (value, limit = 2400) => String(value || '').replace(/\u0000/g, '').trim().slice(0, limit);
 const ACTION_PATTERN = /\b(approve|reject|delete|remove|change|assign|create|add|edit|update|export|send|upload|publish)\b/i;
 const ACTION_OBJECT_PATTERN = /\b(report|user|role|event|chapter|email|file|assignment|export)\b/i;
-const INJECTION_PATTERN = /\b(ignore (all |any )?(previous|prior|system)|show (me )?(the )?system prompt|reveal (the )?(secret|credential|token|key|prompt)|act as (an? )?(admin|super admin)|bypass (the )?(permission|authorization|chapter|scope)|developer mode|jailbreak)\b/i;
+const INJECTION_PATTERN = /\b(ignore (all |any )?(previous|prior|system)( instructions?)?|(?:show|reveal|expose|provide|give)(?: me)?(?: (?:the|your|all))? (?:hidden )?(?:system (?:prompt|instructions?)|secrets?|credentials?|api keys?|tokens?|(?:mistral|groq|supabase|service role) keys?)|(?:bypass|override|disable|evade)(?: (?:the|application))? (?:permission|authorization|security|chapter|role|scope|access controls?|rules?)|(?:pretend|impersonate|act as)(?: that)?(?: i am| i'm| to be| as)? (?:an? )?(?:higher role|admin|super admin|super_admin)|(?:show|access|retrieve|list)(?: me)?(?: all)? (?:restricted|unauthorized|another chapter(?:'s)?) (?:chapter )?(?:data|reports?|records?|information)|developer mode|jailbreak)\b/i;
 
 export function classifyQuery(message) {
   const text = safeText(message, 500);
@@ -21,6 +21,14 @@ export function classifyQuery(message) {
 }
 
 export const isPromptInjection = (message) => INJECTION_PATTERN.test(safeText(message, 500));
+
+export function securityRefusal(message) {
+  if (!isPromptInjection(message)) return null;
+  return {
+    response: 'I can only access information permitted by your current DEVCON Kids Hub role and scope. I can help with an authorized operational question instead.',
+    citations: [],
+  };
+}
 
 export function actionRefusal(message) {
   if (classifyQuery(message) !== 'unsupported/action-request') return null;
@@ -58,6 +66,16 @@ export function buildStructuredSources(records = []) {
 
 export function buildCitations(chunks = []) {
   return chunks.slice(0, 6).map((chunk) => ({ type: 'knowledge_document', id: String(chunk.document_id || ''), documentId: String(chunk.document_id || ''), title: safeTitle(chunk.document_title), pageNumber: Number(chunk.page_number || 0) || null }));
+}
+
+export function deduplicateCitations(citations = []) {
+  const seen = new Set();
+  return citations.filter((citation) => {
+    const key = [citation.type || '', citation.route || '', citation.documentId || citation.id || '', citation.pageNumber || ''].join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function buildEvidence(chunks = [], structured = []) {
