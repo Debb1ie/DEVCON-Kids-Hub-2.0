@@ -1,110 +1,186 @@
 /**
  * Vector Embedding & RAG Service
- * Handles document embeddings, storage, and semantic search using Supabase pgvector
+ * Routes through Supabase Edge Function (ai-embed) for embeddings and search.
+ * 
+ * A06: Server-side Mistral via Edge Function.
+ * 
+ * ### What is RAG (Retrieval-Augmented Generation)?
+ * Instead of asking an LLM to answer from its training data (which may be outdated
+ * or generic), we RETRIEVE relevant documents from our own database first, then
+ * AUGMENT the prompt with those documents, so the LLM GENERATES answers based on
+ * real, specific organizational content. This eliminates hallucination.
+ * 
+ * ### What are embeddings?
+ * An embedding is a list of numbers (a "vector") that represents the MEANING of text.
+ * Similar texts produce similar vectors. We can compare vectors using cosine similarity
+ * to find documents that are semantically related to a user's question — even if they
+ * don't share exact keywords.
+ * 
+ * ### How this service fits in the pipeline:
+ * 1. INGESTION: Upload → parse → chunk → this service embeds each chunk → store in DB
+ * 2. QUERY: User asks question → this service embeds it → searches DB for similar chunks
+ *    → returns the best matches → chatService uses them as context for the LLM
  */
 
 import { supabase } from '../lib/supabase';
+import { assertKnowledgeManager, KnowledgeAuthorizationError } from './knowledgeAuthorization';
 
-const OPENAI_BASE_URL = import.meta.env.VITE_OPENAI_BASE_URL || 'http://192.168.1.14/v1';
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-const OPENAI_EMBEDDING_MODEL = import.meta.env.VITE_OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
-const OPENAI_EMBEDDING_ENDPOINT = `${OPENAI_BASE_URL.replace(/\/$/, '')}/embeddings`;
+const KNOWLEDGE_BUCKET = 'knowledge-base-documents';
+const safeFileName = (name) => (name || 'document').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 120) || 'document';
+const documentType = (file) => file.name.toLowerCase().endsWith('.docx') ? 'docx'
+  : file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'txt';
+
+// WHAT: Edge Function URL for server-side embedding.
+// WHY: Same pattern as chatService — derive from Supabase URL for env portability.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const EDGE_EMBED_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/ai-embed` : null;
 
 /**
- * Generate embeddings for text using the local OpenAI-compatible API
+ * Generate a 1024-dim embedding vector.
+ * Uses the authenticated Edge Function; provider credentials remain server-side.
+ * Returns [] on any failure (graceful degradation).
+ * 
+ * ### What this does:
+ * Converts a piece of text into a list of 1024 numbers (a "vector") that captures
+ * the semantic meaning of that text. Two texts about the same topic will produce
+ * vectors that are mathematically close to each other (high cosine similarity).
+ * 
+ * ### Why return [] on failure instead of throwing?
+ * Embedding is used during both upload (non-critical — chunk can be stored without it)
+ * and search (degrades to no results). Crashing the whole flow for one failed embed
+ * would be worse than gracefully continuing with reduced functionality.
  */
 export async function generateEmbedding(text) {
-  if (!OPENAI_API_KEY) {
-    return [];
-  }
+  if (!text || text.trim().length === 0) return [];
 
-  const requestBody = {
-    model: OPENAI_EMBEDDING_MODEL,
-    input: text
-  };
-
-  try {
-    const response = await fetch(OPENAI_EMBEDDING_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Embedding error: ${error.error?.message || error.message || 'Unknown error'}`);
+  // Try Edge Function first (requires real Supabase session)
+  if (EDGE_EMBED_URL) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const res = await fetch(EDGE_EMBED_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ action: 'embed', text }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.embedding?.length > 0) return data.embedding;
+        }
+      }
+    } catch (e) {
+      console.warn('[ragService] Edge Function embed failed, falling back:', e.message);
     }
-
-    const data = await response.json();
-    return data.data?.[0]?.embedding || [];
-  } catch (error) {
-    console.error('Embedding generation error:', error);
-    return [];
   }
+
+  return [];
 }
 
 /**
- * Store document chunks in vector database (Supabase pgvector)
+ * Store document chunks in vector database (Supabase pgvector).
+ * 
+ * ### What this does:
+ * After a document is parsed and split into chunks, this function:
+ * 1. Generates an embedding (vector) for each chunk via Mistral
+ * 2. Inserts the chunk text + vector into the knowledge_base table
+ * 
+ * ### Why batch processing (5 at a time)?
+ * Generating embeddings requires API calls. Doing all chunks in parallel would
+ * hit rate limits. Doing them one-by-one would be slow. Batches of 5 balance
+ * speed and API friendliness.
+ * 
+ * ### Why store chunks with null embeddings?
+ * If embedding generation fails for a chunk, we still store the text (with null vector).
+ * The chunk won't appear in semantic search, but at least the document content isn't lost.
+ * A re-embedding job could fill in the nulls later.
+ * 
+ * @param {string} documentId - Unique document identifier
+ * @param {string} documentTitle - Document filename/title
+ * @param {Array} chunks - Array of {content, pageNumber} objects
+ * @returns {number} Number of chunks stored (0 if storage failed)
  */
-export async function storeDocumentChunks(documentId, documentTitle, chunks) {
+export async function storeDocumentChunks(documentId, documentTitle, chunks, role) {
+  assertKnowledgeManager(role);
   try {
-    const chunkRecords = [];
+    const BATCH_SIZE = 5; // Process 5 chunks at a time for parallel embedding
+    let storedCount = 0;
 
-    for (const chunk of chunks) {
-      const embedding = await generateEmbedding(chunk.content);
+    // Process chunks in batches to balance speed and API rate limits
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
+      
+      // Generate embeddings in parallel within each batch
+      const embeddingPromises = batch.map(chunk => generateEmbedding(chunk.content));
+      const embeddings = await Promise.all(embeddingPromises);
 
-      chunkRecords.push({
+      const chunkRecords = batch.map((chunk, idx) => ({
         document_id: documentId,
         document_title: documentTitle,
         content: chunk.content,
-        embedding: embedding.length > 0 ? embedding : null,
+        embedding: embeddings[idx].length > 0 ? embeddings[idx] : null,
         page_number: chunk.pageNumber,
         created_at: new Date().toISOString()
-      });
+      }));
+
+      // Insert each batch separately — partial success is better than total failure
+      const { error } = await supabase
+        .from('knowledge_base')
+        .insert(chunkRecords);
+
+      if (error) {
+        console.error(`[ragService] Failed to store batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error);
+        // Continue with remaining batches — don't abort the whole upload
+      } else {
+        storedCount += chunkRecords.length;
+      }
     }
 
-    // Store in Supabase knowledge_base table
-    const { error } = await supabase
-      .from('knowledge_base')
-      .insert(chunkRecords);
-
-    if (error) throw error;
-    return chunkRecords.length;
+    console.log(`[ragService] Stored ${storedCount}/${chunks.length} chunks for "${documentTitle}"`);
+    return storedCount;
   } catch (error) {
-    console.error('Error storing document chunks:', error);
-    throw error;
+    console.error('[ragService] Error storing document chunks:', error);
+    return 0;
   }
 }
 
 /**
- * Semantic search in knowledge base using vector similarity
+ * Semantic search in knowledge base using vector similarity.
+ * Uses Edge Function or direct Mistral via generateEmbedding().
+ * 
+ * ### What this does:
+ * Takes the user's question, converts it to a vector, then finds the most similar
+ * document chunks in the database using pgvector's cosine distance operator (<=>).
+ * 
+ * ### How cosine similarity works:
+ * Two vectors pointing in the same direction have similarity = 1 (identical meaning).
+ * Perpendicular vectors = 0 (unrelated). The DB computes 1 - distance for each chunk
+ * and returns the top matches above the threshold (0.3 = very loose, catches partial matches).
  */
 export async function semanticSearch(query, limit = 5) {
   try {
-    if (!OPENAI_API_KEY) {
-      return [];
-    }
-
-    // Generate embedding for query
     const queryEmbedding = await generateEmbedding(query);
 
     if (!queryEmbedding.length) {
+      console.warn('[ragService] Query embedding returned empty — cannot search.');
       return [];
     }
 
-    // Search in Supabase using pgvector similarity
+    // Search in Supabase using pgvector cosine similarity
+    // Note: supabase-js handles array → vector conversion automatically
     const { data, error } = await supabase.rpc('search_knowledge_base', {
       query_embedding: queryEmbedding,
-      similarity_threshold: 0.7,
+      similarity_threshold: 0.3,
       match_count: limit
     });
 
     if (error) throw error;
 
-    return data.map(item => ({
+    console.log(`[ragService] Search returned ${data?.length || 0} results`);
+
+    return (data || []).map(item => ({
       content: item.content,
       similarity: item.similarity,
       metadata: {
@@ -114,32 +190,118 @@ export async function semanticSearch(query, limit = 5) {
       }
     }));
   } catch (error) {
-    console.error('Semantic search error:', error);
+    console.error('[ragService] Semantic search error:', error);
     return [];
   }
 }
 
 /**
- * Retrieve relevant context for RAG
+ * Confidence thresholds for Smart Doc Suggestions.
+ * 
+ * ### What are these?
+ * After searching the knowledge base, we classify how confident we are in the results:
+ * - HIGH (≥0.55): Strong match — the KB has good content for this question
+ * - MEDIUM (≥0.4): Partial match — some relevant content but incomplete
+ * - LOW/NONE (<0.4): The KB doesn't cover this topic well
+ * 
+ * ### Why does this matter?
+ * The chatbot behaves differently based on confidence:
+ * - High: Answer confidently with citations
+ * - Medium: Answer with a note about gaps + suggest uploading more docs
+ * - Low/None: Tell the user "I don't have info on this" + suggest a doc topic
+ * This prevents the AI from guessing when it has no relevant context.
  */
-export async function retrieveContext(userQuery) {
+const CONFIDENCE_HIGH = 0.55;
+const CONFIDENCE_MEDIUM = 0.4;
+
+/**
+ * Analyze search results and determine confidence level.
+ * Simple threshold-based: high/medium/low based on max similarity.
+ */
+function analyzeConfidence(results, userQuery) {
+  if (!results || results.length === 0) {
+    return { level: 'none', avgSimilarity: 0, maxSimilarity: 0, resultCount: 0, suggestion: extractTopicFromQuery(userQuery) };
+  }
+
+  const similarities = results.map(r => r.similarity);
+  const maxSimilarity = Math.max(...similarities);
+  const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+
+  if (maxSimilarity >= CONFIDENCE_HIGH) {
+    return { level: 'high', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: null };
+  }
+  if (maxSimilarity >= CONFIDENCE_MEDIUM) {
+    return { level: 'medium', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: extractTopicFromQuery(userQuery) };
+  }
+  return { level: 'low', avgSimilarity, maxSimilarity, resultCount: results.length, suggestion: extractTopicFromQuery(userQuery) };
+}
+
+/**
+ * Extract a human-readable topic from the user's query for doc suggestions.
+ * Strips common filler words and returns a concise topic phrase.
+ */
+function extractTopicFromQuery(query) {
+  if (!query || typeof query !== 'string') return 'this topic';
+  const stopWords = ['what', 'is', 'the', 'how', 'do', 'i', 'can', 'you', 'tell', 'me', 'about',
+    'please', 'explain', 'describe', 'a', 'an', 'to', 'of', 'for', 'in', 'on', 'with', 'are', 'does',
+    'did', 'will', 'would', 'could', 'should', 'there', 'their', 'they', 'this', 'that', 'where', 'when',
+    'who', 'which', 'why', 'have', 'has', 'had', 'been', 'being', 'was', 'were', 'get', 'got'];
+  const words = query.toLowerCase().replace(/[?!.,;:'"]/g, '').split(/\s+/);
+  const meaningful = words.filter(w => !stopWords.includes(w) && w.length > 2);
+  if (meaningful.length === 0) return query.substring(0, 40).trim();
+  return meaningful.slice(0, 5).join(' ');
+}
+
+/**
+ * Retrieve relevant context for RAG.
+ * 
+ * ### What this does:
+ * This is the main function called before every chat message. It searches the
+ * knowledge base for chunks related to the user's question and returns them
+ * with a confidence assessment attached.
+ * 
+ * ### Why filter to similarity ≥ 0.5?
+ * The DB search uses a loose threshold (0.3) to cast a wide net. But chunks below
+ * 0.5 similarity are often noise — they share a few keywords but aren't really about
+ * the same topic. We filter them out so the LLM gets clean, relevant context only.
+ * If all results are below 0.5, we still pass the top 3 (better than nothing).
+ * 
+ * @param {string} userQuery - The user's question
+ * @param {Array} chatHistory - Previous messages (unused for now, reserved for A09)
+ * @returns {Array} chunks with _confidence property attached
+ */
+export async function retrieveContext(userQuery, chatHistory = []) { // eslint-disable-line no-unused-vars
   try {
-    const results = await semanticSearch(userQuery, 5);
-    return results.map(r => ({
+    const results = await semanticSearch(userQuery, 3);
+
+    // Filter out low-relevance chunks (below 0.5 = noise)
+    const filtered = results.filter(r => r.similarity >= 0.5);
+    const finalResults = filtered.length > 0 ? filtered : results.slice(0, 3);
+
+    const chunks = finalResults.map(r => ({
       content: r.content,
       metadata: r.metadata,
       similarity: r.similarity
     }));
+    const confidence = analyzeConfidence(finalResults, userQuery);
+
+    // Attach confidence as a property on the array for backward compatibility
+    // ponytail: monkey-patching arrays is ugly; refactor to {chunks, confidence} in A09
+    chunks._confidence = confidence;
+    return chunks;
   } catch (error) {
     console.error('Context retrieval error:', error);
-    return [];
+    const empty = [];
+    empty._confidence = { level: 'none', avgSimilarity: 0, maxSimilarity: 0, resultCount: 0, suggestion: extractTopicFromQuery(userQuery) };
+    return empty;
   }
 }
 
 /**
  * Delete document and its chunks
  */
-export async function deleteDocument(documentId) {
+export async function deleteDocument(documentId, role) {
+  assertKnowledgeManager(role);
   try {
     const { error } = await supabase
       .from('knowledge_base')
@@ -157,7 +319,8 @@ export async function deleteDocument(documentId) {
 /**
  * List all documents in knowledge base
  */
-export async function listDocuments() {
+export async function listDocuments(role) {
+  assertKnowledgeManager(role);
   try {
     const { data, error } = await supabase
       .from('documents')
@@ -170,4 +333,86 @@ export async function listDocuments() {
     console.error('Error listing documents:', error);
     return [];
   }
+}
+
+export async function uploadKnowledgeDocument(file, processedDocument, role) {
+  assertKnowledgeManager(role);
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new KnowledgeAuthorizationError();
+
+  const documentId = `doc_${crypto.randomUUID()}`;
+  const storagePath = `sources/${user.id}/${documentId}/${safeFileName(file.name)}`;
+  const embeddedChunks = [];
+  for (const chunk of processedDocument.chunks) {
+    const embedding = await generateEmbedding(chunk.content);
+    if (embedding.length !== 1024) {
+      throw new Error('Unable to index this document right now. No document data was saved.');
+    }
+    embeddedChunks.push({
+      content: chunk.content,
+      page_number: chunk.pageNumber,
+      embedding,
+    });
+  }
+
+  const upload = await supabase.storage.from(KNOWLEDGE_BUCKET).upload(storagePath, file, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (upload.error) throw new Error('Unable to upload the private source document.');
+
+  try {
+    const { data, error } = await supabase.rpc('finalize_knowledge_document', {
+      document_id: documentId,
+      document_title: processedDocument.fileName,
+      document_file_type: documentType(file),
+      document_total_chunks: processedDocument.totalChunks,
+      document_total_pages: processedDocument.totalPages,
+      document_file_size: file.size,
+      source_storage_path: storagePath,
+      chunks: embeddedChunks,
+    });
+    if (error) throw error;
+    return { documentId, chunksStored: data, storagePath };
+  } catch (error) {
+    await supabase.storage.from(KNOWLEDGE_BUCKET).remove([storagePath]);
+    throw new Error(error?.message?.includes('Knowledge Base')
+      ? error.message
+      : 'Unable to save document metadata and index its contents.', { cause: error });
+  }
+}
+
+export async function createDocumentMetadata(document, role) {
+  assertKnowledgeManager(role);
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new KnowledgeAuthorizationError();
+
+  const { error } = await supabase.from('documents').insert({
+    ...document,
+    uploaded_by: user.id,
+  });
+  if (error) throw new Error('Unable to save document metadata.');
+}
+
+export async function deleteDocumentMetadata(documentId, role) {
+  assertKnowledgeManager(role);
+  const { error } = await supabase.from('documents').delete().eq('id', documentId);
+  if (error) throw new Error('Unable to delete document metadata.');
+}
+
+export async function deleteKnowledgeDocument(documentId, role) {
+  assertKnowledgeManager(role);
+  const { data: document, error: readError } = await supabase
+    .from('documents')
+    .select('id, storage_bucket, storage_path')
+    .eq('id', documentId)
+    .single();
+  if (readError) throw new Error('Unable to load document metadata.');
+  if (document.storage_bucket && document.storage_path) {
+    const { error: storageError } = await supabase.storage
+      .from(document.storage_bucket)
+      .remove([document.storage_path]);
+    if (storageError) throw new Error('Unable to delete the private source document.');
+  }
+  await deleteDocumentMetadata(documentId, role);
 }

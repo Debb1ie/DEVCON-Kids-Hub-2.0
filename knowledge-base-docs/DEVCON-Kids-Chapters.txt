@@ -1,0 +1,52 @@
+# DEVCON Kids — Chapters
+
+DEVCON Kids publicly lists 10 chapters: Bukidnon, Cagayan de Oro, Cebu, Davao, Iligan, Laguna, Legazpi, Manila, and Iloilo in the Philippines, plus Los Angeles in the USA.
+
+Note: DEVCON Philippines has 11 chapters; not all of them run the DEVCON Kids programme, and the DEVCON Kids chapter list is not identical to the DEVCON chapter list.
+
+## Cagayan de Oro, Philippines
+The first DEVCON chapter to adopt the DEVCON Kids programme outside Metro Manila, adopted in 2018. Described as the chapter with the most activity, reaching both children and college students through OJT rotations, and holding a strong partnership with DICT Region X officers. Hosted Lead Learner and kids' code camps at the DICT Building on T. Chavez Street.
+
+## Cebu, Philippines
+Activated February 2023. Volunteers are made up of young professionals and college students. A published highlight is the chapter's participation in a Computer Science Teachers Association event, where it showcased teaching-and-learning robots and microcontrollers.
+
+## Davao, Philippines
+Has made great strides in empowering children in underprivileged areas. Has conducted code camps with children from SOS Village and extended outreach to remote areas of the province. Also hosted a game development code camp during Davao Startup Week at the University of the Immaculate Conception.
+
+## Iligan, Philippines
+The newest chapter to adopt the DEVCON Kids programme at the time the chapter list was published. Its close alignment with Iligan City's IT initiatives makes it unique among the chapters. Runs sessions at the Digital Creatives Hub Iligan.
+
+## Manila, Philippines
+Established 2023. Manila is where several national-level DEVCON Kids activities are staged, including the Coding Herstory programme with American Spaces Manila and the PromptWars hackathon in Makati.
+
+## Iloilo, Philippines
+A chapter based in Panay which aims to promote IT by providing a venue for IT students and professionals. One of the most active chapters for DEVCON Kids delivery in 2025-2026: host of Hour of AI Iloilo in December 2025 (with CPU PSSE), Scratch Day Iloilo, and a creative robotics showcase at Iloilo National High School under the Sui "Build Beyond" partnership.
+
+## Bukidnon, Philippines
+Listed as a DEVCON Kids chapter. DEVCON Bukidnon was the first chapter featured in DEVCON's 2026 Chapter Showcase series and was reported as one of the top three chapters by face-to-face reach in 2025.
+
+## Laguna, Philippines
+Listed as a DEVCON Kids chapter. No chapter-specific DEVCON Kids event detail was found in public sources.
+
+## Legazpi, Philippines
+Listed as a DEVCON Kids chapter. No chapter-specific DEVCON Kids event detail was found in public sources.
+
+## Los Angeles, USA
+Established October 2022 in partnership with Faith Church LA, funded by donations from the World Economic Forum's Young Global Leaders (YGL) community and Talino Venture Labs. In its first year it hosted a Discovery Expo attended by 165 adults and children. Ran a "Pixel Art with ImagiCharms in Python" camp in September 2023. DEVCON Kids USA is chaired by Pam Ros Damarillo.
+
+## How to Get Involved
+
+### Volunteer
+DEVCON Kids continuously recruits volunteers for on-ground and online events. Sign up through the volunteer form on devconkids.org. Volunteers who work with children complete Child Protection Policy training. Prospective teaching volunteers train as Lead Learners.
+
+### Partner
+Organisations can support events and collaborate with chapters. Partnership enquiries go through the "Become a Partner" route on devconkids.org.
+
+### Open a Chapter
+DEVCON Kids invites enquiries from people who want to bring the programme to additional cities, via the "Open a Chapter" contact route on devconkids.org.
+
+### Donate
+- Sponsor a Scholar via PayPal: https://www.paypal.com/paypalme/DEVCONKids
+- Coding Herstory donations via GoFundMe
+- Donations fund scholarships and learning tools (laptops, gadgets, hardware kits)
+- Corporate partners are being sought to sponsor hardware kits for high-need communities

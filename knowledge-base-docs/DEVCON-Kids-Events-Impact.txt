@@ -1,0 +1,91 @@
+# DEVCON Kids — Events and Impact
+
+## Impact Figures
+
+IMPORTANT: These figures cover different periods and different metrics. They must never be summed, and each must be quoted with its period.
+
+### Calendar Year 2025 (published July 2026)
+- Students reached: 3,825
+- Volunteers activated: 180
+- Teachers trained: 100+
+- Events executed: 29
+- Schools reached: 32
+
+### Combined 2022 and 2023 (as published on devconkids.org)
+- Scholarships: 1,407
+- Code Camps: 35
+- Lead Learners trained: 212
+- Special Events: 1,574 [VERIFY — this may represent attendees at special events, not count of events]
+- Hour of Code students: 958
+
+### Cumulative Since 2018
+More than 10,000 children reached — stated by Pam Ros Damarillo in June 2026.
+
+### Parent Organisation Context (DEVCON Philippines, for comparison)
+- 19,000 geeks face-to-face nationwide in 2025
+- Led by Bukidnon, Iloilo, and Manila chapters
+- Roughly 1 million aggregated online reach annually
+- Community of over 70,000
+
+## Timeline of Key Milestones
+
+- 2009: DEVCON Philippines founded
+- 2018: DEVCON Kids launched. Cagayan de Oro becomes the first chapter outside Metro Manila
+- 2019: Robotics sessions with partner schools (robot-sumo with Mano Amiga, 14 Feb 2019)
+- 2020: Pandemic period; Scratch teacher account maintained for remote learning
+- 2021: micro:bit lending programme with CSTA Philippines
+- Oct 2022: Los Angeles USA chapter established
+- Feb 2023: Cebu chapter activated
+- 2023: Manila chapter established. LA Discovery Expo (165 attendees)
+- 2024: Coding Herstory launched with American Spaces Manila. Hour of Code nationwide celebration
+- 2025: Hour of AI rolls out nationwide. Largest documented single-year impact
+- Mar 2026: Sui Foundation "Build Beyond" partnership launched
+- Jun 2026: PromptWars AI hackathon with Tutorials Dojo. DEVCON 17th anniversary
+- Jul 2026: Hour of AI 2026 sessions begin; advanced AI hardware touring nationwide
+
+## Partners, Funders, and Collaborators
+
+### Education and Curriculum Partners
+- Code.org — Hour of Code and Hour of AI
+- CSforALL — co-developer of the global Hour of AI
+- CSTA Philippines — K-12 CS teachers' association; CPD training, micro:bit lending
+- imagiLabs (Sweden) — imagiCharm hardware and Python pixel-art curriculum
+- micro:bit Educational Foundation — micro:bit hardware and CreateAI platform
+- Tutorials Dojo — PromptWars 2026 co-organiser
+
+### Government and Public Institutions
+- DICT (Department of Information and Communications Technology)
+- DOST (Department of Science and Technology)
+- Department of Education — engagement via Coding Herstory; MATATAG curriculum alignment
+- Office of the Vice Mayor of Iloilo City; Province of Iloilo – 3rd District
+- U.S. Embassy in the Philippines / American Spaces Manila — Coding Herstory
+
+### Corporate, Foundation, and Community Partners
+- Sui Foundation — "Build Beyond" partnership (2026); robotics kits and micro:bits
+- nmblr.ai / Nmblr AI Foundry — venue and support
+- Talino Venture Labs — LA chapter funding
+- World Economic Forum Young Global Leaders community — LA chapter funding
+- Faith Church LA — LA chapter host partner
+- Tech For All — powered Hour of AI Iloilo
+- Marvin Chin Foundation, UMWAD Western Visayas, ING — Hour of AI Iloilo support
+- Global Shapers Community – Iloilo Hub — co-organiser
+- Mano Amiga Philippines — robotics sessions
+- SOS Children's Village (Davao) — code camp beneficiaries
+
+## Child Protection Policy
+
+DEVCON Philippines maintains a Child Protection Policy written specifically around DEVCON Kids. Full text: https://devcon.ph/child-protection-policy/
+
+Scope: Applies to all staff, volunteers, board members, contractors, partners, interns, and anyone else working with children.
+
+Guiding principles:
+- Paramountcy of the child — the child's best interests are the primary consideration
+- Prevention — a culture of prevention with safeguarding measures
+- Protection — from all forms of harm including physical, emotional, sexual abuse, neglect, exploitation
+- Participation — children's right to express views
+- Equality and inclusion
+- Accountability and transparency
+
+Reporting: Concerns or suspicions must be reported immediately to the designated Child Protection Officer(s) at DEVCON Philippines.
+
+If you have a child safety concern, contact DEVCON Philippines' Child Protection Officer via devcon.ph/child-protection-policy and local authorities as appropriate.

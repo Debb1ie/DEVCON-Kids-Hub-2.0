@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/styles/tokens.css" />
+    <link rel="stylesheet" href="/src/index.css" />
+    <link rel="stylesheet" href="/src/pages/Dashboard.css" />
+    <style>
+      body { margin: 0; padding: 1rem; }
+      .card { padding: 1rem; }
+      .chapter-fixture { min-height: 560px; }
+      .chart-fill { width: 100%; height: 100%; background: var(--accent-subtle); }
+    </style>
+  </head>
+  <body>
+    <main class="dashboard">
+      <div class="dashboard-content">
+        <section class="chart-section card">
+          <header class="section-header"><h2>Impact Growth Trends</h2></header>
+          <div class="chart-container"><div class="chart-fill"></div></div>
+        </section>
+        <section class="chapters-section card chapter-fixture">
+          <header class="section-header"><h2>Nationwide Impact Overview</h2></header>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

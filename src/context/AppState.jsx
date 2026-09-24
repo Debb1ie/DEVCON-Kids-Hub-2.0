@@ -1,5 +1,9 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { AUTH_CALLBACK_PATH, buildOAuthRedirectUrl, clearAuthSession } from '../auth/authFlow';
+import { authSessionLifecycle } from '../auth/sessionLifecycle';
+import { createEventRepository } from '../services/eventService';
 
 const AppContext = createContext();
 
@@ -46,68 +50,43 @@ const loadDashboardSettings = () => {
   }
 };
 
-const fallbackChapters = [
-  { id: 1, name: 'Manila', learners: 2340, workshops: 38, completion: 95, color: '#8B5CF6' },
-  { id: 2, name: 'Cebu', learners: 1820, workshops: 25, completion: 92, color: '#10B981' }
-];
-
-const fallbackEvents = [
-  {
-    id: 1,
-    title: 'Hour of AI',
-    type: 'Cycle Program',
-    chapter: 'Manila',
-    coordinator: 'Program Coordinators',
-    event_date: '2026-06-15',
-    description: 'Highlighted solution program for kids, coordinated by chapter leads for repeated cycle delivery.',
-    image_url: '',
-    status: 'Scheduled',
-    google_folder_name: 'Hour of AI',
-    google_folder_path: 'Google Drive/DEVCON Kids/Events/Hour of AI',
-    google_assets_path: 'Google Drive/DEVCON Kids/Events/Hour of AI/Assets',
-    google_folder_status: 'Ready for Google Drive sync'
-  }
-];
-
-const normalizeFolderName = (value = '') =>
-  value
-    .trim()
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\s+/g, ' ');
-
-const resolveRole = (email, userMetadata = {}) => {
-  const metadataRole = (userMetadata.role || '').toLowerCase();
-  const normalizedEmail = (email || '').toLowerCase();
-
-  if (normalizedEmail === 'pmanucom@devcon.ph' || metadataRole === 'superadmin' || metadataRole === 'admin') {
-    return 'Superadmin';
-  }
-
-  if (metadataRole === 'visitor') {
-    return 'Visitor';
-  }
-
-  return 'Visitor';
+const ROLE_LABELS = {
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  chapter_coordinator: 'Chapter Coordinator',
+  event_coordinator: 'Event Coordinator',
+  volunteer: 'Volunteer',
+  pending_volunteer: 'Pending Volunteer'
 };
 
-const buildUserProfile = (sessionUser, fallbackRole = 'Visitor') => ({
+const ROLE_PRIORITY = Object.keys(ROLE_LABELS);
+
+const buildUserProfile = (sessionUser, assignment = null) => ({
   id: sessionUser.id,
   email: sessionUser.email,
   name: sessionUser.user_metadata?.name || sessionUser.user_metadata?.full_name || sessionUser.email,
-  role: resolveRole(sessionUser.email, sessionUser.user_metadata) || fallbackRole
+  role: ROLE_LABELS[assignment?.role] || 'Pending Volunteer',
+  roleKey: assignment?.role || 'pending_volunteer',
+  chapterId: assignment?.chapter_id || null
 });
 
-const buildEventFolderMetadata = (event) => {
-  const safeTitle = normalizeFolderName(event.title || 'New Event');
-  const folderRoot = 'Google Drive/DEVCON Kids/Events';
+const loadUserProfile = async (sessionUser) => {
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('role, chapter_id')
+    .eq('user_id', sessionUser.id);
 
-  return {
-    ...event,
-    google_folder_name: event.google_folder_name || safeTitle,
-    google_folder_path: event.google_folder_path || `${folderRoot}/${safeTitle}`,
-    google_assets_path: event.google_assets_path || `${folderRoot}/${safeTitle}/Assets`,
-    google_folder_status: event.google_folder_status || 'Queued for Google Drive sync'
-  };
+  if (error) {
+    console.warn('[Auth] Unable to load user role; using safe pending access.', error);
+    return buildUserProfile(sessionUser);
+  }
+
+  const assignments = data || [];
+  const assignment = ROLE_PRIORITY
+    .map((role) => assignments.find((item) => item.role === role))
+    .find(Boolean);
+
+  return buildUserProfile(sessionUser, assignment);
 };
 
 const upsertRecord = (setList, record) => {
@@ -127,12 +106,12 @@ const fetchChapters = async (supabase, setChapters, setStats) => {
   try {
     const { data, error } = await supabase.from('chapters').select('*');
     if (error) throw error;
-    if (data && data.length > 0) {
-      setChapters(data);
-      setStats((prev) => ({ ...prev, activeChapters: data.length }));
-    }
+    setChapters(data || []);
+    setStats((prev) => ({ ...prev, activeChapters: data?.length || 0 }));
   } catch (e) {
-    console.warn("Using fallback chapters. Please run the SQL setup script.", e);
+    setChapters([]);
+    setStats((prev) => ({ ...prev, activeChapters: 0 }));
+    console.warn('Unable to load authorized chapters.', e);
   }
 };
 
@@ -142,7 +121,8 @@ const fetchVolunteers = async (supabase, setVolunteersList) => {
     if (error) throw error;
     if (data) setVolunteersList(data);
   } catch (e) {
-    console.warn("Using fallback volunteers.", e);
+    setVolunteersList([]);
+    console.warn('Unable to load authorized volunteers.', e);
   }
 };
 
@@ -152,7 +132,8 @@ const fetchInventory = async (supabase, setInventoryList) => {
     if (error) throw error;
     if (data) setInventoryList(data);
   } catch (e) {
-    console.warn("Using fallback inventory.", e);
+    setInventoryList([]);
+    console.warn('Unable to load authorized inventory.', e);
   }
 };
 
@@ -162,21 +143,28 @@ const fetchSocialPosts = async (supabase, setSocialPosts) => {
     if (error) throw error;
     if (data) setSocialPosts(data);
   } catch (e) {
-    console.warn("Using fallback social posts.", e);
+    setSocialPosts([]);
+    console.warn('Unable to load authorized social posts.', e);
   }
 };
 
-const fetchEvents = async (supabase, setEventsList) => {
+const fetchEvents = async (supabase, eventRepository, setEventsList) => {
   try {
-    const { data, error } = await supabase.from('events').select('*');
+    const { data, error } = await supabase.from('events').select('*, event_assignments(user_id)');
     if (error) throw error;
-    if (data && data.length > 0) setEventsList(data);
+    const events = (data || []).map((event) => ({
+      ...event,
+      coordinator_user_id: event.event_assignments?.[0]?.user_id || null,
+    }));
+    setEventsList(await Promise.all(events.map((event) => eventRepository.resolveEventImage(event))));
   } catch (e) {
-    console.warn('Using fallback events.', e);
+    setEventsList([]);
+    console.warn('Unable to load authorized events.', e);
   }
 };
 
 export const AppProvider = ({ children }) => {
+  const eventRepository = useMemo(() => createEventRepository(supabase), []);
   const [stats, setStats] = useState({
     learnersReached: 12450,
     successfulWorkshops: 142,
@@ -185,11 +173,11 @@ export const AppProvider = ({ children }) => {
     hourOfAIStudents: 0
   });
 
-  const [chapters, setChapters] = useState(fallbackChapters);
+  const [chapters, setChapters] = useState([]);
   const [volunteersList, setVolunteersList] = useState([]);
   const [inventoryList, setInventoryList] = useState([]);
   const [socialPosts, setSocialPosts] = useState([]);
-  const [eventsList, setEventsList] = useState(fallbackEvents);
+  const [eventsList, setEventsList] = useState([]);
 
   const [growthData] = useState([
     { month: 'Jan', learners: 5000 },
@@ -201,9 +189,21 @@ export const AppProvider = ({ children }) => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true); // eslint-disable-line no-unused-vars
+  const [authLoading, setAuthLoading] = useState(true);
   const [themeMode, setThemeModeState] = useState(getStoredThemeMode);
   const [dashboardSettings, setDashboardSettings] = useState(loadDashboardSettings);
+
+  const acceptSession = useCallback(async (session) => {
+    if (!session?.user || !session?.access_token) return false;
+    authSessionLifecycle.accept(session);
+    const profile = await loadUserProfile(session.user);
+    const activeSession = await authSessionLifecycle.requireSession(supabase.auth);
+    if (activeSession?.user?.id !== session.user.id) return false;
+    setUser(profile);
+    setIsAuthenticated(true);
+    setAuthLoading(false);
+    return profile;
+  }, []);
 
   useEffect(() => {
     applyThemeMode(themeMode);
@@ -222,187 +222,71 @@ export const AppProvider = ({ children }) => {
     }
   }, [dashboardSettings]);
 
-// Fetch Data from Supabase
-   useEffect(() => {
-     fetchChapters(supabase, setChapters, setStats);
-     fetchVolunteers(supabase, setVolunteersList);
-     fetchInventory(supabase, setInventoryList);
-     fetchSocialPosts(supabase, setSocialPosts);
-     fetchEvents(supabase, setEventsList);
-   }, []);
+  // Load protected workspace data only after the user's approved role is known.
+  useEffect(() => {
+    if (!isAuthenticated || user?.roleKey === 'pending_volunteer') return;
+    fetchChapters(supabase, setChapters, setStats);
+    fetchVolunteers(supabase, setVolunteersList);
+    fetchInventory(supabase, setInventoryList);
+    fetchSocialPosts(supabase, setSocialPosts);
+    fetchEvents(supabase, eventRepository, setEventsList);
+  }, [eventRepository, isAuthenticated, user?.roleKey]);
 
   // Sync Supabase auth session on mount and listen for changes
   useEffect(() => {
     let mounted = true;
-    let pollTimer = null;
     const isOAuthCallback =
-      typeof window !== 'undefined' && window.location.pathname === '/auth/callback';
-
-    if (isOAuthCallback) {
-      console.debug('[Auth] /auth/callback route detected — will poll getSession() for OAuth code exchange');
-    }
+      typeof window !== 'undefined' && window.location.pathname === AUTH_CALLBACK_PATH;
 
     const finishLoading = () => {
       if (mounted) setAuthLoading(false);
-      console.debug('[Auth] authLoading -> false, isAuthenticated =', isAuthenticated);
     };
-
-    // Fast-path: if polling already stored the session in sessionStorage,
-    // restore state immediately without waiting for getSession().
-    const { storedSession } = (() => {
-      try { return JSON.parse(sessionStorage.getItem('auth_session') || '{}'); }
-      catch { return {}; }
-    })();
-    if (storedSession?.user) {
-      if (mounted) {
-        setIsAuthenticated(true);
-        setUser(buildUserProfile(storedSession.user));
-        sessionStorage.removeItem('auth_session');
-      }
-      finishLoading();
-    }
 
     const syncSession = async () => {
       try {
-        console.log('[Auth] Calling getSession()...');
-        const { data, error } = await supabase.auth.getSession();
-        const session = data?.session;
-        if (error) {
-          console.warn('[Auth] getSession() error:', error);
-        } else {
-          console.log('[Auth] getSession() returned:', session ? `user ${session.user.email}` : 'null');
-        }
+        const session = await authSessionLifecycle.restore(supabase.auth);
         if (session?.user && mounted) {
-          console.log('[Auth] Sync: Session found from getSession()');
-          setIsAuthenticated(true);
-          setUser(buildUserProfile(session.user));
-          // Mirror into sessionStorage so AuthCallback has a fast-path on remount
-          try { sessionStorage.setItem('auth_session', JSON.stringify({ user: session.user })); } catch {}
-          finishLoading();
+          await acceptSession(session);
           return;
         }
-        if (isOAuthCallback) {
-          console.log('[Auth] On /auth/callback but no session yet — starting poll');
-        }
-      } catch (e) {
-        console.warn('[Auth] getSession() failed immediately:', e);
+      } catch {
+        console.warn('[Auth] Session restoration failed.');
       }
 
-      // If we're on /auth/callback and getSession() returned null,
-      // the PKCE code may not have been exchanged yet — poll until we know.
-      if (isOAuthCallback) {
-        const setIntervalFn = typeof self !== 'undefined' ? self.setInterval : (typeof setInterval !== 'undefined' ? setInterval : undefined);
-        const clearIntervalFn = typeof self !== 'undefined' ? self.clearInterval : (typeof clearInterval !== 'undefined' ? clearInterval : undefined);
-        const clearTimeoutFn = typeof window !== 'undefined' && window.clearTimeout ? window.clearTimeout : (typeof clearTimeout !== 'undefined' ? clearTimeout : undefined);
-        if (!setIntervalFn) {
-          finishLoading();
-          return;
-        }
-        console.log('[Auth] Starting OAuth session poll every 500ms...');
-        let pollAttempts = 0;
-        pollTimer = setIntervalFn(async () => {
-          if (!mounted) {
-            if (pollTimer !== null && clearIntervalFn) clearIntervalFn(pollTimer);
-            pollTimer = null;
-            return;
-          }
-          try {
-            const { data } = await supabase.auth.getSession();
-            const session = data?.session;
-            if (session?.user) {
-              console.log('[Auth] Poll: Session found after', pollAttempts * 500, 'ms');
-              setIsAuthenticated(true);
-              setUser(buildUserProfile(session.user));
-              try { sessionStorage.setItem('auth_session', JSON.stringify({ user: session.user })); } catch {}
-              if (pollTimer !== null && clearIntervalFn) clearIntervalFn(pollTimer);
-              pollTimer = null;
-              finishLoading();
-            } else {
-              pollAttempts++;
-              if (pollAttempts % 6 === 0) {
-                console.log('[Auth] Poll attempt', pollAttempts, '— still waiting for session (', pollAttempts * 500, 'ms)...');
-              }
-            }
-          } catch (e) {
-            console.warn('[Auth] Poll attempt error:', e);
-          }
-        }, 500);
-      } else {
-        // Not on /auth/callback - only finish loading if we actually found a session or confirmed no session
-        console.log('[Auth] Not on /auth/callback route, will rely on onAuthStateChange to determine auth state');
+      // The public callback route owns the PKCE exchange. Keep the loading gate
+      // active so no protected route can redirect before that exchange finishes.
+      if (!isOAuthCallback) {
+        setIsAuthenticated(false);
+        setUser(null);
+        finishLoading();
       }
     };
 
-    // On /auth/callback, add a delay before syncing to let Supabase parse the OAuth URL
-    if (isOAuthCallback) {
-      console.log('[Auth] On /auth/callback — delaying sync by 800ms to allow Supabase to parse OAuth parameters');
-      setTimeout(syncSession, 800);
-    } else {
-      syncSession();
-    }
-
-    // Fallback only after 60 seconds (removed the 20s timeout)
-    const callbackFallbackTimer = window.setTimeout(() => {
-      console.warn('[Auth] Extended poll fallback timer fired — no session after 60 s. Stopping poll. URL:', window.location.href);
-      if (pollTimer) {
-        if (typeof self !== 'undefined') self.clearInterval(pollTimer);
-        else clearInterval(pollTimer);
-        pollTimer = null;
-      }
-      // Only finish loading if we're not on /auth/callback (user will be redirected to dashboard anyway)
-      if (!isOAuthCallback) {
-        finishLoading();
-      }
-    }, 60_000);
+    void syncSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        console.log('[Auth] onAuthStateChange event:', _event, 'user:', session?.user?.email ?? 'signed-out');
-        if (pollTimer) {
-          if (typeof self !== 'undefined') self.clearInterval(pollTimer);
-          else clearInterval(pollTimer);
-          pollTimer = null;
-        }
+      (event, session) => {
+        authSessionLifecycle.acceptAuthEvent(event, session);
         if (session?.user) {
-          console.log('[Auth] Setting authenticated state for user:', session.user.email);
-          setIsAuthenticated(true);
-          setUser(buildUserProfile(session.user));
-          try { sessionStorage.setItem('auth_session', JSON.stringify({ user: session.user })); } catch {}
+          void acceptSession(session);
         } else {
-          console.log('[Auth] Clearing authenticated state');
           setIsAuthenticated(false);
           setUser(null);
+          finishLoading();
         }
-        finishLoading();
       }
     );
 
     return () => {
       mounted = false;
-      window.clearTimeout(callbackFallbackTimer);
-      if (pollTimer) {
-        if (typeof self !== 'undefined') self.clearInterval(pollTimer);
-        else clearInterval(pollTimer);
-        pollTimer = null;
-      }
       if (listener && listener.subscription) listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [acceptSession]);
 
   // Auth Actions
-  const login = (email, password) => {
-    if (email === 'pmanucom@devcon.ph' && password === 'devconkids101') {
-      setIsAuthenticated(true);
-      setUser({ email, name: 'Admin User', role: 'Superadmin' });
-      return { success: true };
-    }
-    return { success: false, message: 'Invalid credentials. Please use pmanucom@devcon.ph / devconkids101' };
-  };
-
   const loginWithGoogle = async () => {
     try {
-      const redirectUrl = window.location.origin + '/auth/callback';
-      console.log('🟡 [AppState.loginWithGoogle] Initiating Google OAuth with redirectTo:', redirectUrl);
+      const redirectUrl = buildOAuthRedirectUrl(window.location.origin);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -415,32 +299,25 @@ export const AppProvider = ({ children }) => {
         },
       });
       
-      if (error) {
-        console.error('🟡 [AppState.loginWithGoogle] OAuth error from Supabase:', error);
-        throw error;
-      }
+      if (error) throw error;
       
       if (data?.url) {
-        console.log('🟡 [AppState.loginWithGoogle] Received redirect URL from Supabase:', data.url);
-        console.log('🟡 [AppState.loginWithGoogle] About to redirect to Google...');
         if (typeof window !== 'undefined') {
           window.location.href = data.url;
-          return { success: true, redirectUrl: data.url };
+          return { success: true };
         }
-      } else {
-        console.log('🟡 [AppState.loginWithGoogle] No URL in response, but no error either');
       }
       
       return { success: true, data };
     } catch (error) {
-      console.error('🟡 [AppState.loginWithGoogle] Exception caught:', error.message, error);
       return { success: false, error };
     }
   };
 
   const logout = async () => {
+    authSessionLifecycle.clear();
     try {
-      await supabase.auth.signOut();
+      await clearAuthSession(supabase.auth);
     } catch (error) {
       console.warn('Sign out failed', error);
     }
@@ -448,6 +325,7 @@ export const AppProvider = ({ children }) => {
     try {
       sessionStorage.removeItem('oauth_in_progress');
       sessionStorage.removeItem('auth_session');
+      localStorage.removeItem('chatHistory');
     } catch {
       // ignore storage cleanup errors
     }
@@ -457,177 +335,172 @@ export const AppProvider = ({ children }) => {
   };
 
   // Supabase CRUD Actions
+  
+  const logAuditAction = async (action, targetTable, targetId = null, metadata = {}) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const actorId = session?.user?.id || null;
+      await supabase.from('audit_logs').insert([{
+        actor_id: actorId,
+        action,
+        target_table: targetTable,
+        target_id: targetId,
+        metadata
+      }]);
+    } catch (e) {
+      console.warn("Audit log failed", e);
+    }
+  };
+
   const addChapter = async (chapter) => {
     const payload = { ...chapter };
-
-    try {
-      const { data, error } = await supabase.from('chapters').insert([payload]).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setChapters, data[0]);
-      }
-    } catch (error) {
-      const mockNew = { id: Date.now(), ...payload };
-      upsertRecord(setChapters, mockNew);
+    const { data, error } = await supabase.from('chapters').insert([payload]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setChapters, data[0]);
+      logAuditAction('INSERT', 'chapters', data[0].id, { name: data[0].name });
     }
+    return { persisted: true };
   };
 
   const updateChapter = async (id, chapter) => {
     const payload = { ...chapter };
-
-    try {
-      const { data, error } = await supabase.from('chapters').update(payload).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setChapters, data[0]);
-      }
-    } catch (error) {
-      upsertRecord(setChapters, { id, ...payload });
+    const { data, error } = await supabase.from('chapters').update(payload).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setChapters, data[0]);
+      logAuditAction('UPDATE', 'chapters', id, { name: data[0].name });
     }
+    return { persisted: true };
   };
 
   const deleteChapter = async (id) => {
-    try {
-      await supabase.from('chapters').delete().eq('id', id);
-    } catch (error) {
-      console.warn('Falling back to local chapter delete.', error);
-    } finally {
-      setChapters((current) => current.filter((chapter) => chapter.id !== id));
-    }
+    const { error } = await supabase.from('chapters').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'chapters', id);
+    setChapters((current) => current.filter((chapter) => chapter.id !== id));
+    return { persisted: true };
   };
 
   const addVolunteer = async (volunteer) => {
-    try {
-      const { data, error } = await supabase.from('volunteers').insert([volunteer]).select();
-      if (error) throw error;
-      if (data?.[0]) upsertRecord(setVolunteersList, data[0]);
-      setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
-    } catch (error) {
-      // Fallback local update if Supabase fails
-      const mockNew = { id: Date.now(), ...volunteer };
-      upsertRecord(setVolunteersList, mockNew);
-      setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
+    const { data, error } = await supabase.from('volunteers').insert([volunteer]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setVolunteersList, data[0]);
+      logAuditAction('INSERT', 'volunteers', data[0].id, { name: data[0].name });
     }
+    setStats(prev => ({ ...prev, volunteers: prev.volunteers + 1 }));
+    return { persisted: true };
   };
 
   const updateVolunteer = async (id, volunteer) => {
-    try {
-      const { data, error } = await supabase.from('volunteers').update(volunteer).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setVolunteersList, data[0]);
-      }
-    } catch (error) {
-      upsertRecord(setVolunteersList, { id, ...volunteer });
+    const { data, error } = await supabase.from('volunteers').update(volunteer).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setVolunteersList, data[0]);
+      logAuditAction('UPDATE', 'volunteers', id, { name: data[0].name });
     }
+    return { persisted: true };
   };
 
   const deleteVolunteer = async (id) => {
-    try {
-      await supabase.from('volunteers').delete().eq('id', id);
-      setStats(prev => ({ ...prev, volunteers: Math.max(0, prev.volunteers - 1) }));
-    } catch (error) {
-      console.warn('Falling back to local volunteer delete.', error);
-    }
+    const { error } = await supabase.from('volunteers').delete().eq('id', id);
+    if (error) throw error;
+    setStats(prev => ({ ...prev, volunteers: Math.max(0, prev.volunteers - 1) }));
+    logAuditAction('DELETE', 'volunteers', id);
     setVolunteersList((current) => current.filter((volunteer) => volunteer.id !== id));
+    return { persisted: true };
   };
 
   const addInventoryItem = async (item) => {
-    try {
-      const { data, error } = await supabase.from('inventory').insert([item]).select();
-      if (error) throw error;
-      if (data?.[0]) upsertRecord(setInventoryList, data[0]);
-    } catch (error) {
-      const mockNew = { id: Date.now(), ...item };
-      upsertRecord(setInventoryList, mockNew);
+    const { data, error } = await supabase.from('inventory').insert([item]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setInventoryList, data[0]);
+      logAuditAction('INSERT', 'inventory', data[0].id, { item: data[0].name });
     }
+    return { persisted: true };
   };
 
   const updateInventoryItem = async (id, item) => {
-    try {
-      const { data, error } = await supabase.from('inventory').update(item).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setInventoryList, data[0]);
-      }
-    } catch (error) {
-      upsertRecord(setInventoryList, { id, ...item });
+    const { data, error } = await supabase.from('inventory').update(item).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setInventoryList, data[0]);
+      logAuditAction('UPDATE', 'inventory', id, { item: data[0].name });
     }
+    return { persisted: true };
   };
 
   const deleteInventoryItem = async (id) => {
-    try {
-      await supabase.from('inventory').delete().eq('id', id);
-    } catch (error) {
-      console.warn('Falling back to local inventory delete.', error);
-    }
+    const { error } = await supabase.from('inventory').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'inventory', id);
     setInventoryList((current) => current.filter((item) => item.id !== id));
+    return { persisted: true };
   };
 
   const addSocialPost = async (post) => {
-    try {
-      const { data, error } = await supabase.from('social_media_posts').insert([post]).select();
-      if (error) throw error;
-      if (data?.[0]) upsertRecord(setSocialPosts, data[0]);
-    } catch (error) {
-      const mockNew = { id: Date.now(), ...post };
-      upsertRecord(setSocialPosts, mockNew);
+    const { data, error } = await supabase.from('social_media_posts').insert([post]).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setSocialPosts, data[0]);
+      logAuditAction('INSERT', 'social_media_posts', data[0].id);
     }
+    return { persisted: true };
   };
 
   const updateSocialPost = async (id, post) => {
-    try {
-      const { data, error } = await supabase.from('social_media_posts').update(post).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) {
-        upsertRecord(setSocialPosts, data[0]);
-      }
-    } catch (error) {
-      upsertRecord(setSocialPosts, { id, ...post });
+    const { data, error } = await supabase.from('social_media_posts').update(post).eq('id', id).select();
+    if (error) throw error;
+    if (data?.[0]) {
+      upsertRecord(setSocialPosts, data[0]);
+      logAuditAction('UPDATE', 'social_media_posts', id);
     }
+    return { persisted: true };
   };
 
   const deleteSocialPost = async (id) => {
-    try {
-      await supabase.from('social_media_posts').delete().eq('id', id);
-    } catch (error) {
-      console.warn('Falling back to local post delete.', error);
-    }
+    const { error } = await supabase.from('social_media_posts').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'social_media_posts', id);
     setSocialPosts((current) => current.filter((post) => post.id !== id));
+    return { persisted: true };
   };
 
-  const addEvent = async (event) => {
-    const payload = buildEventFolderMetadata(event);
+  const listEligibleEventCoordinators = useCallback(
+    (chapterId) => eventRepository.listEligibleCoordinators(chapterId),
+    [eventRepository]
+  );
 
-    try {
-      const { data, error } = await supabase.from('events').insert([payload]).select();
-      if (error) throw error;
-      if (data?.[0]) upsertRecord(setEventsList, data[0]);
-    } catch (error) {
-      const mockNew = { id: Date.now(), ...payload };
-      upsertRecord(setEventsList, mockNew);
-    }
+  const addEvent = async (event, coordinatorUserId) => {
+    const data = await eventRepository.saveEvent({ event, coordinatorUserId });
+    const resolved = data ? await eventRepository.resolveEventImage({ ...data, coordinator_user_id: coordinatorUserId }) : data;
+    if (resolved) upsertRecord(setEventsList, resolved);
+    return { persisted: true, event: resolved };
   };
 
-  const updateEvent = async (id, event) => {
-    const payload = buildEventFolderMetadata(event);
+  const updateEvent = async (id, event, coordinatorUserId) => {
+    const data = await eventRepository.saveEvent({ eventId: id, event, coordinatorUserId });
+    const resolved = data ? await eventRepository.resolveEventImage({ ...data, coordinator_user_id: coordinatorUserId }) : data;
+    if (resolved) upsertRecord(setEventsList, resolved);
+    return { persisted: true, event: resolved };
+  };
 
-    try {
-      const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
-      if (error) throw error;
-      if (data?.[0]) upsertRecord(setEventsList, data[0]);
-    } catch (error) {
-      upsertRecord(setEventsList, { id, ...payload });
-    }
+  const uploadEventImage = async (eventId, file) => {
+    const uploaded = await eventRepository.uploadEventImage(eventId, file);
+    setEventsList((current) => current.map((event) => event.id === eventId
+      ? { ...event, image_storage_path: uploaded.image_storage_path, image_url: uploaded.image_url }
+      : event));
+    return uploaded;
   };
 
   const deleteEvent = async (id) => {
-    try {
-      await supabase.from('events').delete().eq('id', id);
-    } catch (error) {
-      console.warn('Falling back to local event delete.', error);
-    }
+    const { error } = await supabase.from('events').delete().eq('id', id);
+    if (error) throw error;
+    logAuditAction('DELETE', 'events', id);
     setEventsList((current) => current.filter((event) => event.id !== id));
+    return { persisted: true };
   };
 
   const addLearner = () => {
@@ -660,6 +533,7 @@ export const AppProvider = ({ children }) => {
       eventsList,
       growthData,
       authLoading,
+      authSessionReady: !authLoading,
       isAuthenticated,
       user,
       themeMode,
@@ -669,9 +543,13 @@ export const AppProvider = ({ children }) => {
       updateDashboardSetting,
       resetDashboardSettings,
       role: user?.role || 'Visitor',
-      isSuperadmin: (user?.role || '').toLowerCase() === 'superadmin',
-      canManageContent: (user?.role || '').toLowerCase() === 'superadmin',
-      login,
+      roleKey: user?.roleKey || 'visitor',
+      isPendingVolunteer: user?.roleKey === 'pending_volunteer',
+      isSuperadmin: user?.roleKey === 'super_admin',
+      isAdmin: user?.roleKey === 'super_admin' || user?.roleKey === 'admin',
+      hasRole: (...roles) => roles.includes(user?.roleKey),
+      canManageContent: user?.roleKey === 'super_admin' || user?.roleKey === 'admin',
+      acceptSession,
       loginWithGoogle,
       logout,
       addChapter,
@@ -686,8 +564,10 @@ export const AppProvider = ({ children }) => {
       addSocialPost,
       updateSocialPost,
       deleteSocialPost,
+      listEligibleEventCoordinators,
       addEvent,
       updateEvent,
+      uploadEventImage,
       deleteEvent,
       addLearner
     }}>

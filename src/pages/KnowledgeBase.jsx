@@ -1,25 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload, Trash2, FileText, Loader } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { useApp } from '../context/AppState';
+import { canPerform } from '../auth/permissions';
 import { processDocument, validateDocumentFile } from '../services/documentService';
-import { storeDocumentChunks, listDocuments, deleteDocument } from '../services/ragService';
+import { deleteKnowledgeDocument, listDocuments, uploadKnowledgeDocument } from '../services/ragService';
+import PageHeader from '../components/PageHeader';
+import EmptyState from '../components/EmptyState';
 import './KnowledgeBase.css';
 
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 KB';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const size = bytes / (1024 ** index);
+  return `${size >= 10 || index === 0 ? Math.round(size) : size.toFixed(1)} ${units[index]}`;
+};
+
+const getFileTypeLabel = (file) => file.name.split('.').pop()?.toUpperCase() || 'FILE';
+
 export default function KnowledgeBase() {
+  const { roleKey } = useApp();
+  const canManageKnowledge = canPerform(roleKey, 'knowledge.manage');
   const [documents, setDocuments] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const fileInputRef = useRef(null);
 
+  // Auto-clear success/error messages after 5 seconds
   useEffect(() => {
-    loadDocuments();
-  }, []);
+    if (!success && !error) return;
+    const timer = setTimeout(() => { setSuccess(''); setError(''); }, 5000);
+    return () => clearTimeout(timer);
+  }, [success, error]);
 
-  const loadDocuments = async () => {
+  // Ref to the hidden file input — we trigger it when the button is clicked
+  useEffect(() => {
+    let active = true;
+    listDocuments(roleKey)
+      .then((docs) => { if (active) setDocuments(docs); })
+      .catch((err) => {
+        console.error('Error loading documents:', err);
+        if (active) setError('Failed to load documents');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [roleKey]);
+
+  async function loadDocuments() {
     setLoading(true);
     try {
-      const docs = await listDocuments();
+      const docs = await listDocuments(roleKey);
       setDocuments(docs);
     } catch (err) {
       console.error('Error loading documents:', err);
@@ -27,11 +60,20 @@ export default function KnowledgeBase() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleFileUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setSelectedFile(file);
+    setError('');
+    setSuccess('');
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile || uploading) return;
+    const file = selectedFile;
 
     setError('');
     setSuccess('');
@@ -41,38 +83,27 @@ export default function KnowledgeBase() {
       // Validate file
       validateDocumentFile(file);
 
-      // Process document
+      // Warn on duplicate filename (prevents polluting KB with repeat uploads)
+      const existingDoc = documents.find(d => d.title === file.name);
+      if (existingDoc && !confirm(`"${file.name}" already exists in the Knowledge Base. Upload again? This will create duplicate chunks.`)) {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
+      // Process document (parse + chunk)
       const processedDoc = await processDocument(file);
 
-      // Generate document ID
-      const docId = `doc_${Date.now()}`;
-
-      // Store in Supabase documents table
-      const { data: docData, error: docError } = await supabase
-        .from('documents')
-        .insert([{
-          id: docId,
-          title: processedDoc.fileName,
-          file_type: processedDoc.fileType,
-          total_chunks: processedDoc.totalChunks,
-          total_pages: processedDoc.totalPages,
-          created_at: new Date().toISOString()
-        }])
-        .select();
-
-      if (docError) throw docError;
-
-      // Store chunks with embeddings in knowledge_base table
-      await storeDocumentChunks(docId, processedDoc.fileName, processedDoc.chunks);
-
-      setSuccess(`✓ ${processedDoc.fileName} uploaded successfully (${processedDoc.totalChunks} chunks indexed)`);
+      const { chunksStored } = await uploadKnowledgeDocument(file, processedDoc, roleKey);
+      setSelectedFile(null);
+      setSuccess(`✓ ${processedDoc.fileName} uploaded securely (${chunksStored} chunks indexed)`);
       await loadDocuments();
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err.message || 'Failed to upload document');
+      setError(err.message || 'Unable to upload the document. Please try again.');
     } finally {
       setUploading(false);
-      e.target.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -80,14 +111,7 @@ export default function KnowledgeBase() {
     if (!confirm('Delete this document and all its indexed chunks?')) return;
 
     try {
-      await deleteDocument(docId);
-      
-      const { error } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', docId);
-
-      if (error) throw error;
+      await deleteKnowledgeDocument(docId, roleKey);
 
       setSuccess('Document deleted successfully');
       await loadDocuments();
@@ -99,36 +123,79 @@ export default function KnowledgeBase() {
 
   return (
     <div className="knowledge-base-page">
-      <h1>Knowledge Base Management</h1>
-      <p className="subtitle">Upload and manage documents for AI knowledge grounding</p>
+      <PageHeader
+        eyebrow="Intelligence"
+        title={canManageKnowledge ? 'Knowledge Base Management' : 'Knowledge Base'}
+        description={
+          canManageKnowledge
+            ? 'Upload and manage documents for AI knowledge grounding'
+            : 'Browse approved resources used by the DEVCON Kids assistant'
+        }
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
+      {error && <div className="alert alert-error" role="alert" aria-live="assertive">{error}</div>}
+      {success && <div className="alert alert-success" role="status" aria-live="polite">{success}</div>}
 
-      <div className="upload-section">
-        <div className="upload-box">
-          <Upload size={32} />
-          <h3>Upload Documents</h3>
-          <p>PDF, DOCX, or TXT files</p>
-          <input
-            type="file"
-            onChange={handleFileUpload}
-            disabled={uploading}
-            accept=".pdf,.docx,.txt"
-            className="file-input"
-          />
-          <button className="upload-btn" disabled={uploading}>
-            {uploading ? (
-              <>
-                <Loader size={16} className="spinner" />
-                Uploading...
-              </>
-            ) : (
-              'Select File'
+      {canManageKnowledge && (
+        <div className="upload-section">
+          <div className="upload-box">
+            <div className="upload-icon"><Upload size={32} aria-hidden="true" /></div>
+            <h3>Upload Documents</h3>
+            <p>Choose a PDF, DOCX, or TXT file to add it to the AI knowledge base.</p>
+            <input
+              id="knowledge-base-file"
+              ref={fileInputRef}
+              type="file"
+              onChange={handleFileSelect}
+              disabled={uploading}
+              accept=".pdf,.docx,.txt"
+              className="file-input"
+              aria-describedby="upload-requirements"
+            />
+            <p id="upload-requirements" className="upload-requirements">Supported formats: PDF, DOCX, TXT · Maximum file size: 50MB</p>
+            <label
+              htmlFor="knowledge-base-file"
+              className={`upload-btn select-file-btn ${uploading ? 'is-disabled' : ''}`}
+              role="button"
+              tabIndex={uploading ? -1 : 0}
+              aria-disabled={uploading}
+              onKeyDown={(event) => {
+                if (!uploading && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+            >
+              Select File
+            </label>
+            {selectedFile && (
+              <div className="selected-file" aria-live="polite">
+                <FileText size={20} aria-hidden="true" />
+                <div>
+                  <span>Selected file</span>
+                  <strong>{selectedFile.name}</strong>
+                  <small>{getFileTypeLabel(selectedFile)} · {formatFileSize(selectedFile.size)}</small>
+                </div>
+              </div>
             )}
-          </button>
+            <button
+              type="button"
+              className="upload-btn process-upload-btn"
+              onClick={handleFileUpload}
+              disabled={!selectedFile || uploading}
+            >
+              {uploading ? (
+                <>
+                  <Loader size={16} className="spinner" />
+                  Processing...
+                </>
+              ) : (
+                'Upload Document'
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="documents-section">
         <h2>Uploaded Documents ({documents.length})</h2>
@@ -139,11 +206,15 @@ export default function KnowledgeBase() {
             <p>Loading documents...</p>
           </div>
         ) : documents.length === 0 ? (
-          <div className="empty-state">
-            <FileText size={48} />
-            <p>No documents uploaded yet</p>
-            <small>Upload documents to build your AI knowledge base</small>
-          </div>
+          <EmptyState
+            icon={FileText}
+            title="No documents uploaded yet"
+            description={
+              canManageKnowledge
+                ? 'Upload documents to build your AI knowledge base.'
+                : 'No approved knowledge resources are currently available.'
+            }
+          />
         ) : (
           <div className="documents-table">
             <table>
@@ -154,27 +225,30 @@ export default function KnowledgeBase() {
                   <th>Chunks</th>
                   <th>Pages</th>
                   <th>Uploaded</th>
-                  <th>Action</th>
+                  {canManageKnowledge && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
-                {documents.map(doc => (
+                {documents.map((doc) => (
                   <tr key={doc.id}>
                     <td className="title-cell">
-                      <FileText size={16} />
-                      {doc.title}
+                      <span className="document-title-content">
+                        <FileText size={16} />
+                        <span>{doc.title}</span>
+                      </span>
                     </td>
                     <td>{doc.file_type.toUpperCase()}</td>
                     <td>{doc.total_chunks}</td>
                     <td>{doc.total_pages}</td>
-                    <td>
-                      {new Date(doc.created_at).toLocaleDateString()}
-                    </td>
+                    {canManageKnowledge && (
+                      <td>{new Date(doc.created_at).toLocaleDateString()}</td>
+                    )}
                     <td>
                       <button
                         onClick={() => handleDeleteDocument(doc.id)}
                         className="delete-btn"
                         title="Delete document"
+                        type="button"
                       >
                         <Trash2 size={16} />
                       </button>
