@@ -44,6 +44,7 @@ export const buildEventRpcArgs = ({ eventId = null, event, coordinatorUserId }) 
   event_image_url: event.image_url || null,
   event_status_value: event.status,
   event_date_value: event.event_date || null,
+  event_venue: event.venue,
 });
 
 export const getEventValidationIssue = (error) => {

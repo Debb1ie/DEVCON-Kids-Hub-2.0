@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { AUTH_CALLBACK_PATH, buildOAuthRedirectUrl, clearAuthSession } from '../auth/authFlow';
 import { authSessionLifecycle } from '../auth/sessionLifecycle';
 import { createEventRepository } from '../services/eventService';
+import { buildVolunteerPayload, sanitizedVolunteerError } from '../services/volunteerService';
 
 const AppContext = createContext();
 
@@ -383,8 +384,12 @@ export const AppProvider = ({ children }) => {
   };
 
   const addVolunteer = async (volunteer) => {
-    const { data, error } = await supabase.from('volunteers').insert([volunteer]).select();
-    if (error) throw error;
+    const payload = buildVolunteerPayload(volunteer);
+    const { data, error } = await supabase.from('volunteers').insert([payload]).select();
+    if (error) {
+      if (import.meta.env.DEV) console.error('[Volunteers] Insert failed', sanitizedVolunteerError(error));
+      throw error;
+    }
     if (data?.[0]) {
       upsertRecord(setVolunteersList, data[0]);
       logAuditAction('INSERT', 'volunteers', data[0].id, { name: data[0].name });
@@ -394,8 +399,12 @@ export const AppProvider = ({ children }) => {
   };
 
   const updateVolunteer = async (id, volunteer) => {
-    const { data, error } = await supabase.from('volunteers').update(volunteer).eq('id', id).select();
-    if (error) throw error;
+    const payload = buildVolunteerPayload(volunteer);
+    const { data, error } = await supabase.from('volunteers').update(payload).eq('id', id).select();
+    if (error) {
+      if (import.meta.env.DEV) console.error('[Volunteers] Update failed', sanitizedVolunteerError(error));
+      throw error;
+    }
     if (data?.[0]) {
       upsertRecord(setVolunteersList, data[0]);
       logAuditAction('UPDATE', 'volunteers', id, { name: data[0].name });

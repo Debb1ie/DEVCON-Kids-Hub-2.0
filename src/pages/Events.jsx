@@ -22,6 +22,7 @@ const createEmptyForm = () => ({
   coordinator_user_id: '',
   coordinator: '',
   event_date: '',
+  venue: '',
   description: '',
   image_url: '',
   status: 'Scheduled'
@@ -207,6 +208,7 @@ export default function Events() {
       coordinator_user_id: event.coordinator_user_id || '',
       coordinator: event.coordinator || '',
       event_date: event.event_date || '',
+      venue: event.venue || '',
       description: event.description || '',
       image_url: event.image_fallback_url ?? event.image_url ?? '',
       status: event.status || 'Scheduled'
@@ -327,7 +329,8 @@ export default function Events() {
       if (!form.title.trim()) nextErrors.push(createValidationError({ key: 'event-name-required', fieldId: 'event-name', stage: 0, message: 'Enter an event name.' }));
       const chapter = assignableChapters.find((item) => item.id === form.chapter_id);
       if (!chapter) nextErrors.push(createValidationError({ key: 'event-chapter-required', fieldId: 'event-chapter', stage: 0, message: 'Select a valid active chapter or Volunteer Community.' }));
-      if (!isValidIsoDate(form.event_date)) nextErrors.push(createValidationError({ key: 'event-date-invalid', fieldId: 'event-date', stage: 0, message: 'Enter a valid event date.' }));
+      if (!form.event_date || !isValidIsoDate(form.event_date)) nextErrors.push(createValidationError({ key: 'event-date-invalid', fieldId: 'event-date', stage: 0, message: 'Enter a valid event date.' }));
+      if (!form.venue.trim()) nextErrors.push(createValidationError({ key: 'event-venue-required', fieldId: 'event-venue', stage: 0, message: 'Enter the event venue.' }));
     }
     if (stage === 1) {
       if (!selectedCoordinatorOption) nextErrors.push(createValidationError({ key: 'event-coordinator-required', fieldId: 'event-coordinator', stage: 1, message: 'Select an active Event Coordinator assigned to this chapter.' }));
@@ -386,7 +389,7 @@ export default function Events() {
       return;
     }
 
-    if (!isValidIsoDate(form.event_date)) {
+    if (!form.event_date || !isValidIsoDate(form.event_date)) {
       setEditorStep(0);
       setValidationErrors([createValidationError({ key: 'event-date-invalid', fieldId: 'event-date', stage: 0, message: 'Enter a valid event date.' })]);
       return;
@@ -408,6 +411,7 @@ export default function Events() {
       chapter: selectedChapter.name,
       coordinator: selectedCoordinatorOption.full_name || selectedCoordinatorOption.email,
       description: form.description.trim(),
+      venue: form.venue.trim(),
       image_url: form.image_url.trim()
     };
 
@@ -619,9 +623,14 @@ export default function Events() {
                     {validationErrorFor('event-chapter') && <small id="event-chapter-error" className="field-error">{validationErrorFor('event-chapter')}</small>}
                   </div>
                   <div className="form-group">
-                    <label htmlFor="event-date">Event Date <span className="optional-label">Optional</span></label>
-                    <input id="event-date" type="date" className="border-input" value={form.event_date} onChange={(e) => { setFormError(''); clearValidationError('event-date', isValidIsoDate(e.target.value)); setForm({ ...form, event_date: e.target.value }); }} disabled={isSubmitting} aria-invalid={validationErrorFor('event-date') ? true : undefined} aria-describedby={validationErrorFor('event-date') ? 'event-date-error' : undefined} />
+                    <label htmlFor="event-date">Event Date <span aria-hidden="true">*</span></label>
+                    <input id="event-date" type="date" className="border-input" value={form.event_date} onChange={(e) => { setFormError(''); clearValidationError('event-date', isValidIsoDate(e.target.value)); setForm({ ...form, event_date: e.target.value }); }} disabled={isSubmitting} aria-invalid={validationErrorFor('event-date') ? true : undefined} aria-describedby={validationErrorFor('event-date') ? 'event-date-error' : undefined} required />
                     {validationErrorFor('event-date') && <small id="event-date-error" className="field-error">{validationErrorFor('event-date')}</small>}
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="event-venue">Venue <span aria-hidden="true">*</span></label>
+                    <input id="event-venue" className="border-input" type="text" value={form.venue} onChange={(e) => { setFormError(''); clearValidationError('event-venue', Boolean(e.target.value.trim())); setForm({ ...form, venue: e.target.value }); }} disabled={isSubmitting} aria-invalid={validationErrorFor('event-venue') ? true : undefined} aria-describedby={validationErrorFor('event-venue') ? 'event-venue-error' : undefined} required />
+                    {validationErrorFor('event-venue') && <small id="event-venue-error" className="field-error">{validationErrorFor('event-venue')}</small>}
                   </div>
                   <div className="form-group">
                     <label htmlFor="event-status">Status</label>
@@ -698,6 +707,7 @@ export default function Events() {
                     <div><dt>Event</dt><dd>{form.title || 'Not provided'}</dd></div>
                     <div><dt>Type</dt><dd>{form.type}</dd></div>
                     <div><dt>Date</dt><dd>{form.event_date || 'Not scheduled'}</dd></div>
+                    <div><dt>Venue</dt><dd>{form.venue || 'Not provided'}</dd></div>
                     <div><dt>Status</dt><dd><StatusBadge status={form.status} /></dd></div>
                   </dl>
                 </section>

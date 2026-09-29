@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, ExternalLink, FileText, Image, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import { postEventReportRepository, validateReportFile } from '../services/postEventReportService';
+import { buildEventReportForm } from '../services/postEventReportForm';
 import { reportAutomationService } from '../services/reportAutomationService';
 import PageHeader from '../components/PageHeader';
 import './PostEventReport.css';
@@ -13,7 +14,8 @@ const LABELS = { draft: 'Draft', submitted: 'Submitted', needs_revision: 'Needs 
 const money = (value) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0);
 
 export default function PostEventReport() {
-  const { eventsList = [], isAdmin, user, roleKey } = useApp();
+  const { isAdmin, user, roleKey } = useApp();
+  const [events, setEvents] = useState([]);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(EMPTY);
   const [reportId, setReportId] = useState(null);
@@ -24,7 +26,7 @@ export default function PostEventReport() {
   const [fileCategory, setFileCategory] = useState('event_documentation');
   const [status, setStatus] = useState('draft');
   const [errors, setErrors] = useState({});
-  const [notice, setNotice] = useState('Select an event to load or create its local report.');
+  const [notice, setNotice] = useState('Loading events you can report on…');
   const [busy, setBusy] = useState(false);
   const [automation, setAutomation] = useState(null);
   const fileInput = useRef(null);
@@ -32,21 +34,33 @@ export default function PostEventReport() {
   const expenses = useMemo(() => transactions.reduce((sum, item) => sum + Number(item.amount || 0), 0), [transactions]);
   const balance = Number(form.budget || 0) - expenses;
 
+  useEffect(() => {
+    let active = true;
+    postEventReportRepository.listEligibleEvents()
+      .then((rows) => {
+        if (!active) return;
+        setEvents(rows);
+        setNotice(rows.length ? 'Select an event to load or create its report.' : 'No events are available in your authorized scope.');
+      })
+      .catch((error) => { if (active) setNotice(error.message); });
+    return () => { active = false; };
+  }, []);
+
   const update = (field, value) => { setForm((current) => ({ ...current, [field]: value })); setErrors((current) => ({ ...current, [field]: '' })); setNotice(''); };
 
   const loadEvent = async (eventId) => {
-    const event = eventsList.find((item) => String(item.id) === eventId);
+    const event = events.find((item) => String(item.id) === eventId);
     if (!event) { setForm(EMPTY); setReportId(null); setTransactions([]); setFiles([]); setAutomation(null); return; }
     setBusy(true); setNotice('Loading report…');
     try {
       const data = await postEventReportRepository.loadByEvent(event.id);
       const report = data?.report;
-      setForm({ ...EMPTY, eventId: String(event.id), eventName: event.title || '', chapter: event.chapter || '', eventDate: event.event_date || '', venue: report?.venue || '', coordinator: report?.coordinator_name || event.coordinator || '', summary: report?.event_summary || '', registered: data?.attendance?.registered_count ?? '', attended: data?.attendance?.attended_count ?? '', children: data?.attendance?.children_reached ?? '', volunteers: data?.attendance?.volunteers_involved ?? '', attendanceNotes: data?.attendance?.notes || '', budget: data?.finance?.approved_budget ?? '', keyLearnings: data?.impact?.key_learnings || '', challenges: data?.impact?.challenges || '', communityImpact: data?.impact?.community_impact || '', recommendations: data?.impact?.recommendations || '', satisfaction: data?.impact?.satisfaction_rating || '' });
+      setForm(buildEventReportForm(event, data));
       setReportId(report?.id || null); setStatus(report?.status || 'draft');
       setTransactions((data?.transactions || []).map((item) => ({ id: item.id, description: item.description, category: item.expense_category, amount: Number(item.amount), persisted: true })));
       setFiles((data?.attachments || []).map((item) => ({ ...item, persisted: true, name: item.file_name, type: item.file_type, size: item.file_size })));
       setAutomation(report?.id ? await reportAutomationService.load(report.id) : null);
-      setNotice(data ? 'Report loaded from local Supabase.' : 'No report exists yet. Save to create a draft.');
+      setNotice(data ? `Report already exists (${LABELS[report.status] || report.status}).` : 'No report exists yet. Save to create a draft.');
     } catch (error) { setNotice(error.message); }
     finally { setBusy(false); }
   };
@@ -65,10 +79,10 @@ export default function PostEventReport() {
   const persistDraft = async () => {
     if (!editable) { setNotice('Submitted and approved reports cannot be edited.'); return null; }
     if (!form.eventId || !user?.id) { setNotice('Select an event and sign in before saving.'); return null; }
-    setBusy(true); setNotice('Saving draft to local Supabase…');
+    setBusy(true); setNotice('Saving draft…');
     try {
       const result = await postEventReportRepository.saveDraft({ reportId, eventId: form.eventId, userId: user.id, report: { venue: form.venue, coordinatorName: form.coordinator, eventSummary: form.summary }, attendance: { registeredCount: form.registered, attendedCount: form.attended, childrenReached: form.children, volunteersInvolved: form.volunteers, notes: form.attendanceNotes }, finance: { approvedBudget: form.budget }, impact: { keyLearnings: form.keyLearnings, challenges: form.challenges, communityImpact: form.communityImpact, recommendations: form.recommendations, satisfactionRating: form.satisfaction || null }, transactions });
-      setReportId(result.report.id); setStatus(result.report.status); setTransactions(result.transactions); setNotice('Draft saved to the isolated local database.'); return result.report;
+      setReportId(result.report.id); setStatus(result.report.status); setTransactions(result.transactions); setNotice('Draft saved.'); return result.report;
     } catch (error) { setNotice(error.message); return null; }
     finally { setBusy(false); }
   };
@@ -91,7 +105,7 @@ export default function PostEventReport() {
   const uploadFiles = async () => {
     const saved = reportId ? { id: reportId } : await persistDraft(); if (!saved) return;
     const staged = files.filter((item) => !item.persisted); if (!staged.length) return;
-    setBusy(true); setNotice('Uploading privately to local Storage…');
+    setBusy(true); setNotice('Uploading privately…');
     try { const uploaded = []; for (const item of staged) { const attachment = await postEventReportRepository.uploadAttachment({ reportId: saved.id, eventId: form.eventId, category: item.category, file: item.file }); uploaded.push({ ...attachment, persisted: true, name: attachment.file_name, type: attachment.file_type, size: attachment.file_size }); URL.revokeObjectURL(item.localUrl); } setFiles((current) => [...current.filter((item) => item.persisted), ...uploaded]); setNotice(`${uploaded.length} attachment${uploaded.length === 1 ? '' : 's'} uploaded.`); }
     catch (error) { setNotice(error.message); }
     finally { setBusy(false); }
@@ -133,7 +147,7 @@ export default function PostEventReport() {
     <nav className="report-steps" aria-label="Report progress">{STEPS.map((label,index)=><button key={label} type="button" className={index===step?'active':index<step?'complete':''} onClick={()=>index<=step&&setStep(index)}><span>{index<step?<Check size={15}/>:index+1}</span><strong>{label}</strong></button>)}</nav>
     {notice&&<div className="report-notice" role="status">{busy&&<Loader2 className="spin" size={16}/>} {notice}</div>}
     <main className="report-panel card"><div className="report-panel-heading"><div><span>Step {step+1} of 5</span><h2>{STEPS[step]}</h2></div><button className="btn-secondary" type="button" disabled={busy||!editable} onClick={persistDraft}><Save size={17}/> Save draft</button></div>
-      {step===0&&<General form={form} update={update} errors={errors} events={eventsList} loadEvent={loadEvent} locked={busy||Boolean(reportId)} editable={editable}/>}
+      {step===0&&<General form={form} update={update} errors={errors} events={events} loadEvent={loadEvent} locked={busy||Boolean(reportId)} editable={editable}/>}
       {step===1&&<Attendance form={form} update={update} errors={errors} editable={editable}/>}
       {step===2&&<Finance form={form} update={update} errors={errors} editable={editable} transaction={transaction} setTransaction={setTransaction} addTransaction={addTransaction} transactions={transactions} setTransactions={setTransactions} edit={(item)=>{setTransaction({description:item.description,category:item.category,amount:String(item.amount)});setEditingTransaction(item.id);}} expenses={expenses} balance={balance}/>}
       {step===3&&<Impact form={form} update={update} errors={errors} editable={editable} files={files} category={fileCategory} setCategory={setFileCategory} fileInput={fileInput} chooseFiles={chooseFiles} uploadFiles={uploadFiles} preview={preview} removeFile={removeFile} busy={busy}/>}
@@ -144,7 +158,7 @@ export default function PostEventReport() {
 }
 
 const Field=({label,required,error,wide,children})=><label className={`report-field ${wide?'wide':''}`}><span>{label}{required&&<b> *</b>}</span>{children}{error&&<small role="alert">{error}</small>}</label>;
-const General=({form,update,errors,events,loadEvent,locked,editable})=><div className="report-grid"><Field label="Existing event" required error={errors.eventId}><select disabled={locked} value={form.eventId} onChange={(e)=>loadEvent(e.target.value)}><option value="">Select an event</option>{events.map((event)=><option key={event.id} value={event.id}>{event.title} — {event.chapter||'No chapter'}</option>)}</select></Field><Field label="Event name" required error={errors.eventName}><input disabled value={form.eventName}/></Field><Field label="Chapter" required error={errors.chapter}><input disabled value={form.chapter}/></Field><Field label="Event date" required error={errors.eventDate}><input disabled type="date" value={form.eventDate}/></Field><Field label="Venue" required error={errors.venue}><input disabled={!editable} value={form.venue} onChange={(e)=>update('venue',e.target.value)}/></Field><Field label="Coordinator"><input disabled={!editable} value={form.coordinator} onChange={(e)=>update('coordinator',e.target.value)}/></Field><Field label="Event summary" wide><textarea disabled={!editable} rows="4" value={form.summary} onChange={(e)=>update('summary',e.target.value)}/></Field></div>;
+const General=({form,update,errors,events,loadEvent,locked,editable})=><div className="report-grid"><Field label="Existing event" required error={errors.eventId}><select disabled={locked} value={form.eventId} onChange={(e)=>loadEvent(e.target.value)}><option value="">Select an event</option>{events.map((event)=>{const existing=event.post_event_reports?.[0];return <option key={event.id} value={event.id}>{event.title} — {event.chapter||'No chapter'}{existing?` — Report already exists (${LABELS[existing.status]||existing.status})`:''}</option>;})}</select></Field><Field label="Event name" required error={errors.eventName}><input disabled value={form.eventName}/></Field><Field label="Chapter" required error={errors.chapter}><input disabled value={form.chapter}/></Field><Field label="Event date" required error={errors.eventDate}><input disabled type="date" value={form.eventDate}/></Field><Field label="Venue" required error={errors.venue}><input disabled value={form.venue}/></Field><Field label="Coordinator"><input disabled value={form.coordinator}/></Field><Field label="Event summary" wide><textarea disabled={!editable} rows="4" value={form.summary} onChange={(e)=>update('summary',e.target.value)}/></Field></div>;
 const Attendance=({form,update,errors,editable})=><div className="report-grid">{[['registered','Registered participants'],['attended','Actual attendance'],['children','Children reached'],['volunteers','Volunteers involved']].map(([key,label])=><Field key={key} label={label} required error={errors[key]}><input disabled={!editable} type="number" min="0" value={form[key]} onChange={(e)=>update(key,e.target.value)}/></Field>)}<Field label="Attendance notes" wide><textarea disabled={!editable} rows="5" value={form.attendanceNotes} onChange={(e)=>update('attendanceNotes',e.target.value)}/></Field></div>;
 const Finance=({form,update,errors,editable,transaction,setTransaction,addTransaction,transactions,setTransactions,edit,expenses,balance})=><div className="finance-layout"><div className="report-grid"><Field label="Approved budget" required error={errors.budget}><input disabled={!editable} type="number" min="0" step="0.01" value={form.budget} onChange={(e)=>update('budget',e.target.value)}/></Field></div><section className="transaction-card"><div className="section-title"><div><h3>Expense transactions</h3><p>Add each expense manually.</p></div></div><div className="transaction-form"><input disabled={!editable} placeholder="Description" value={transaction.description} onChange={(e)=>setTransaction({...transaction,description:e.target.value})}/><select disabled={!editable} value={transaction.category} onChange={(e)=>setTransaction({...transaction,category:e.target.value})}><option value="">Category</option>{['venue','food','transport','materials','other'].map((item)=><option key={item}>{item}</option>)}</select><input disabled={!editable} type="number" min="0.01" step="0.01" placeholder="Amount" value={transaction.amount} onChange={(e)=>setTransaction({...transaction,amount:e.target.value})}/><button disabled={!editable} type="button" className="btn-primary" onClick={addTransaction}><Plus size={17}/> Add/update</button></div>{transactions.length===0?<div className="empty-state">No expenses added yet.</div>:<div className="transaction-list">{transactions.map((item)=><div key={item.id}><span><strong>{item.description}</strong><small>{item.category}</small></span><b>{money(item.amount)}</b><button disabled={!editable} type="button" onClick={()=>edit(item)}><Pencil size={16}/></button><button disabled={!editable} type="button" onClick={()=>setTransactions((current)=>current.filter((entry)=>entry.id!==item.id))}><Trash2 size={16}/></button></div>)}</div>}</section><div className="finance-summary"><span>Budget<strong>{money(form.budget)}</strong></span><span>Expenses<strong>{money(expenses)}</strong></span><span className={balance<0?'negative':''}>Remaining<strong>{money(balance)}</strong></span></div></div>;
 const Impact=({form,update,errors,editable,files,category,setCategory,fileInput,chooseFiles,uploadFiles,preview,removeFile,busy})=><div className="impact-layout"><div className="report-grid">{[['keyLearnings','Key learnings'],['challenges','Challenges'],['communityImpact','Community impact'],['recommendations','Recommendations']].map(([key,label])=><Field key={key} label={label} required={key==='keyLearnings'||key==='communityImpact'} error={errors[key]}><textarea disabled={!editable} rows="4" value={form[key]} onChange={(e)=>update(key,e.target.value)}/></Field>)}<Field label="Participant satisfaction"><select disabled={!editable} value={form.satisfaction} onChange={(e)=>update('satisfaction',e.target.value)}><option value="">Not collected</option>{['excellent','good','fair','poor'].map((item)=><option key={item}>{item}</option>)}</select></Field></div><section className="attachment-section"><div className="section-title"><div><h3>Private attachments</h3><p>Upload intents authorize each path before permanent metadata is stored.</p></div><div className="attachment-controls"><select disabled={!editable} value={category} onChange={(e)=>setCategory(e.target.value)}><option value="event_photo">Event photo</option><option value="event_documentation">Documentation</option><option value="attendance">Attendance</option><option value="finance_support">Finance receipt</option><option value="impact_report">Impact report</option></select><button disabled={!editable} type="button" className="btn-secondary" onClick={()=>fileInput.current?.click()}><UploadCloud size={17}/> Choose</button><input ref={fileInput} hidden multiple type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={chooseFiles}/><button disabled={!editable||busy||!files.some((item)=>!item.persisted)} type="button" className="btn-primary" onClick={uploadFiles}>Upload staged</button></div></div>{files.length===0?<div className="empty-state"><Image size={26}/> No attachments yet.</div>:<div className="file-grid">{files.map((item)=><article key={item.id}>{item.localUrl&&item.type.startsWith('image/')?<img src={item.localUrl} alt=""/>:<FileText size={30}/>}<div><strong>{item.name}</strong><small>{item.category} · {(item.size/1024).toFixed(1)} KB</small></div><button type="button" onClick={()=>preview(item)}>Preview</button><button disabled={!editable} type="button" onClick={()=>removeFile(item)}><Trash2 size={16}/></button></article>)}</div>}</section></div>;

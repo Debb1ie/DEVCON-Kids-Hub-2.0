@@ -9,16 +9,6 @@ export const REPORT_FILE_TYPES = new Set([
   'application/pdf',
 ]);
 
-const localHosts = new Set(['127.0.0.1', 'localhost', '::1']);
-
-export const isLoopbackSupabaseUrl = (value) => {
-  try {
-    return localHosts.has(new URL(value).hostname);
-  } catch {
-    return false;
-  }
-};
-
 export const validateReportFile = (file) => {
   if (!REPORT_FILE_TYPES.has(file?.type)) {
     throw new Error('Only JPEG, PNG, WebP, and PDF files are supported.');
@@ -35,17 +25,17 @@ const unwrap = (result, context) => {
 
 export const createPostEventReportRepository = ({
   client,
-  backendUrl,
-  enforceLocal = true,
 }) => {
-  const assertLocal = () => {
-    if (enforceLocal && !isLoopbackSupabaseUrl(backendUrl)) {
-      throw new Error('Post Event Report persistence is restricted to the local Supabase environment.');
-    }
+  const listEligibleEvents = async () => {
+    const rows = unwrap(await client
+      .from('events')
+      .select('id,title,chapter_id,chapter,event_date,venue,status,coordinator,event_assignments(user_id),post_event_reports(id,status)')
+      .order('event_date', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false }), 'Load reportable events');
+    return rows || [];
   };
 
   const loadByEvent = async (eventId) => {
-    assertLocal();
     const report = unwrap(await client.from('post_event_reports').select('*').eq('event_id', eventId).maybeSingle(), 'Load report');
     if (!report) return null;
 
@@ -71,7 +61,6 @@ export const createPostEventReportRepository = ({
   };
 
   const saveDraft = async ({ reportId, eventId, userId, report, attendance, impact, finance, transactions }) => {
-    assertLocal();
     const reportPayload = {
       event_id: eventId,
       submitted_by: userId,
@@ -143,12 +132,10 @@ export const createPostEventReportRepository = ({
   };
 
   const transition = async (reportId, status, fields = {}) => {
-    assertLocal();
     return unwrap(await client.from('post_event_reports').update({ status, ...fields }).eq('id', reportId).select().single(), `Set report status to ${status}`);
   };
 
   const uploadAttachment = async ({ reportId, eventId, category, file, transactionId = null, caption = null }) => {
-    assertLocal();
     validateReportFile(file);
     const attachmentId = crypto.randomUUID();
     const intent = unwrap(await client.from('post_event_report_upload_intents').insert({
@@ -194,18 +181,17 @@ export const createPostEventReportRepository = ({
   };
 
   const createSignedUrl = async (attachment, expiresIn = 300) => {
-    assertLocal();
     const data = unwrap(await client.storage.from(attachment.storage_bucket).createSignedUrl(attachment.storage_path, expiresIn), 'Create signed URL');
     return data.signedUrl;
   };
 
   const deleteAttachment = async (attachment) => {
-    assertLocal();
     unwrap(await client.storage.from(attachment.storage_bucket).remove([attachment.storage_path]), 'Delete attachment object');
     unwrap(await client.from('post_event_report_attachments').delete().eq('id', attachment.id), 'Delete attachment metadata');
   };
 
   return {
+    listEligibleEvents,
     loadByEvent,
     saveDraft,
     submit: (id) => transition(id, 'submitted'),
@@ -218,10 +204,6 @@ export const createPostEventReportRepository = ({
   };
 };
 
-const runtimeEnv = import.meta.env || {};
-
 export const postEventReportRepository = createPostEventReportRepository({
   client: supabase,
-  backendUrl: runtimeEnv.VITE_SUPABASE_URL,
-  enforceLocal: true,
 });
