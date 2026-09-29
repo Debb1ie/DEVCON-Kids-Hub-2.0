@@ -78,16 +78,18 @@ test('RPC arguments preserve the resolved coordinator UUID and ISO date exactly'
       image_url: '',
       status: 'Scheduled',
       event_date: '2026-09-15',
+      venue: 'Manila Community Hall',
     },
     coordinatorUserId: sinagExeId,
   });
   assert.deepEqual(Object.keys(args), [
     'target_event_id', 'target_chapter_id', 'target_coordinator_id', 'event_title',
-    'event_type', 'event_description', 'event_image_url', 'event_status_value', 'event_date_value',
+    'event_type', 'event_description', 'event_image_url', 'event_status_value', 'event_date_value', 'event_venue',
   ]);
   assert.equal(args.target_chapter_id, manilaId);
   assert.equal(args.target_coordinator_id, sinagExeId);
   assert.equal(args.event_date_value, '2026-09-15');
+  assert.equal(args.event_venue, 'Manila Community Hall');
 });
 
 test('optional ISO event dates validate calendar days without timezone conversion', () => {

@@ -24,6 +24,15 @@ import {
 import ConfirmationModal from '../components/ConfirmationModal';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
+import {
+  MAX_VOLUNTEER_ROLE_LENGTH,
+  VOLUNTEER_STATUSES,
+  normalizeVolunteerRole,
+  normalizeVolunteerStatus,
+  volunteerErrorMessage,
+  volunteerRoleLabel,
+  volunteerStatusLabel,
+} from '../services/volunteerService';
 import './Volunteers.css';
 
 // The approval ladder is derived entirely from each volunteer's existing
@@ -47,6 +56,9 @@ const formatJoinedDate = (value) => {
     ? null
     : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
+
+const volunteerChapterLabel = (volunteer, chapters) =>
+  chapters.find((chapter) => chapter.id === volunteer?.chapter_id)?.name || volunteer?.chapter || '—';
 
 function LadderProgress({ status }) {
   const step = getPipelineStep(status);
@@ -98,9 +110,9 @@ export default function Volunteers() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     name: '',
-    role: 'Lead Instructor',
-    chapter: '',
-    status: 'Pending',
+    role: '',
+    chapterId: '',
+    status: 'pending',
   });
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,7 +121,7 @@ export default function Volunteers() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const emptyForm = { name: '', role: 'Lead Instructor', chapter: '', status: 'Pending' };
+  const emptyForm = { name: '', role: '', chapterId: '', status: 'pending' };
 
   // Auto-dismiss volunteer action feedback.
   useEffect(() => {
@@ -187,9 +199,9 @@ export default function Volunteers() {
     setEditingId(volunteer.id);
     setForm({
       name: volunteer.name || '',
-      role: volunteer.role || 'Lead Instructor',
-      chapter: volunteer.chapter || '',
-      status: volunteer.status || 'Pending',
+      role: normalizeVolunteerRole(volunteer.role) || '',
+      chapterId: volunteer.chapter_id || '',
+      status: normalizeVolunteerStatus(volunteer.status) || 'pending',
     });
     setFormError('');
     setShowForm(true);
@@ -205,11 +217,7 @@ export default function Volunteers() {
 
     setFormError('');
     setIsSubmitting(true);
-    const payload = { ...form, name: form.name.trim() };
-
-    if (!editingId) {
-      payload.joined_date = new Date().toISOString();
-    }
+    const payload = { ...form, name: form.name.trim(), chapter_id: form.chapterId };
 
     const isEditing = Boolean(editingId);
     try {
@@ -232,11 +240,11 @@ export default function Volunteers() {
       resetForm();
       setShowForm(false);
     } catch (error) {
-      console.error('Failed to save volunteer', error);
-      setFormError(isEditing ? 'Unable to update volunteer.' : 'Unable to add volunteer.');
+      const message = isEditing ? 'Unable to update volunteer right now. Please try again.' : volunteerErrorMessage(error);
+      setFormError(message);
       setActionNotice({
         type: 'error',
-        message: isEditing ? 'Unable to update volunteer.' : 'Unable to add volunteer.',
+        message,
       });
     } finally {
       setIsSubmitting(false);
@@ -569,16 +577,19 @@ export default function Volunteers() {
                     <label htmlFor="volunteer-role">
                       Role <span aria-hidden="true">*</span>
                     </label>
-                    <select
+                    <input
                       id="volunteer-role"
+                      type="text"
+                      placeholder="e.g. Lead Instructor, Photographer, Facilitator"
+                      maxLength={MAX_VOLUNTEER_ROLE_LENGTH}
                       value={form.role}
-                      onChange={(e) => setForm({ ...form, role: e.target.value })}
+                      onChange={(e) => {
+                        setFormError('');
+                        setForm({ ...form, role: e.target.value });
+                      }}
                       disabled={isSubmitting}
-                    >
-                      <option>Lead Instructor</option>
-                      <option>Assistant</option>
-                      <option>Event Coordinator</option>
-                    </select>
+                      required
+                    />
                   </div>
                   <div className="volunteer-field">
                     <label htmlFor="volunteer-chapter">
@@ -586,13 +597,13 @@ export default function Volunteers() {
                     </label>
                     <select
                       id="volunteer-chapter"
-                      value={form.chapter}
-                      onChange={(e) => setForm({ ...form, chapter: e.target.value })}
+                      value={form.chapterId}
+                      onChange={(e) => setForm({ ...form, chapterId: e.target.value })}
                       disabled={isSubmitting}
                     >
                       <option value="">Select a location</option>
                       {chapters.map((chapter) => (
-                        <option key={chapter.id} value={chapter.name}>
+                        <option key={chapter.id} value={chapter.id}>
                           {chapter.name}
                           {chapter.location_type === 'volunteer_community'
                             ? ' (Volunteer Community)'
@@ -611,11 +622,9 @@ export default function Volunteers() {
                       onChange={(e) => setForm({ ...form, status: e.target.value })}
                       disabled={isSubmitting}
                     >
-                      <option>Pending</option>
-                      <option>Approved</option>
-                      <option>Rejected</option>
-                      <option>Active</option>
-                      <option>Inactive</option>
+                      {Object.entries(VOLUNTEER_STATUSES).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="volunteer-form-actions">
@@ -748,15 +757,15 @@ export default function Volunteers() {
                       </div>
                     </td>
                     <td>
-                      <span className="chapter-badge">{volunteer.chapter || '—'}</span>
+                      <span className="chapter-badge">{volunteerChapterLabel(volunteer, chapters)}</span>
                     </td>
-                    <td>{volunteer.role || '—'}</td>
+                    <td>{volunteerRoleLabel(volunteer.role)}</td>
                     <td>
                       <LadderProgress status={volunteer.status} />
                     </td>
                     <td>
                       <span className={`status-badge ${statusKey}`}>
-                        {volunteer.status || '—'}
+                        {volunteerStatusLabel(volunteer.status)}
                       </span>
                     </td>
                     <td className="joined-date">{joined || '—'}</td>
@@ -915,8 +924,8 @@ export default function Volunteers() {
                 <div className="volunteer-modal-title">
                   <h3 id="volunteer-detail-title">{viewingVolunteer.name || 'Volunteer'}</h3>
                   <p className="text-muted text-sm">
-                    {viewingVolunteer.role || 'Volunteer'}
-                    {viewingVolunteer.chapter ? ` • ${viewingVolunteer.chapter}` : ''}
+                    {volunteerRoleLabel(viewingVolunteer.role)}
+                    {` • ${volunteerChapterLabel(viewingVolunteer, chapters)}`}
                   </p>
                 </div>
                 <span
@@ -924,7 +933,7 @@ export default function Volunteers() {
                     normalizeStatus(viewingVolunteer.status) || 'inactive'
                   }`}
                 >
-                  {viewingVolunteer.status || '—'}
+                  {volunteerStatusLabel(viewingVolunteer.status)}
                 </span>
                 <button
                   type="button"
@@ -940,15 +949,15 @@ export default function Volunteers() {
                 <div className="volunteer-detail-grid">
                   <div className="volunteer-detail-item">
                     <span>Role</span>
-                    <strong>{viewingVolunteer.role || '—'}</strong>
+                    <strong>{volunteerRoleLabel(viewingVolunteer.role)}</strong>
                   </div>
                   <div className="volunteer-detail-item">
                     <span>Chapter</span>
-                    <strong>{viewingVolunteer.chapter || '—'}</strong>
+                    <strong>{volunteerChapterLabel(viewingVolunteer, chapters)}</strong>
                   </div>
                   <div className="volunteer-detail-item">
                     <span>Status</span>
-                    <strong>{viewingVolunteer.status || '—'}</strong>
+                    <strong>{volunteerStatusLabel(viewingVolunteer.status)}</strong>
                   </div>
                   <div className="volunteer-detail-item">
                     <span>Joined date</span>
