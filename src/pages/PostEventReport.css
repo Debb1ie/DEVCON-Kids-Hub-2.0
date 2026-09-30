@@ -632,3 +632,24 @@
     width: 100%;
   }
 }
+.review-note-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.review-note-field > span {
+  color: var(--text-main);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.review-note-field textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+}
+
+.review-note-field small {
+  color: var(--state-danger);
+  font-size: 0.8rem;
+}

@@ -22,6 +22,8 @@ import EventChecklist from './pages/EventChecklist';
 import FAQSuggestions from './pages/FAQSuggestions';
 import PendingApproval from './pages/PendingApproval';
 import PostEventReport from './pages/PostEventReport';
+import PostEventReportReviewQueue from './pages/PostEventReportReviewQueue';
+import PostEventReportReviewDetail from './pages/PostEventReportReviewDetail';
 import UserManagement from './pages/UserManagement';
 import { canAccessRoute, defaultRouteForRole } from './auth/permissions';
 import './index.css';
@@ -100,7 +102,9 @@ function AppRoutes() {
           <Route path="volunteers" element={<ProtectedRoute route="/dashboard/volunteers"><Volunteers /></ProtectedRoute>} />
           <Route path="inventory" element={<ProtectedRoute route="/dashboard/inventory"><Inventory /></ProtectedRoute>} />
           <Route path="events" element={<ProtectedRoute route="/dashboard/events">{roleKey === 'volunteer' ? <VolunteerEvents /> : <Events />}</ProtectedRoute>} />
-          <Route path="post-event-report" element={<ProtectedRoute route="/dashboard/post-event-report"><PostEventReport /></ProtectedRoute>} />
+          <Route path="post-event-report" element={['admin', 'super_admin'].includes(roleKey) ? <Navigate to="/dashboard/post-event-report/review" replace /> : <ProtectedRoute route="/dashboard/post-event-report"><PostEventReport /></ProtectedRoute>} />
+          <Route path="post-event-report/review" element={<ProtectedRoute route="/dashboard/post-event-report/review"><PostEventReportReviewQueue /></ProtectedRoute>} />
+          <Route path="post-event-report/review/:reportId" element={<ProtectedRoute route="/dashboard/post-event-report/review/:reportId"><PostEventReportReviewDetail /></ProtectedRoute>} />
           <Route
             path="admin"
             element={

@@ -2,14 +2,38 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { deterministicFolderName, findOrCreateEventFolder, upsertReportSheetRow } from '../supabase/functions/google-workspace-worker/core.mjs';
-import { buildGoogleAuthorizationUrl, requestOAuthToken, revokeOAuthToken } from '../supabase/functions/_shared/googleOAuthCore.mjs';
+import { buildGoogleAuthorizationUrl, requestOAuthToken, revokeOAuthToken, revokeOAuthTokenSafely } from '../supabase/functions/_shared/googleOAuthCore.mjs';
+import { disconnectGoogleWorkspace, REMOTE_WARNING } from '../supabase/functions/google-workspace-auth/disconnectCore.mjs';
 
 const migration = readFileSync('supabase/migrations/20260910000300_google_workspace_automation.sql', 'utf8');
 const worker = readFileSync('supabase/functions/google-workspace-worker/index.ts', 'utf8');
 const oauth = readFileSync('supabase/functions/google-workspace-auth/index.ts', 'utf8');
+const disconnectCore = readFileSync('supabase/functions/google-workspace-auth/disconnectCore.mjs', 'utf8');
 const oauthCore = readFileSync('supabase/functions/_shared/googleOAuth.ts', 'utf8');
 const page = readFileSync('src/pages/IntegrationSettings.jsx', 'utf8');
 const service = readFileSync('src/services/googleWorkspaceService.js', 'utf8');
+
+function disconnectHarness({ credential = true, revokeResult, revokeError, deleteError, clearError } = {}) {
+  const calls = [];
+  const secret = 'fixture-refresh-token-never-returned';
+  return {
+    calls,
+    secret,
+    run: () => disconnectGoogleWorkspace({
+      actorId: 'fixture-user',
+      loadCredential: async () => ({ data: credential ? { refresh_token_ciphertext: 'fixture-ciphertext' } : null, error: null }),
+      decryptCredential: async () => secret,
+      revokeCredential: async (token) => {
+        calls.push(['revoke', token]);
+        if (revokeError) throw revokeError;
+        return revokeResult || { confirmed: true, outcome: 'success', providerStatus: 200, reason: null };
+      },
+      deleteCredential: async () => { calls.push(['delete']); return { error: deleteError || null }; },
+      clearConnection: async () => { calls.push(['clear']); return { error: clearError || null }; },
+      writeAudit: async (entry) => { calls.push(['audit', entry]); return { error: null }; },
+    }),
+  };
+}
 
 test('deterministic folder creation reuses a matching folder', async () => {
   let creates = 0;
@@ -84,11 +108,53 @@ test('worker keeps credentials server-side and returns only safe failures', () =
   assert.match(oauthCore, /GOOGLE_OAUTH_TOKEN_ENCRYPTION_KEY/);
   assert.match(oauth, /buildGoogleAuthorizationUrl/);
   assert.match(oauth, /CONNECT_GOOGLE_WORKSPACE/);
-  assert.match(oauth, /DISCONNECT_GOOGLE_WORKSPACE/);
+  assert.match(disconnectCore, /DISCONNECT_GOOGLE_WORKSPACE/);
   assert.doesNotMatch(`${worker}\n${oauth}\n${oauthCore}`, /GOOGLE_WORKSPACE_SERVICE_ACCOUNT_JSON|google-auth-library|service account/i);
   assert.match(worker, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(worker, /SAFE_FAILURE/);
   assert.doesNotMatch(page, /SERVICE_ROLE|PRIVATE_KEY|REFRESH_TOKEN|GOOGLE_OAUTH_CLIENT_SECRET/);
   assert.doesNotMatch(service, /SERVICE_ROLE|PRIVATE_KEY|REFRESH_TOKEN|GOOGLE_OAUTH_CLIENT_SECRET/);
   assert.doesNotMatch(worker, /console\.(log|error)/);
+});
+
+test('disconnect revocation success clears local credential and connected state', async () => {
+  const harness = disconnectHarness();
+  const result = await harness.run();
+  assert.deepEqual(harness.calls.slice(0, 3).map(([name]) => name), ['revoke', 'delete', 'clear']);
+  assert.deepEqual(result, { connected: false, disconnected: true, revocationConfirmed: true });
+});
+
+test('invalid or expired token still clears local state and returns a safe success warning', async () => {
+  const revocation = await revokeOAuthTokenSafely(async () => ({ ok: false, status: 400 }), 'fixture-token');
+  const harness = disconnectHarness({ revokeResult: revocation });
+  const result = await harness.run();
+  assert.deepEqual(harness.calls.slice(0, 3).map(([name]) => name), ['revoke', 'delete', 'clear']);
+  assert.equal(result.revocationConfirmed, false);
+  assert.equal(result.warning, REMOTE_WARNING);
+  assert.doesNotMatch(JSON.stringify(result), /fixture-token|ciphertext|refresh/i);
+  assert.equal(harness.calls.at(-1)[1].metadata.provider_reason, 'token_invalid_or_expired');
+});
+
+test('network or provider revocation failure cannot block local cleanup or leak secrets', async () => {
+  const revocation = await revokeOAuthTokenSafely(async () => { throw new Error('network includes fixture-token'); }, 'fixture-token');
+  const harness = disconnectHarness({ revokeResult: revocation });
+  const result = await harness.run();
+  assert.deepEqual(harness.calls.slice(0, 3).map(([name]) => name), ['revoke', 'delete', 'clear']);
+  assert.equal(result.disconnected, true);
+  assert.equal(harness.calls.at(-1)[1].metadata.provider_reason, 'network_error');
+  assert.doesNotMatch(JSON.stringify([result, harness.calls.at(-1)[1]]), /fixture-token|ciphertext/);
+});
+
+test('local credential cleanup failure returns failure and never claims disconnected', async () => {
+  const harness = disconnectHarness({ deleteError: { message: 'database unavailable' } });
+  await assert.rejects(harness.run(), /credential removal failed/);
+  assert.deepEqual(harness.calls.map(([name]) => name), ['revoke', 'delete']);
+});
+
+test('disconnect is idempotent when already disconnected', async () => {
+  const harness = disconnectHarness({ credential: false });
+  const result = await harness.run();
+  assert.deepEqual(harness.calls.slice(0, 2).map(([name]) => name), ['delete', 'clear']);
+  assert.deepEqual(result, { connected: false, disconnected: true, revocationConfirmed: true });
+  assert.equal(harness.calls.at(-1)[1].metadata.remote_revocation, 'not_required');
 });

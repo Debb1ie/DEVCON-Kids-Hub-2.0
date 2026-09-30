@@ -48,8 +48,14 @@ export const sheetRow = (payload, automation) => [[
 export async function runReportExport({ provider, payload, checkpoint = {} }) {
   if (payload.report.status !== 'approved') throw new Error('Only approved reports can be exported.');
   const next = { ...checkpoint };
-  if (!next.drive_folder_id) next.drive_folder_id = await provider.ensureFolderPath(reportFolderPath(payload));
-  if (!next.final_export_file_id) next.final_export_file_id = await provider.upsertJsonFile(next.drive_folder_id, `post-event-report-${payload.report.id}.json`, payload, `report:${payload.report.id}:v${AUTOMATION_VERSION}`);
+  if (!next.drive_folder_id) {
+    next.drive_folder_id = await provider.ensureFolderPath(reportFolderPath(payload));
+    await provider.checkpoint?.(next);
+  }
+  if (!next.final_export_file_id) {
+    next.final_export_file_id = await provider.upsertJsonFile(next.drive_folder_id, `post-event-report-${payload.report.id}.json`, payload, `report:${payload.report.id}:v${AUTOMATION_VERSION}`);
+    await provider.checkpoint?.(next);
+  }
   const uploaded = new Set(next.uploaded_attachment_ids || []);
   for (const attachment of payload.attachments) {
     if (!uploaded.has(attachment.id)) {

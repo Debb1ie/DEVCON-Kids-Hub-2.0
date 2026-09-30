@@ -15,6 +15,7 @@ const focusableSelector = [
 export default function ConfirmationModal({
   title,
   message,
+  children,
   cancelLabel = 'Cancel',
   confirmLabel = 'Delete',
   busyLabel = 'Working...',
@@ -22,7 +23,8 @@ export default function ConfirmationModal({
   onConfirm,
   isBusy = false,
   role = 'alertdialog',
-  focusAfterConfirm
+  focusAfterConfirm,
+  tone = 'danger'
 }) {
   const titleId = useId();
   const messageId = useId();
@@ -109,15 +111,16 @@ export default function ConfirmationModal({
     <>
       <div className="confirmation-modal-overlay" aria-hidden="true" />
       <div className="confirmation-modal-container" onMouseDown={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}>
-        <div ref={dialogRef} className="confirmation-modal card animate-fade-in" role={role} aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId} tabIndex="-1">
+        <div ref={dialogRef} className={`confirmation-modal confirmation-modal-${tone} card animate-fade-in`} role={role} aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId} tabIndex="-1">
           <div className="confirmation-modal-icon" aria-hidden="true"><AlertTriangle size={22} /></div>
           <div>
             <h3 id={titleId}>{title}</h3>
             <p id={messageId}>{message}</p>
           </div>
+          {children && <div className="confirmation-modal-content">{children}</div>}
           <div className="confirmation-modal-actions">
             <button ref={cancelRef} type="button" className="btn-secondary" onClick={handleCancel} disabled={isBusy}>{cancelLabel}</button>
-            <button type="button" className="confirmation-modal-confirm" onClick={handleConfirm} disabled={isBusy}>{isBusy ? busyLabel : confirmLabel}</button>
+            <button type="button" className="btn-primary confirmation-modal-confirm" onClick={handleConfirm} disabled={isBusy}>{isBusy ? busyLabel : confirmLabel}</button>
           </div>
         </div>
       </div>

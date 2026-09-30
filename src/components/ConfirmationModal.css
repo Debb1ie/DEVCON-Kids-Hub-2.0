@@ -16,14 +16,17 @@
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  overflow-y: auto;
 }
 
 .confirmation-modal {
   width: min(100%, 400px);
+  max-height: calc(100dvh - 2rem);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.85rem;
   padding: 1.25rem;
+  overflow-y: auto;
 }
 
 .confirmation-modal:focus {
@@ -50,6 +53,26 @@
   color: var(--text-muted);
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+.confirmation-modal-content {
+  grid-column: 1 / -1;
+}
+
+.confirmation-modal-primary .confirmation-modal-icon {
+  background: color-mix(in srgb, var(--action-primary) 12%, transparent);
+  color: var(--action-primary);
+}
+
+.confirmation-modal-primary .confirmation-modal-confirm {
+  border-color: var(--action-primary);
+  background: var(--action-primary);
+  color: var(--text-on-accent);
+}
+
+.confirmation-modal-primary .confirmation-modal-confirm:hover:not(:disabled) {
+  border-color: var(--action-primary-hover);
+  background: var(--action-primary-hover);
 }
 
 .confirmation-modal-actions {
@@ -88,7 +111,8 @@
 
 @media (max-width: 420px) {
   .confirmation-modal-actions {
-    flex-direction: column-reverse;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .confirmation-modal-actions button {

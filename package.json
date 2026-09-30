@@ -22,7 +22,7 @@
     "test:permissions": "node --test tests/permissions.test.mjs tests/rbac-ui-static.test.mjs tests/rbac-migrations-static.test.mjs",
     "test:volunteers": "node --test tests/volunteer-creation.test.mjs",
     "test:post-report:local": "node tests/post-event-report-local-e2e.mjs",
-    "test:post-report": "node --test tests/post-event-report-workflow.test.mjs",
+    "test:post-report": "node --test tests/post-event-report-workflow.test.mjs tests/post-event-report-review-dialog.test.mjs tests/post-event-report-approval.test.mjs tests/post-event-report-review-queue.test.mjs tests/post-event-report-role-separation.test.mjs",
     "test:google-workspace": "node --test tests/google-workspace-automation.test.mjs",
     "test:report-automation": "node --test tests/report-export-automation.test.mjs",
     "test:google-workspace:local": "node tests/google-workspace-local-e2e.mjs",

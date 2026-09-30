@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { callbackUrl, encryptToken, requiredEnv, sha256, tokenRequest } from '../_shared/googleOAuth.ts';
-import { buildGoogleAuthorizationUrl, revokeOAuthToken } from '../_shared/googleOAuthCore.mjs';
+import { buildGoogleAuthorizationUrl, revokeOAuthTokenSafely } from '../_shared/googleOAuthCore.mjs';
+import { disconnectGoogleWorkspace } from './disconnectCore.mjs';
 
 const HEADERS = {
   'content-type': 'application/json',
@@ -78,17 +79,23 @@ Deno.serve(async (request) => {
       return json(200, { authorizationUrl: buildGoogleAuthorizationUrl({ clientId: requiredEnv('GOOGLE_OAUTH_CLIENT_ID'), redirectUri: callbackUrl(), state }) });
     }
     if (body.action === 'disconnect') {
-      const credential = await db.from('google_oauth_credentials').select('refresh_token_ciphertext').eq('singleton', true).maybeSingle();
-      if (credential.error) throw credential.error;
-      if (credential.data) {
-        const { decryptToken } = await import('../_shared/googleOAuth.ts');
-        const refreshToken = await decryptToken(credential.data.refresh_token_ciphertext);
-        if (!await revokeOAuthToken(fetch, refreshToken)) return json(502, { error: 'Google access could not be revoked. Please try again.' });
-      }
-      await db.from('google_oauth_credentials').delete().eq('singleton', true);
-      await db.from('google_workspace_settings').update({ connected_google_email: null, google_connected_at: null, automatic_folder_creation_enabled: false, sheet_synchronization_enabled: false, updated_by: user.id }).eq('singleton', true);
-      await db.from('audit_logs').insert({ actor_id: user.id, action: 'DISCONNECT_GOOGLE_WORKSPACE', target_table: 'google_workspace_settings' });
-      return json(200, { disconnected: true });
+      const { decryptToken } = await import('../_shared/googleOAuth.ts');
+      const result = await disconnectGoogleWorkspace({
+        actorId: user.id,
+        loadCredential: () => db.from('google_oauth_credentials').select('refresh_token_ciphertext').eq('singleton', true).maybeSingle(),
+        decryptCredential: decryptToken,
+        revokeCredential: (token: string) => revokeOAuthTokenSafely(fetch, token),
+        deleteCredential: () => db.from('google_oauth_credentials').delete().eq('singleton', true),
+        clearConnection: (actorId: string) => db.from('google_workspace_settings').update({
+          connected_google_email: null,
+          google_connected_at: null,
+          automatic_folder_creation_enabled: false,
+          sheet_synchronization_enabled: false,
+          updated_by: actorId,
+        }).eq('singleton', true),
+        writeAudit: (entry: Record<string, unknown>) => db.from('audit_logs').insert(entry),
+      });
+      return json(200, result);
     }
     return json(400, { error: 'Unsupported authorization action.' });
   } catch {

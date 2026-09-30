@@ -1,4 +1,6 @@
 import { supabase } from '../lib/supabase.js';
+import { createReportTransition } from './postEventReportTransition.js';
+import { normalizePostEventReports } from './postEventReportQueue.js';
 
 export const REPORT_BUCKET = 'event-report-attachments';
 export const MAX_REPORT_FILE_SIZE = 25 * 1024 * 1024;
@@ -26,19 +28,67 @@ const unwrap = (result, context) => {
 export const createPostEventReportRepository = ({
   client,
 }) => {
+  const transition = createReportTransition(client);
   const listEligibleEvents = async () => {
+    const authResult = await client.auth.getUser();
+    if (authResult.error || !authResult.data?.user?.id) throw new Error('Load reportable events: authentication is required.');
+    const userId = authResult.data.user.id;
     const rows = unwrap(await client
       .from('events')
-      .select('id,title,chapter_id,chapter,event_date,venue,status,coordinator,event_assignments(user_id),post_event_reports(id,status)')
+      .select('id,title,chapter_id,chapter,event_date,venue,status,coordinator,event_assignments!inner(user_id,assignment_role),post_event_reports(id,status)')
+      .eq('event_assignments.user_id', userId)
+      .eq('event_assignments.assignment_role', 'event_coordinator')
       .order('event_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false }), 'Load reportable events');
-    return rows || [];
+    return (rows || []).map((event) => ({
+      ...event,
+      post_event_reports: normalizePostEventReports(event.post_event_reports),
+    }));
   };
 
-  const loadByEvent = async (eventId) => {
-    const report = unwrap(await client.from('post_event_reports').select('*').eq('event_id', eventId).maybeSingle(), 'Load report');
-    if (!report) return null;
+  const listReviewQueue = async () => {
+    const reports = unwrap(await client
+      .from('post_event_reports')
+      .select('id,event_id,submitted_by,status,submitted_at,updated_at,coordinator_name,events(id,title,chapter,chapter_id,event_date)')
+      .in('status', ['submitted', 'needs_revision', 'approved'])
+      .order('updated_at', { ascending: false }), 'Load report review queue') || [];
+    if (!reports.length) return [];
 
+    const submitterIds = [...new Set(reports.map((report) => report.submitted_by).filter(Boolean))];
+    const reportIds = reports.map((report) => report.id);
+    const [profilesResult, exportsResult] = await Promise.all([
+      client.from('profiles').select('id,full_name,email').in('id', submitterIds),
+      client.from('post_event_report_exports').select('report_id,status').in('report_id', reportIds),
+    ]);
+    const profiles = unwrap(profilesResult, 'Resolve report submitters') || [];
+    const exports = exportsResult.error?.code === '42P01' || exportsResult.error?.code === 'PGRST205'
+      ? []
+      : unwrap(exportsResult, 'Load report export states') || [];
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+    const exportByReport = new Map(exports.map((entry) => [entry.report_id, entry]));
+
+    return reports.map((report) => {
+      const event = Array.isArray(report.events) ? report.events[0] : report.events;
+      const submitter = profileById.get(report.submitted_by);
+      return {
+        id: report.id,
+        eventId: report.event_id,
+        eventName: event?.title || 'Unnamed event',
+        chapter: event?.chapter || 'Unassigned',
+        chapterId: event?.chapter_id || null,
+        eventDate: event?.event_date || null,
+        submitterId: report.submitted_by,
+        submitterName: submitter?.full_name || submitter?.email || 'Unknown submitter',
+        coordinatorName: report.coordinator_name || 'Unassigned',
+        submittedAt: report.submitted_at,
+        updatedAt: report.updated_at,
+        status: report.status,
+        exportStatus: exportByReport.get(report.id)?.status || null,
+      };
+    });
+  };
+
+  const loadReportDetail = async (report) => {
     const [attendance, impact, finance, transactions, attachments, reviews] = await Promise.all([
       client.from('post_event_report_attendance').select('*').eq('report_id', report.id).maybeSingle(),
       client.from('post_event_report_impact').select('*').eq('report_id', report.id).maybeSingle(),
@@ -57,6 +107,30 @@ export const createPostEventReportRepository = ({
       transactions: transactions.data || [],
       attachments: attachments.data || [],
       reviews: reviews.data || [],
+    };
+  };
+
+  const loadByEvent = async (eventId) => {
+    const report = unwrap(await client.from('post_event_reports').select('*').eq('event_id', eventId).maybeSingle(), 'Load report');
+    return report ? loadReportDetail(report) : null;
+  };
+
+  const loadById = async (reportId) => {
+    const report = unwrap(await client.from('post_event_reports').select('*').eq('id', reportId).maybeSingle(), 'Load requested report');
+    if (!report) return null;
+    const event = unwrap(await client
+      .from('events')
+      .select('id,title,chapter_id,chapter,event_date,venue,status,coordinator,event_assignments(user_id),post_event_reports(id,status)')
+      .eq('id', report.event_id)
+      .maybeSingle(), 'Load requested report event');
+    if (!event) throw new Error('Unable to load this report.');
+    const submitter = report.submitted_by
+      ? unwrap(await client.from('profiles').select('id,full_name,email').eq('id', report.submitted_by).maybeSingle(), 'Resolve report submitter')
+      : null;
+    return {
+      event: { ...event, post_event_reports: normalizePostEventReports(event.post_event_reports) },
+      submitter,
+      ...(await loadReportDetail(report)),
     };
   };
 
@@ -131,10 +205,6 @@ export const createPostEventReportRepository = ({
     return { report: savedReport, transactions: savedTransactions };
   };
 
-  const transition = async (reportId, status, fields = {}) => {
-    return unwrap(await client.from('post_event_reports').update({ status, ...fields }).eq('id', reportId).select().single(), `Set report status to ${status}`);
-  };
-
   const uploadAttachment = async ({ reportId, eventId, category, file, transactionId = null, caption = null }) => {
     validateReportFile(file);
     const attachmentId = crypto.randomUUID();
@@ -192,12 +262,14 @@ export const createPostEventReportRepository = ({
 
   return {
     listEligibleEvents,
+    listReviewQueue,
     loadByEvent,
+    loadById,
     saveDraft,
-    submit: (id) => transition(id, 'submitted'),
-    requestRevision: (id, reason) => transition(id, 'needs_revision', { revision_reason: reason }),
-    resubmit: (id) => transition(id, 'submitted'),
-    approve: (id, notes = null) => transition(id, 'approved', { review_notes: notes }),
+    submit: (id) => transition(id, 'submitted', {}, 'draft'),
+    requestRevision: (id, reason) => transition(id, 'needs_revision', { revision_reason: reason }, 'submitted'),
+    resubmit: (id) => transition(id, 'submitted', {}, 'needs_revision'),
+    approve: (id, notes = null) => transition(id, 'approved', { review_notes: notes }, 'submitted'),
     uploadAttachment,
     createSignedUrl,
     deleteAttachment,

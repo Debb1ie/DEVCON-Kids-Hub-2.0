@@ -24,13 +24,16 @@ import './Sidebar.css';
 export default function Sidebar({ onNavigate, collapsed = false }) {
   const { user, roleKey } = useApp();
   const visible = (link) => canAccessRoute(roleKey, link.path);
+  const reportLink = ['admin', 'super_admin'].includes(roleKey)
+    ? { name: 'Review Queue', path: '/dashboard/post-event-report/review', icon: <FileText size={20} /> }
+    : { name: 'Post Event Report', path: '/dashboard/post-event-report', icon: <FileText size={20} /> };
   const operationsLinks = [
     { name: 'Overview', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'Chapters', path: '/dashboard/chapters', icon: <MapPin size={20} /> },
     { name: 'Volunteers', path: '/dashboard/volunteers', icon: <Users size={20} /> },
     { name: 'Inventory', path: '/dashboard/inventory', icon: <Package size={20} /> },
     { name: 'Events & CodeCamps', path: '/dashboard/events', icon: <CalendarDays size={20} /> },
-    { name: 'Post Event Report', path: '/dashboard/post-event-report', icon: <FileText size={20} /> },
+    reportLink,
     { name: 'Event Checklist', path: '/dashboard/event-checklist', icon: <ClipboardList size={20} /> },
   ].filter(visible);
 

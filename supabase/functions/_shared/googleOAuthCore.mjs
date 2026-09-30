@@ -28,3 +28,22 @@ export async function revokeOAuthToken(fetchImplementation, token) {
   });
   return response.ok;
 }
+
+export async function revokeOAuthTokenSafely(fetchImplementation, token) {
+  try {
+    const response = await fetchImplementation('https://oauth2.googleapis.com/revoke', {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token }),
+    });
+    if (response.ok) return { confirmed: true, outcome: 'success', providerStatus: response.status || 200, reason: null };
+    const tokenInvalid = response.status === 400 || response.status === 401;
+    return {
+      confirmed: false,
+      outcome: tokenInvalid ? 'failed' : 'unavailable',
+      providerStatus: Number.isInteger(response.status) ? response.status : null,
+      reason: tokenInvalid ? 'token_invalid_or_expired' : 'provider_error',
+    };
+  } catch {
+    return { confirmed: false, outcome: 'unavailable', providerStatus: null, reason: 'network_error' };
+  }
+}

@@ -1,0 +1,34 @@
+.report-section-nav { display: flex; gap: .5rem; border-bottom: 1px solid var(--border-default); }
+.report-section-nav a { padding: .75rem 1rem; color: var(--text-secondary); border-bottom: 3px solid transparent; font-weight: 700; }
+.report-section-nav a.active { color: var(--action-primary); border-color: var(--action-primary); }
+.review-queue-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.review-queue-counts span { display: flex; align-items: baseline; gap: .5rem; padding: .8rem 1rem; background: var(--surface-default); border-radius: var(--radius-control); color: var(--text-secondary); font-size: .82rem; }
+.review-queue-counts strong { color: var(--text-primary); font-size: 1.2rem; }
+.review-queue-filters { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(170px, .8fr) minmax(240px, 1.5fr); gap: 1rem; }
+.review-queue-filters label { display: grid; gap: .35rem; }
+.review-queue-filters label > span { color: var(--text-secondary); font-size: .78rem; font-weight: 700; text-transform: uppercase; }
+.review-queue-filters :is(select,input) { width: 100%; min-height: 44px; padding: .65rem .75rem; border: 1px solid var(--border-default); border-radius: var(--radius-control); }
+.review-queue-table-wrap { padding: 0; overflow-x: auto; }
+.review-queue-table { width: 100%; min-width: 1100px; border-collapse: collapse; }
+.review-queue-table th,.review-queue-table td { padding: .8rem; border-bottom: 1px solid var(--border-default); text-align: left; vertical-align: middle; font-size: .84rem; }
+.review-queue-table th { color: var(--text-secondary); background: var(--surface-muted); font-size: .75rem; text-transform: uppercase; }
+.review-queue-table td:first-child { color: var(--text-primary); font-weight: 700; }
+.review-queue-table .status-badge { white-space: nowrap; }
+.review-queue-cards { display: none; }
+.review-queue-state { min-height: 220px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .5rem; padding: 2rem; text-align: center; color: var(--text-secondary); background: var(--surface-default); border-radius: var(--radius-panel); }
+.review-queue-state strong { color: var(--text-primary); }
+.review-queue-error { color: var(--state-danger); }
+@media (max-width: 900px) { .review-queue-counts { grid-template-columns: repeat(2, 1fr); } .review-queue-filters { grid-template-columns: 1fr 1fr; } .review-queue-search { grid-column: 1 / -1; } .review-queue-table-wrap { display: none; } .review-queue-cards { display: grid; gap: 1rem; } .review-queue-cards article { display: grid; gap: 1rem; } .review-queue-cards article > div { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; } .review-queue-cards dl { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; } .review-queue-cards dt { color: var(--text-secondary); font-size: .72rem; text-transform: uppercase; } .review-queue-cards dd { margin: .15rem 0 0; color: var(--text-primary); overflow-wrap: anywhere; } }
+@media (max-width: 520px) { .report-section-nav a { flex: 1; text-align: center; } .review-queue-counts,.review-queue-filters,.review-queue-cards dl { grid-template-columns: 1fr; } .review-queue-search { grid-column: auto; } }
+.review-back-link { display: inline-flex; align-items: center; gap: .4rem; color: var(--action-primary); font-weight: 700; }
+.review-detail-header { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.review-detail-header > div { display: grid; gap: .3rem; }
+.review-detail-header span,.review-detail-section dt { color: var(--text-secondary); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.review-detail-section { display: grid; gap: 1rem; }
+.review-detail-section h2,.reviewer-actions-panel h2 { margin: 0; font-size: 1.05rem; }
+.review-detail-section dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 0; }
+.review-detail-section dl > div { display: grid; gap: .25rem; }
+.review-detail-section dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-attachment-list { display: grid; gap: .65rem; padding: 0; margin: 0; list-style: none; }
+.review-attachment-list li,.reviewer-actions-panel { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+@media (max-width: 700px) { .review-detail-header,.review-detail-section dl { grid-template-columns: 1fr; } .reviewer-actions-panel { align-items: stretch; flex-direction: column; } }
