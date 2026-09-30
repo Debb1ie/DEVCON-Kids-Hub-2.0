@@ -46,6 +46,23 @@ export const createPostEventReportRepository = ({
     }));
   };
 
+  // Report state per event for the Events page. RLS decides visibility:
+  // reviewers only receive submitted or later reports, authors their own.
+  const listReportStatesForEvents = async (eventIds = []) => {
+    const ids = [...new Set(eventIds.filter(Boolean))];
+    if (!ids.length) return new Map();
+    const reports = unwrap(await client
+      .from('post_event_reports')
+      .select('id,event_id,status,submitted_by,submitted_at,approved_at')
+      .in('event_id', ids), 'Load event report states') || [];
+    const reportIds = reports.map((report) => report.id);
+    const exportsResult = reportIds.length
+      ? await client.from('post_event_report_exports').select('report_id,status').in('report_id', reportIds)
+      : { data: [] };
+    const exportByReport = new Map((exportsResult.error ? [] : exportsResult.data || []).map((entry) => [entry.report_id, entry.status]));
+    return new Map(reports.map((report) => [report.event_id, { ...report, exportStatus: exportByReport.get(report.id) || null }]));
+  };
+
   const listReviewQueue = async () => {
     const reports = unwrap(await client
       .from('post_event_reports')
@@ -263,6 +280,7 @@ export const createPostEventReportRepository = ({
   return {
     listEligibleEvents,
     listReviewQueue,
+    listReportStatesForEvents,
     loadByEvent,
     loadById,
     saveDraft,

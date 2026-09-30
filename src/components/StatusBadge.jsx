@@ -13,6 +13,7 @@ const ICONS = {
   rejected: CircleAlert,
   draft: Info,
   submitted: Info,
+  'pending-review': Clock3,
   warning: CircleAlert
 };
 

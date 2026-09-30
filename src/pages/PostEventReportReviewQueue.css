@@ -1,6 +1,6 @@
 .report-section-nav { display: flex; gap: .5rem; border-bottom: 1px solid var(--border-default); }
 .report-section-nav a { padding: .75rem 1rem; color: var(--text-secondary); border-bottom: 3px solid transparent; font-weight: 700; }
-.report-section-nav a.active { color: var(--action-primary); border-color: var(--action-primary); }
+.report-section-nav a.active { color: var(--action-primary-text); border-color: var(--action-primary); }
 .review-queue-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
 .review-queue-counts span { display: flex; align-items: baseline; gap: .5rem; padding: .8rem 1rem; background: var(--surface-default); border-radius: var(--radius-control); color: var(--text-secondary); font-size: .82rem; }
 .review-queue-counts strong { color: var(--text-primary); font-size: 1.2rem; }
@@ -20,7 +20,7 @@
 .review-queue-error { color: var(--state-danger); }
 @media (max-width: 900px) { .review-queue-counts { grid-template-columns: repeat(2, 1fr); } .review-queue-filters { grid-template-columns: 1fr 1fr; } .review-queue-search { grid-column: 1 / -1; } .review-queue-table-wrap { display: none; } .review-queue-cards { display: grid; gap: 1rem; } .review-queue-cards article { display: grid; gap: 1rem; } .review-queue-cards article > div { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; } .review-queue-cards dl { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; } .review-queue-cards dt { color: var(--text-secondary); font-size: .72rem; text-transform: uppercase; } .review-queue-cards dd { margin: .15rem 0 0; color: var(--text-primary); overflow-wrap: anywhere; } }
 @media (max-width: 520px) { .report-section-nav a { flex: 1; text-align: center; } .review-queue-counts,.review-queue-filters,.review-queue-cards dl { grid-template-columns: 1fr; } .review-queue-search { grid-column: auto; } }
-.review-back-link { display: inline-flex; align-items: center; gap: .4rem; color: var(--action-primary); font-weight: 700; }
+.review-back-link { display: inline-flex; align-items: center; gap: .4rem; color: var(--action-primary-text); font-weight: 700; }
 .review-detail-header { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .review-detail-header > div { display: grid; gap: .3rem; }
 .review-detail-header span,.review-detail-section dt { color: var(--text-secondary); font-size: .75rem; font-weight: 700; text-transform: uppercase; }

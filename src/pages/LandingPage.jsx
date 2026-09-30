@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import logo from '../assets/devcon-kids-logo.png';
+import { BrandLockup } from '../components/brand/SparkHub';
+import HeaderAtmosphere from '../components/brand/HeaderAtmosphere';
 import './LandingPage.css';
 
 export default function LandingPage() {
@@ -16,8 +17,9 @@ export default function LandingPage() {
 
   return (
     <main className="brand-intro" aria-labelledby="brand-intro-status">
+      <HeaderAtmosphere />
       <div className="brand-intro-mark">
-        <img src={logo} alt="DEVCON Kids Hub" />
+        <BrandLockup layout="stacked" size={72} />
       </div>
       <p id="brand-intro-status" role="status" aria-live="polite">
         DEVCON Kids is loading

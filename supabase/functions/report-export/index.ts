@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { buildReportExport, runReportExport } from './core.mjs';
+import { chooseTrackerRow, isLegacyHeader, LAST_COLUMN, legacyRowToTracker, OVERVIEW_TAB, OVERVIEW_TITLE, overviewFormatRequests, overviewValues, REPORT_ID_COLUMN, rowCurrencyRequest, TRACKER_HEADERS, trackerFormatRequests } from './tracker.mjs';
 import { decryptToken, requiredEnv } from '../_shared/googleOAuth.ts';
 
 const SAFE_FAILURE = 'Report export failed. Review the Google Workspace configuration and retry.';
@@ -150,19 +151,44 @@ Deno.serve(async (req) => {
       currentStage = 'drive_folder_create';
       return (await request(token, 'https://www.googleapis.com/drive/v3/files?fields=id', currentStage, 'drive', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] }) })).id;
     };
+    const sheetId = settings.data.report_sheet_id as string;
+    const tabName = settings.data.report_sheet_tab_name as string;
+    const tab = tabName.replace(/'/g, "''");
+    const sheetsBase = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`;
+    const valuesUrl = (range: string, query = '') => `${sheetsBase}/values/${encodeURIComponent(range)}${query}`;
+    const putValues = (stage: string, range: string, values: unknown[][], input: 'RAW' | 'USER_ENTERED') => {
+      currentStage = stage;
+      return request(token, valuesUrl(range, `?valueInputOption=${input}`), stage, 'sheets', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ values }) });
+    };
+    const batchUpdate = (stage: string, requests: unknown[]) => {
+      currentStage = stage;
+      return request(token, `${sheetsBase}:batchUpdate`, stage, 'sheets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ requests }) });
+    };
+    // Formatting and the Overview tab are presentation only: a failure there is
+    // logged but never blocks or duplicates the export itself.
+    const bestEffort = async (label: string, work: () => Promise<unknown>) => {
+      try { await work(); } catch (error) {
+        const diagnostic = error instanceof GoogleFailure ? error.diagnostic : { stage: label, reason: 'worker_error' };
+        console.error(JSON.stringify({ event: 'REPORT_TRACKER_FORMAT_SKIPPED', report_id: reportId, label, diagnostic }));
+      }
+    };
+    const upsertDriveFile = async (folderId: string, name: string, bytes: Uint8Array, type: string, stableKey: string, stage: string) => {
+      const q = encodeURIComponent(`'${folderId}' in parents and appProperties has { key='devconKey' and value='${escapeQuery(stableKey)}' } and trashed=false`);
+      currentStage = `${stage}_lookup`;
+      const found = await request(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`, currentStage, 'drive');
+      const metadata = found.files?.[0] ? { name } : { name, parents: [folderId], appProperties: { devconKey: stableKey } };
+      const part = multipart(metadata, bytes, type);
+      const endpoint = found.files?.[0] ? `https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=multipart&fields=id` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
+      currentStage = `${stage}_upload`;
+      return (await request(token, endpoint, currentStage, 'drive', { method: found.files?.[0] ? 'PATCH' : 'POST', headers: { 'content-type': part.contentType }, body: part.body })).id;
+    };
     const provider = {
       ensureFolderPath: async (parts: string[]) => { let parent = root; for (const part of parts) parent = await ensureChild(part, parent); return parent; },
-      upsertJsonFile: async (folderId: string, name: string, value: unknown, stableKey: string) => {
-        const q = encodeURIComponent(`'${folderId}' in parents and appProperties has { key='devconKey' and value='${escapeQuery(stableKey)}' } and trashed=false`);
-        currentStage = 'drive_json_lookup';
-        const found = await request(token, `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`, currentStage, 'drive');
-        const bytes = new TextEncoder().encode(JSON.stringify(value, null, 2));
-        const metadata = found.files?.[0] ? { name } : { name, parents: [folderId], appProperties: { devconKey: stableKey } };
-        const part = multipart(metadata, bytes, 'application/json');
-        const endpoint = found.files?.[0] ? `https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=multipart&fields=id` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
-        currentStage = 'drive_json_upload';
-        return (await request(token, endpoint, currentStage, 'drive', { method: found.files?.[0] ? 'PATCH' : 'POST', headers: { 'content-type': part.contentType }, body: part.body })).id;
-      },
+      ensureChildFolder: (name: string, parent: string) => ensureChild(name, parent),
+      upsertJsonFile: (folderId: string, name: string, value: unknown, stableKey: string) =>
+        upsertDriveFile(folderId, name, new TextEncoder().encode(JSON.stringify(value, null, 2)), 'application/json', stableKey, 'drive_json'),
+      upsertFile: (folderId: string, name: string, bytes: Uint8Array, type: string, stableKey: string) =>
+        upsertDriveFile(folderId, name, bytes, type, stableKey, 'drive_pdf'),
       copyAttachment: async (folderId: string, attachment: Record<string, string>) => {
         const stableKey = `attachment:${attachment.id}`;
         const q = encodeURIComponent(`'${folderId}' in parents and appProperties has { key='devconKey' and value='${escapeQuery(stableKey)}' } and trashed=false`);
@@ -177,29 +203,82 @@ Deno.serve(async (req) => {
         await request(token, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', currentStage, 'drive', { method: 'POST', headers: { 'content-type': part.contentType }, body: part.body });
       },
       checkpoint: async (state: Record<string, unknown>) => { await db!.from('post_event_report_exports').update(state).eq('report_id', reportId); },
-      upsertSheetRow: async (_key: string, values: unknown[][], existing: string | null) => {
-        let reference = existing;
-        if (!reference) {
-          const allocation = await db!.from('google_workspace_report_syncs').upsert({ report_id: reportId }, { onConflict: 'report_id', ignoreDuplicates: true }).select('*').maybeSingle();
-          const row = allocation.data || (await db!.from('google_workspace_report_syncs').select('*').eq('report_id', reportId).single()).data;
-          const tab = settings.data.report_sheet_tab_name.replace(/'/g, "''"); reference = `'${tab}'!A${row.sheet_row_number}:U${row.sheet_row_number}`;
+      upsertSheetRow: async (_key: string, values: unknown[][], existing: string | null, meta: { currency?: string; reportId: string }) => {
+        currentStage = 'sheets_metadata';
+        const fields = 'sheets(properties(sheetId,title,gridProperties(rowCount)),bandedRanges(bandedRangeId),conditionalFormats(ranges(startColumnIndex,endColumnIndex)),basicFilter(range(startColumnIndex,endColumnIndex)))';
+        const spreadsheet = await request(token, `${sheetsBase}?fields=${encodeURIComponent(fields)}`, currentStage, 'sheets');
+        const sheets = (spreadsheet.sheets || []) as Record<string, any>[];
+        let tracker = sheets.find((item) => item.properties.title === tabName);
+        if (!tracker) {
+          const added = await batchUpdate('sheets_tab_create', [{ addSheet: { properties: { title: tabName } } }]);
+          tracker = { properties: added.replies[0].addSheet.properties };
         }
-        const tab = settings.data.report_sheet_tab_name.replace(/'/g, "''");
-        currentStage = 'sheets_header_write';
-        await request(token, `https://sheets.googleapis.com/v4/spreadsheets/${settings.data.report_sheet_id}/values/${encodeURIComponent(`'${tab}'!A1:U1`)}?valueInputOption=RAW`, currentStage, 'sheets', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ values: [[
-          'Report ID', 'Event ID', 'Event name', 'Chapter', 'Event date', 'Submitted by', 'Approved by', 'Registered', 'Attended', 'Learners reached', 'Volunteers', 'Satisfaction', 'Approved budget', 'Expenses', 'Balance', 'Report status', 'Export status', 'Drive folder ID', 'Final export file ID', 'Approved at', 'Exported at',
-        ]] }) });
-        currentStage = 'sheets_row_write';
-        await request(token, `https://sheets.googleapis.com/v4/spreadsheets/${settings.data.report_sheet_id}/values/${encodeURIComponent(reference)}?valueInputOption=RAW`, currentStage, 'sheets', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ values }) });
+        const trackerSheetId = tracker.properties.sheetId;
+
+        currentStage = 'sheets_header_read';
+        const headerRead = await request(token, valuesUrl(`'${tab}'!A1:${LAST_COLUMN}1`), currentStage, 'sheets');
+        if (isLegacyHeader(headerRead.values?.[0] || [])) {
+          // One-time, in-place upgrade of rows written by the original 21-column layout.
+          currentStage = 'sheets_legacy_read';
+          const legacy = await request(token, valuesUrl(`'${tab}'!A2:U`, '?valueRenderOption=UNFORMATTED_VALUE'), currentStage, 'sheets');
+          const upgraded = ((legacy.values || []) as unknown[][]).map(legacyRowToTracker);
+          if (upgraded.length) {
+            await putValues('sheets_legacy_write', `'${tab}'!A2:${LAST_COLUMN}${upgraded.length + 1}`, upgraded, 'USER_ENTERED');
+            await batchUpdate('sheets_legacy_currency', [rowCurrencyRequest({ sheetId: trackerSheetId, row: 2, endRow: upgraded.length + 1, currency: 'PHP' })]);
+          }
+        }
+        await putValues('sheets_header_write', `'${tab}'!A1:${LAST_COLUMN}1`, [TRACKER_HEADERS], 'RAW');
+        await bestEffort('tracker_format', () => batchUpdate('sheets_format', trackerFormatRequests({
+          sheetId: trackerSheetId,
+          rowCount: tracker!.properties.gridProperties?.rowCount || 1000,
+          bandedRangeIds: (tracker!.bandedRanges || []).map((band: Record<string, number>) => band.bandedRangeId),
+          conditionalFormats: tracker!.conditionalFormats || [],
+          hasBasicFilter: Boolean(tracker!.basicFilter),
+          basicFilterColumns: tracker!.basicFilter ? (tracker!.basicFilter.range.endColumnIndex ?? 0) - (tracker!.basicFilter.range.startColumnIndex ?? 0) : 0,
+        })));
+
+        // Rows are located by Report ID, so sorting or filtering the sheet never
+        // causes a duplicate row. The allocated row is only a first-time hint.
+        currentStage = 'sheets_row_lookup';
+        const idColumn = await request(token, valuesUrl(`'${tab}'!${REPORT_ID_COLUMN}:${REPORT_ID_COLUMN}`), currentStage, 'sheets');
+        const reportIds = ((idColumn.values || []) as string[][]).map((cells) => cells?.[0] ?? '');
+        let preferredRow = Number(/![A-Z]+(\d+):/.exec(existing || '')?.[1] || 0) || null;
+        if (!preferredRow && !reportIds.includes(meta.reportId)) {
+          const allocation = await db!.from('google_workspace_report_syncs').upsert({ report_id: reportId }, { onConflict: 'report_id', ignoreDuplicates: true }).select('*').maybeSingle();
+          const allocated = allocation.data || (await db!.from('google_workspace_report_syncs').select('*').eq('report_id', reportId).single()).data;
+          preferredRow = Number(allocated?.sheet_row_number) || null;
+        }
+        const row = chooseTrackerRow({ reportIds, reportId: meta.reportId, preferredRow });
+        const reference = `'${tab}'!A${row}:${LAST_COLUMN}${row}`;
+        await putValues('sheets_row_write', reference, values, 'USER_ENTERED');
+        await bestEffort('row_currency', () => batchUpdate('sheets_row_currency', [rowCurrencyRequest({ sheetId: trackerSheetId, row, currency: meta.currency || 'PHP' })]));
+
+        await bestEffort('overview', async () => {
+          if (tabName === OVERVIEW_TAB) return;
+          let overview = sheets.find((item) => item.properties.title === OVERVIEW_TAB);
+          let owned = false;
+          if (!overview) {
+            const added = await batchUpdate('sheets_overview_create', [{ addSheet: { properties: { title: OVERVIEW_TAB, index: 0 } } }]);
+            overview = { properties: added.replies[0].addSheet.properties };
+            owned = true;
+          } else {
+            currentStage = 'sheets_overview_read';
+            const title = await request(token, valuesUrl(`'${OVERVIEW_TAB}'!A1`), currentStage, 'sheets');
+            owned = title.values?.[0]?.[0] === OVERVIEW_TITLE;
+          }
+          if (!owned) return; // Never overwrite an Overview tab someone else created.
+          await putValues('sheets_overview_write', `'${OVERVIEW_TAB}'!A1:E5`, overviewValues(tabName), 'USER_ENTERED');
+          await batchUpdate('sheets_overview_format', overviewFormatRequests(overview.properties.sheetId));
+        });
         return reference;
       },
     };
     const completedAt = new Date().toISOString();
     const result = await runReportExport({ provider, payload, checkpoint: claimed.data });
-    await db.from('audit_logs').insert({ actor_id: session.data.user.id, action: 'REPORT_EXPORT_DESTINATION_READY', target_table: 'post_event_reports', target_id: reportId, metadata: { drive_folder_id: result.drive_folder_id, final_export_file_id: result.final_export_file_id } });
-    const completed = await db.from('post_event_report_exports').update({ ...result, status: 'completed', completed_at: completedAt, safe_error_message: null, drive_folder_url: driveUrl(result.drive_folder_id), final_export_url: fileUrl(result.final_export_file_id) }).eq('report_id', reportId).select('*').single();
+    await db.from('audit_logs').insert({ actor_id: session.data.user.id, action: 'REPORT_EXPORT_DESTINATION_READY', target_table: 'post_event_reports', target_id: reportId, metadata: { drive_folder_id: result.drive_folder_id, final_export_file_id: result.final_export_file_id, pdf_file_id: result.pdf_file_id } });
+    const completed = await db.from('post_event_report_exports').update({ ...result, status: 'completed', completed_at: completedAt, safe_error_message: null, drive_folder_url: driveUrl(result.drive_folder_id), final_export_url: fileUrl(result.final_export_file_id), pdf_url: fileUrl(result.pdf_file_id) }).eq('report_id', reportId).select('*').single();
     if (completed.error) throw completed.error;
-    await db.from('audit_logs').insert({ actor_id: session.data.user.id, action: 'REPORT_EXPORT_COMPLETED', target_table: 'post_event_reports', target_id: reportId, metadata: { automation_version: '1' } });
+    await db.from('audit_logs').insert({ actor_id: session.data.user.id, action: 'REPORT_EXPORT_COMPLETED', target_table: 'post_event_reports', target_id: reportId, metadata: { automation_version: '1', artifacts: ['json', 'pdf', 'sheet'] } });
     return reply(200, { export: completed.data });
   } catch (error) {
     if (db && exportRow) {

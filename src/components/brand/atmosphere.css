@@ -1,0 +1,75 @@
+/* Header atmosphere: upper ~320px only, behind content, faded away from the title (left) and
+   before dense content (bottom). Nothing here is interactive or announced. */
+.header-atmosphere {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: -1;
+  height: 320px;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent), linear-gradient(90deg, transparent 4%, #000 42%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, #000 45%, transparent), linear-gradient(90deg, transparent 4%, #000 42%);
+  mask-composite: intersect;
+}
+.header-atmosphere.is-quiet { opacity: .6; }
+.atmo-day, .atmo-night { position: absolute; inset: 0; transition: opacity 600ms ease; }
+.atmo-night { opacity: 0; }
+body.dark-mode .atmo-day { opacity: 0; }
+body.dark-mode .atmo-night { opacity: 1; }
+
+.atmo-glow {
+  position: absolute; right: 6%; top: -120px; width: 520px; height: 320px; border-radius: 50%;
+  background: radial-gradient(closest-side, var(--atmo-glow), var(--atmo-glow-2) 60%, transparent);
+  animation: atmo-drift 38s ease-in-out infinite alternate;
+}
+.atmo-night .atmo-glow { right: 4%; top: -140px; width: 560px; height: 340px; animation-duration: 44s; }
+.atmo-arc, .atmo-orbit {
+  position: absolute; right: -8%; top: -260px; width: 820px; height: 520px; border-radius: 50%;
+  border: 1.5px solid var(--atmo-arc); transform-origin: 70% 20%;
+  animation: atmo-sway 46s ease-in-out infinite alternate;
+}
+.atmo-arc.is-outer, .atmo-orbit.is-outer { top: -300px; width: 980px; height: 600px; border-color: var(--atmo-arc-2); animation-duration: 58s; animation-delay: -12s; }
+.atmo-orbit { right: -6%; top: -230px; width: 760px; height: 460px; border-style: dashed; animation-duration: 60s; }
+.atmo-orbit.is-outer { border-style: solid; animation-duration: 72s; animation-delay: -20s; }
+.atmo-orbit i { position: absolute; inset: -1px; border-radius: 50%; animation: atmo-turn 70s linear infinite; }
+.atmo-orbit i::after { content: ""; position: absolute; left: 18%; bottom: 12%; width: 5px; height: 5px; border-radius: 50%; background: #9fd4ff; box-shadow: 0 0 10px #9fd4ff; }
+.atmo-speck {
+  position: absolute; width: 4px; height: 4px; border-radius: 50%; opacity: 0;
+  background: var(--atmo-speck); box-shadow: 0 0 8px var(--atmo-speck);
+  animation: atmo-rise var(--atmo-d, 16s) ease-in-out var(--atmo-dl, 0s) infinite;
+}
+.atmo-speck.is-lavender { background: var(--atmo-speck-2); box-shadow: 0 0 8px var(--atmo-speck-2); }
+.atmo-star {
+  position: absolute; width: 2px; height: 2px; border-radius: 50%; opacity: .3; background: var(--atmo-speck);
+  animation: atmo-twinkle var(--atmo-d, 7s) ease-in-out var(--atmo-dl, 0s) infinite, atmo-float 30s ease-in-out var(--atmo-dl, 0s) infinite alternate;
+}
+.atmo-star.is-bright { width: 3px; height: 3px; background: var(--atmo-speck-2); }
+
+@keyframes atmo-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-60px, 18px, 0) scale(1.06); } }
+@keyframes atmo-sway { from { transform: rotate(-2deg); } to { transform: rotate(3deg); } }
+@keyframes atmo-turn { to { transform: rotate(360deg); } }
+@keyframes atmo-rise { 0% { opacity: 0; transform: translate3d(0, 24px, 0); } 25% { opacity: .55; } 75% { opacity: .4; } 100% { opacity: 0; transform: translate3d(14px, -36px, 0); } }
+@keyframes atmo-twinkle { 0%, 100% { opacity: .18; } 50% { opacity: .7; } }
+@keyframes atmo-float { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-10px, 6px, 0); } }
+
+/* Mobile: shorter, kept to the upper right, away from the greeting and headings. */
+@media (max-width: 640px) {
+  /* Mobile: a short band in the top-right corner only, clear of the greeting and headings. */
+  .header-atmosphere {
+    height: 140px;
+    opacity: .75;
+    -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent), linear-gradient(90deg, transparent 62%, #000 92%);
+    mask-image: linear-gradient(to bottom, #000 35%, transparent), linear-gradient(90deg, transparent 62%, #000 92%);
+  }
+  .atmo-arc, .atmo-orbit { width: 420px; height: 260px; top: -200px; }
+  .atmo-arc.is-outer, .atmo-orbit.is-outer, .atmo-speck:nth-child(2n), .atmo-star:nth-child(2n) { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-atmosphere *, .header-atmosphere *::after { animation: none !important; }
+  .atmo-speck { opacity: .35; }
+  .atmo-day, .atmo-night { transition: none; }
+}

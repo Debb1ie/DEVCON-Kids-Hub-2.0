@@ -1,0 +1,32 @@
+/* Cosmic atmosphere: always behind the UI, never interactive, never announced. */
+.cosmic-layer {
+  pointer-events: none;
+  overflow: hidden;
+  z-index: var(--z-cosmic);
+  contain: strict;
+}
+.cosmic-layer.is-viewport { position: fixed; inset: 0; }
+.cosmic-layer.is-container { position: absolute; inset: 0; }
+.cosmic-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.cosmic-nebula {
+  position: absolute;
+  inset: -12%;
+  filter: blur(48px);
+  background:
+    radial-gradient(38% 32% at 74% 16%, var(--cosmic-nebula-1), transparent 70%),
+    radial-gradient(34% 40% at 20% 80%, var(--cosmic-nebula-2), transparent 70%),
+    radial-gradient(22% 20% at 90% 72%, var(--cosmic-nebula-3), transparent 70%),
+    radial-gradient(28% 24% at 48% 44%, var(--cosmic-nebula-4), transparent 70%);
+  animation: cosmic-nebula-drift 70s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes cosmic-nebula-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-2.5%, 1.8%, 0) scale(1.05); }
+}
+@media (max-width: 640px) {
+  .cosmic-nebula { filter: blur(32px); opacity: .7; animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cosmic-nebula { animation: none; }
+}

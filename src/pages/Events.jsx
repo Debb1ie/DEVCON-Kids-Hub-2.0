@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppState';
 import { canPerform } from '../auth/permissions';
-import { ArrowLeft, ArrowRight, CalendarDays, Check, ClipboardCheck, ClipboardList, FolderKanban, FolderOpen, Image as ImageIcon, PencilLine, Plus, Trash2, TrendingUp, UploadCloud, Users, Wallet, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, Check, ClipboardCheck, ClipboardList, FileText, FolderKanban, Image as ImageIcon, MapPin, PencilLine, Plus, Trash2, TrendingUp, UploadCloud, UserRound, Users, Wallet, X } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 import EventApplicationsPanel from '../components/EventApplicationsPanel';
 import ErrorSummary from '../components/ErrorSummary';
 import InlineAlert from '../components/InlineAlert';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
+import { postEventReportRepository } from '../services/postEventReportService';
+import { describeEventReport } from '../services/eventReportState';
 import { getEventErrorMessage, getEventValidationIssue, isUuid, isValidIsoDate, resolveCoordinatorSelection, validateEventImage } from '../services/eventService';
 import { advanceEventEditor, EVENT_CREATE_SUBMIT, isIntentionalEventSubmit, shouldPreventImplicitEventSubmit } from '../utils/eventEditorSubmission';
 import { createValidationError, createValidationFocusRequest, scheduleValidationFocus } from '../utils/validationFocus';
@@ -65,6 +67,17 @@ export default function Events() {
   const location = useLocation();
   const { eventsList, chapters, listEligibleEventCoordinators, addEvent, updateEvent, uploadEventImage, deleteEvent, roleKey, user } = useApp();
   const permissionContext = (event) => ({ actorUserId: user?.id, actorChapterId: user?.chapterId, event, targetChapterId: event?.chapter_id });
+  const [reportStates, setReportStates] = useState(() => new Map());
+  const eventIdKey = (eventsList || []).map((event) => event.id).join('|');
+  useEffect(() => {
+    let active = true;
+    const ids = eventIdKey ? eventIdKey.split('|') : [];
+    if (!ids.length) return undefined;
+    postEventReportRepository.listReportStatesForEvents(ids)
+      .then((states) => { if (active) setReportStates(states); })
+      .catch(() => { if (active) setReportStates(new Map()); });
+    return () => { active = false; };
+  }, [eventIdKey]);
   const canCreateEvent = canPerform(roleKey, 'event.create', { actorChapterId: user?.chapterId, targetChapterId: user?.chapterId });
   const canEditEvent = (event) => canPerform(roleKey, 'event.update', permissionContext(event));
   const canDeleteEvent = (event) => canPerform(roleKey, 'event.delete', permissionContext(event));
@@ -949,61 +962,17 @@ export default function Events() {
 
         <div className="events-grid">
           {paginatedEvents.map((event) => (
-            <article className="event-card" key={event.id}>
-              <div className="event-card-image">
-                {event.image_url ? (
-                  <img src={event.image_url} alt={event.title} />
-                ) : (
-                  <div className="event-placeholder">
-                    <ImageIcon size={34} />
-                    <span>Image holder</span>
-                  </div>
-                )}
-                <StatusBadge status={event.status || 'Draft'} />
-              </div>
-
-              <div className="event-card-body">
-                <div className="event-card-headline">
-                  <div>
-                    <p className="event-type">{event.type}</p>
-                    <h3>{event.title}</h3>
-                  </div>
-                </div>
-
-                <p className="event-description">{event.description}</p>
-
-                <div className="event-meta-list">
-                  <span><CalendarDays size={14} /> {event.event_date || 'Date pending'}</span>
-                  <span><FolderOpen size={14} /> {event.google_folder_name || event.title}</span>
-                  <span><FolderKanban size={14} /> {event.chapter}</span>
-                  <span><PencilLine size={14} /> {event.coordinator}</span>
-                </div>
-
-                <div className="folder-preview compact">
-                  <div>
-                    <span>Folder</span>
-                    <strong>{event.google_folder_path}</strong>
-                  </div>
-                  <div>
-                    <span>Assets</span>
-                    <strong>{event.google_assets_path}</strong>
-                  </div>
-                </div>
-
-                {(canEditEvent(event) || canDeleteEvent(event)) && (
-                  <div className="event-actions">
-                    {canEditEvent(event) && <button type="button" className="btn-secondary small-action" onClick={() => openEditForm(event)} disabled={deletingId === event.id}>
-                      <PencilLine size={16} />
-                      Edit
-                    </button>}
-                    {canDeleteEvent(event) && <button type="button" className="btn-secondary small-action danger" onClick={() => handleDelete(event)} disabled={deletingId === event.id}>
-                      <Trash2 size={16} />
-                      {deletingId === event.id ? 'Deleting...' : 'Delete'}
-                    </button>}
-                  </div>
-                )}
-              </div>
-            </article>
+            <EventCard
+              key={event.id}
+              event={event}
+              report={describeEventReport({ event, report: reportStates.get(event.id) || null, roleKey, userId: user?.id })}
+              canEdit={canEditEvent(event)}
+              canDelete={canDeleteEvent(event)}
+              deleting={deletingId === event.id}
+              onEdit={() => openEditForm(event)}
+              onDelete={() => handleDelete(event)}
+              onOpen={(to) => navigate(to)}
+            />
           ))}
 
           {filteredEvents.length === 0 && (
@@ -1028,5 +997,68 @@ export default function Events() {
         )}
       </div>
     </div>
+  );
+}
+
+const CARD_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const formatEventDate = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  return match ? `${CARD_MONTHS[Number(match[2]) - 1]} ${Number(match[3])}, ${match[1]}` : 'Date pending';
+};
+
+function EventCardMedia({ src, title }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <div className="event-card-media">
+      {src && !broken ? (
+        <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
+      ) : (
+        <div className="event-card-media-fallback" role="img" aria-label={broken ? `Image for ${title} could not be loaded` : `No image for ${title}`}>
+          <ImageIcon size={28} aria-hidden="true" />
+          <span>{broken ? 'Image unavailable' : 'No event image'}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventCard({ event, report, canEdit, canDelete, deleting, onEdit, onDelete, onOpen }) {
+  const place = event.venue ? `${event.venue}${event.chapter ? `, ${event.chapter}` : ''}` : event.chapter || 'Location pending';
+  return (
+    <article className="event-card" aria-labelledby={`event-card-title-${event.id}`}>
+      <EventCardMedia key={event.image_url || 'none'} src={event.image_url} title={event.title} />
+      <div className="event-card-body">
+        <div className="event-card-badges">
+          {event.type && <span className="event-type-chip">{event.type}</span>}
+          <StatusBadge status={event.status || 'Draft'} />
+        </div>
+        <h3 className="event-card-title" id={`event-card-title-${event.id}`} title={event.title}>{event.title}</h3>
+        <ul className="event-card-meta">
+          <li><CalendarDays size={15} aria-hidden="true" /><span><span className="sr-only">Date: </span>{formatEventDate(event.event_date)}</span></li>
+          <li><MapPin size={15} aria-hidden="true" /><span><span className="sr-only">Location: </span>{place}</span></li>
+          <li><UserRound size={15} aria-hidden="true" /><span><span className="sr-only">Coordinator: </span>{event.coordinator || 'Coordinator not assigned'}</span></li>
+        </ul>
+        {report && (
+          <section className={`event-card-report is-${report.status.replace(/_/g, '-')}`} aria-label="Post Event Report status">
+            <div className="event-card-report-head">
+              <span><FileText size={15} aria-hidden="true" /> Post Event Report</span>
+              <StatusBadge status={report.label} />
+            </div>
+            {report.helper && <p>{report.helper}</p>}
+            {report.action && (
+              <button type="button" className="btn-secondary small-action" onClick={() => onOpen(report.action.to)}>
+                {report.action.label} <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            )}
+          </section>
+        )}
+        {(canEdit || canDelete) && (
+          <div className="event-actions">
+            {canEdit && <button type="button" className="btn-secondary small-action" onClick={onEdit} disabled={deleting}><PencilLine size={16} />Edit</button>}
+            {canDelete && <button type="button" className="btn-secondary small-action danger" onClick={onDelete} disabled={deleting}><Trash2 size={16} />{deleting ? 'Deleting...' : 'Delete'}</button>}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }

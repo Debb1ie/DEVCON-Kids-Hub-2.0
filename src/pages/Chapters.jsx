@@ -421,7 +421,7 @@ export default function Chapters() {
                 <div className="chapter-name-wrapper">
                   <div
                     className="chapter-indicator-dot"
-                    style={{ backgroundColor: chapter.color || 'var(--brand-purple)' }}
+                    style={{ backgroundColor: chapter.color || 'var(--brand-fill)' }}
                   />
                   <h3>{chapter.name}</h3>
                 </div>
@@ -429,8 +429,8 @@ export default function Chapters() {
                   className="completion-badge"
                   style={{
                     color: chapter.color || 'var(--brand-purple)',
-                    backgroundColor: `${chapter.color || '#7f08ff'}1a`,
-                    borderColor: `${chapter.color || '#7f08ff'}40`,
+                    backgroundColor: `${chapter.color || '#5638D8'}1a`,
+                    borderColor: `${chapter.color || '#5638D8'}40`,
                   }}
                 >
                   {chapter.completion}% Active

@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import AIChat from './AIChat';
+import HeaderAtmosphere from './brand/HeaderAtmosphere';
+
+// Data-dense workspaces get a quieter header atmosphere so tables and forms stay calm.
+const QUIET_ROUTES = ['/dashboard/post-event-report', '/dashboard/users', '/dashboard/admin', '/dashboard/settings', '/dashboard/integrations', '/dashboard/knowledge-base', '/dashboard/ai-settings', '/dashboard/faq-suggestions', '/dashboard/inventory', '/dashboard/event-checklist'];
 
 export default function Layout() {
+  const { pathname } = useLocation();
+  const quietAtmosphere = QUIET_ROUTES.some((route) => pathname.startsWith(route));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia('(max-width: 768px)').matches);
@@ -71,6 +77,7 @@ export default function Layout() {
       <main ref={mainContentRef} className="main-content" id="main-content" tabIndex="-1">
         <Topbar toggleSidebar={toggleSidebar} menuButtonRef={menuButtonRef} navigationExpanded={navigationExpanded} />
         <div className="scrollable-content">
+          <HeaderAtmosphere quiet={quietAtmosphere} />
           <Outlet />
         </div>
       </main>

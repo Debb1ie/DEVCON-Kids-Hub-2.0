@@ -26,26 +26,37 @@ const contrast = (foreground, background) => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
-test('light and dark semantic text tokens meet WCAG AA on their surfaces', () => {
-  assert.ok(contrast('#28242f', '#f5f2f8') >= 4.5);
-  assert.ok(contrast('#655e70', '#f5f2f8') >= 4.5);
-  assert.ok(contrast('#28242f', '#ffffff') >= 4.5);
-  assert.ok(contrast('#655e70', '#ffffff') >= 4.5);
-  assert.ok(contrast('#f8f5fa', '#19151f') >= 4.5);
-  assert.ok(contrast('#c9c1d1', '#19151f') >= 4.5);
-  assert.ok(contrast('#f8f5fa', '#241f2b') >= 4.5);
-  assert.ok(contrast('#c9c1d1', '#241f2b') >= 4.5);
+// Reads a token value from a theme block so the checks follow the real stylesheet.
+const tokenIn = (block, name) => block.match(new RegExp(`--${name}: (#[0-9a-f]{6})`, 'i'))?.[1];
+const lightBlock = tokens.slice(tokens.indexOf(':root {'), tokens.indexOf('body.dark-mode {'));
+const darkBlock = tokens.slice(tokens.indexOf('body.dark-mode {'));
+
+test('Daylight and Moonlight text tokens meet WCAG AA on their surfaces', () => {
+  for (const block of [lightBlock, darkBlock]) {
+    const surfaces = ['surface-page', 'surface-default', 'surface-subtle', 'surface-elevated'].map((name) => tokenIn(block, name));
+    for (const surface of surfaces) {
+      for (const text of ['text-primary', 'text-secondary', 'text-tertiary']) {
+        assert.ok(contrast(tokenIn(block, text), surface) >= 4.5, `${text} on ${surface}`);
+      }
+    }
+    // Placeholders stay readable inside inputs; field outlines meet the 3:1 non-text minimum.
+    assert.ok(contrast(tokenIn(block, 'text-placeholder'), tokenIn(block, 'surface-input')) >= 4.5);
+    assert.ok(contrast(tokenIn(block, 'border-strong'), tokenIn(block, 'surface-default')) >= 3);
+    assert.ok(contrast(tokenIn(block, 'text-primary'), tokenIn(block, 'surface-input')) >= 4.5);
+  }
+  // Moonlight disabled text stays legible rather than disappearing.
+  assert.ok(contrast(tokenIn(darkBlock, 'text-disabled'), tokenIn(darkBlock, 'disabled-control')) >= 4.5);
 });
 
 test('theme definitions pair complete surfaces and text colors', () => {
-  assert.match(tokens, /--surface-page: #f5f2f8/);
+  assert.match(tokens, /--surface-page: #fbf8f4/);
   assert.match(tokens, /--surface-default: #ffffff/);
-  assert.match(tokens, /--text-primary: #28242f/);
-  assert.match(tokens, /--text-secondary: #655e70/);
-  assert.match(tokens, /body\.dark-mode \{[\s\S]*--surface-page: #19151f/);
-  assert.match(tokens, /body\.dark-mode \{[\s\S]*--surface-default: #241f2b/);
-  assert.match(tokens, /body\.dark-mode \{[\s\S]*--text-primary: #f8f5fa/);
-  assert.match(tokens, /body\.dark-mode \{[\s\S]*--text-secondary: #c9c1d1/);
+  assert.match(tokens, /--text-primary: #1c1726/);
+  assert.match(tokens, /--text-secondary: #4e4759/);
+  assert.match(tokens, /body\.dark-mode \{[\s\S]*--surface-page: #0e0d1a/);
+  assert.match(tokens, /body\.dark-mode \{[\s\S]*--surface-default: #1b1832/);
+  assert.match(tokens, /body\.dark-mode \{[\s\S]*--text-primary: #f4f2fb/);
+  assert.match(tokens, /body\.dark-mode \{[\s\S]*--text-secondary: #cfc9e2/);
   assert.match(tokens, /body\.dark-mode \{[\s\S]*--bg-main: var\(--surface-page\)/);
   assert.match(tokens, /body\.dark-mode \{[\s\S]*--bg-card: var\(--surface-default\)/);
   assert.match(tokens, /body\.dark-mode \{[\s\S]*--text-main: var\(--text-primary\)/);

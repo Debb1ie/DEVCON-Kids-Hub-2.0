@@ -155,9 +155,9 @@
 
 .field input {
   padding: 0.7rem 0.85rem;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
-  background: var(--surface-default);
+  background: var(--surface-input);
   color: var(--text-primary);
   font: inherit;
   font-size: 0.9rem;

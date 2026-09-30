@@ -1,0 +1,64 @@
+/* Auth callback: Daylight sun or Moonlight moon, one calm card, strong text contrast. */
+.auth-callback {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: var(--space-6) var(--space-4);
+  overflow: hidden;
+  background: var(--surface-page);
+}
+.auth-callback-atmosphere {
+  z-index: 0;
+  -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent);
+  mask-image: linear-gradient(to bottom, #000 50%, transparent);
+}
+.auth-callback-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(50% 45% at 50% 32%, color-mix(in srgb, var(--warm-accent) 16%, transparent), transparent 70%);
+}
+body.dark-mode .auth-callback-glow {
+  background: radial-gradient(52% 46% at 50% 30%, rgba(109, 77, 242, .3), transparent 70%), radial-gradient(40% 40% at 12% 90%, rgba(52, 40, 140, .3), transparent 70%);
+}
+.auth-callback-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 440px);
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-8) var(--space-6);
+  text-align: center;
+  border-radius: var(--radius-dialog);
+  background: var(--surface-default);
+  box-shadow: var(--shadow-lg);
+}
+.auth-callback-card h1 {
+  margin: var(--space-2) 0 0;
+  color: var(--text-primary);
+  font: 600 1.4375rem/1.25 var(--font-display);
+  letter-spacing: -.015em;
+  text-wrap: balance;
+}
+.auth-callback-card p { margin: 0; max-width: 34ch; color: var(--text-secondary); font-size: .9375rem; line-height: 1.55; }
+.auth-callback-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-3); margin-top: var(--space-3); }
+.auth-callback-chip {
+  display: inline-flex; align-items: center; gap: .45rem; padding: .375rem .7rem; border-radius: var(--radius-pill);
+  color: var(--warm-accent-text); background: var(--warm-accent-surface); font-size: .78rem; font-weight: 600;
+}
+body.dark-mode .auth-callback-chip { color: var(--state-information); background: var(--state-information-surface); }
+.auth-callback-steps { display: flex; gap: 6px; }
+.auth-callback-steps i { width: 22px; height: 4px; border-radius: 2px; background: var(--border-default); transition: background-color var(--duration-standard) ease; }
+.auth-callback-steps i.is-done { background: var(--warm-accent); }
+body.dark-mode .auth-callback-steps i.is-done { background: var(--orbit-purple-300); }
+.auth-callback-error-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; color: var(--state-danger); background: var(--state-danger-surface); }
+.auth-callback-action { width: 100%; margin-top: var(--space-3); }
+@media (max-width: 480px) {
+  .auth-callback-card { padding: var(--space-6) var(--space-5) var(--space-5); border-radius: var(--radius-xl); }
+  .auth-callback-card h1 { font-size: 1.3rem; }
+}

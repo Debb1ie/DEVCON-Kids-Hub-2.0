@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, FileText, Image, Loader2, Pencil, Plus, Save, Trash2, UploadCloud } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppState';
 import { postEventReportRepository, validateReportFile } from '../services/postEventReportService';
 import { buildEventReportForm } from '../services/postEventReportForm';
@@ -62,6 +63,19 @@ export default function PostEventReport() {
     if (!event) { setForm(EMPTY); setReportId(null); setTransactions([]); setFiles([]); return; }
     await loadEventData(event);
   }, [events, loadEventData]);
+
+  // Deep link from an Events card (?event=<id>): open that event's report once
+  // the authorized event list has loaded. Unknown IDs are ignored.
+  const [searchParams] = useSearchParams();
+  const requestedEventId = searchParams.get('event');
+  const openedFromLink = useRef(false);
+  useEffect(() => {
+    if (openedFromLink.current || !requestedEventId) return;
+    const event = events.find((item) => String(item.id) === requestedEventId);
+    if (!event) return;
+    const task = window.setTimeout(() => { openedFromLink.current = true; loadEventData(event); }, 0);
+    return () => window.clearTimeout(task);
+  }, [events, requestedEventId, loadEventData]);
 
   const validateStep = (index) => {
     const next = {};

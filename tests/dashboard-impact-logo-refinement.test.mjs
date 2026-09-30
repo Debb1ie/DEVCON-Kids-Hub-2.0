@@ -13,21 +13,31 @@ const introCss = read('src/pages/LandingPage.css');
 const login = read('src/pages/Login.jsx');
 const loginCss = read('src/pages/Login.css');
 const globalCss = read('src/index.css');
+const sparkHub = read('src/components/brand/SparkHub.jsx');
+const brandCss = read('src/components/brand/brand.css');
+const tokens = read('src/styles/tokens.css');
 
-test('the supplied transparent PNG is used unframed in every brand location', () => {
-  const logo = readFileSync(new URL('../src/assets/devcon-kids-logo.png', import.meta.url));
-  assert.equal(logo.subarray(1, 4).toString('ascii'), 'PNG');
-  assert.equal(logo[25], 6, 'PNG uses RGBA color with an alpha channel');
+test('the approved Spark Hub lockup is the unframed brand in every location', () => {
+  assert.match(sparkHub, /export function SparkHubMark/);
+  assert.match(sparkHub, /export function BrandLockup/);
+  assert.match(sparkHub, /viewBox="0 0 64 64"/, 'the mark keeps its fixed square construction grid');
+  assert.match(sparkHub, /role="img" aria-label="DEVCON Kids Hub"/, 'the lockup exposes one accessible brand name');
 
   for (const source of [sidebar, intro, login]) {
-    assert.match(source, /assets\/devcon-kids-logo\.png/);
-    assert.match(source, /alt="DEVCON Kids Hub"/);
+    assert.match(source, /from '\.\.?\/(components\/)?brand\/SparkHub'/);
+    assert.match(source, /<BrandLockup\b/);
+    assert.doesNotMatch(source, /devcon-kids-logo|<img\b/);
   }
 
-  assert.match(sidebarCss, /\.brand-logo-surface img[^\n]*object-fit: contain/);
-  assert.doesNotMatch(sidebarCss.match(/\.brand-logo-surface\s*\{[\s\S]*?\}/)?.[0] || '', /background:|border:|box-shadow:/);
+  // Theme-aware wordmark: lockup colors come from logo tokens defined for both themes.
+  assert.match(brandCss, /\.brand-lockup-name \{[^}]*color: var\(--logo-text\)/);
+  assert.match(brandCss, /\.brand-lockup-parent \{[^}]*color: var\(--logo-accent\)/);
+  assert.match(tokens, /:root \{[\s\S]*--logo-text: var\(--ink-950\)/);
+  assert.match(tokens, /body\.dark-mode \{[\s\S]*--logo-text: #ffffff/);
+
+  assert.doesNotMatch(sidebarCss, /\.brand-logo-surface|object-fit/);
+  assert.doesNotMatch(sidebarCss.match(/\.logo-container\s*\{[\s\S]*?\}/)?.[0] || '', /background:|border:|box-shadow:/);
   assert.doesNotMatch(introCss.match(/\.brand-intro-mark\s*\{[\s\S]*?\}/)?.[0] || '', /background:|border:|box-shadow:/);
-  assert.doesNotMatch(loginCss.match(/\.brand-logo-surface\.login-logo\s*\{[\s\S]*?\}/)?.[0] || '', /background:|border:|box-shadow:/);
   assert.match(introCss, /prefers-reduced-motion: reduce[\s\S]*animation: none/);
 });
 

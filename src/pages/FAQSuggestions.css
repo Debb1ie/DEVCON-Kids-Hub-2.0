@@ -96,7 +96,7 @@
 }
 
 .filter-btn.active {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   color: var(--brand-white);
   border-color: var(--brand-purple);
 }
@@ -309,7 +309,7 @@
 }
 
 .faq-action-btn.add-kb {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   color: var(--brand-white);
 }
 

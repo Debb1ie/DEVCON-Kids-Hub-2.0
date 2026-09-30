@@ -1,3 +1,6 @@
+import { buildTrackerRow } from './tracker.mjs';
+import { renderReportPdf } from './pdf.mjs';
+
 export const AUTOMATION_VERSION = '1';
 
 export const sanitizeSegment = (value, fallback = 'unknown') => {
@@ -36,36 +39,49 @@ export const buildReportExport = ({ report, event, chapter, submitter, approver,
   };
 };
 
-export const sheetRow = (payload, automation) => [[
-  payload.report.id, payload.event.id, payload.event.name || '', payload.event.chapter || '', payload.event.date || '',
-  payload.people.submitted_by || '', payload.people.approved_by || '', payload.attendance.registered_count ?? '',
-  payload.attendance.attended_count ?? '', payload.attendance.children_reached ?? '', payload.attendance.volunteers_involved ?? '',
-  payload.impact.satisfaction_rating || '', payload.finance.approved_budget, payload.finance.expenses, payload.finance.balance,
-  payload.report.status, automation.status, automation.drive_folder_id || '', automation.final_export_file_id || '',
-  payload.report.approved_at || '', automation.completed_at || '',
-]];
+export const JSON_FILE_NAME = 'Post Event Report.json';
+export const PDF_FILE_NAME = 'Post Event Report.pdf';
+export const ATTACHMENTS_FOLDER_NAME = 'Attachments';
+// The JSON key keeps its original value so earlier exports are updated, not duplicated.
+export const jsonArtifactKey = (reportId) => `report:${reportId}:v${AUTOMATION_VERSION}`;
+export const pdfArtifactKey = (reportId) => `report-pdf:${reportId}:v1`;
 
-export async function runReportExport({ provider, payload, checkpoint = {} }) {
+export const sheetRow = (payload, automation) => [buildTrackerRow(payload, automation)];
+
+// Every artifact is checkpointed as soon as it exists. A retry resumes from
+// the checkpoint: finished artifacts are reused and only missing ones are
+// produced. The caller marks the export completed only after this resolves.
+export async function runReportExport({ provider, payload, checkpoint = {}, renderPdf = renderReportPdf, now = () => new Date().toISOString() }) {
   if (payload.report.status !== 'approved') throw new Error('Only approved reports can be exported.');
   const next = { ...checkpoint };
+  const save = async () => { await provider.checkpoint?.(next); };
   if (!next.drive_folder_id) {
     next.drive_folder_id = await provider.ensureFolderPath(reportFolderPath(payload));
-    await provider.checkpoint?.(next);
+    await save();
   }
   if (!next.final_export_file_id) {
-    next.final_export_file_id = await provider.upsertJsonFile(next.drive_folder_id, `post-event-report-${payload.report.id}.json`, payload, `report:${payload.report.id}:v${AUTOMATION_VERSION}`);
-    await provider.checkpoint?.(next);
+    next.final_export_file_id = await provider.upsertJsonFile(next.drive_folder_id, JSON_FILE_NAME, payload, jsonArtifactKey(payload.report.id));
+    await save();
+  }
+  if (!next.pdf_file_id) {
+    const bytes = renderPdf(payload, { generatedAt: now(), driveFolderId: next.drive_folder_id, jsonFileId: next.final_export_file_id });
+    if (!bytes?.length) throw new Error('The report PDF could not be generated.');
+    next.pdf_file_id = await provider.upsertFile(next.drive_folder_id, PDF_FILE_NAME, bytes, 'application/pdf', pdfArtifactKey(payload.report.id));
+    await save();
   }
   const uploaded = new Set(next.uploaded_attachment_ids || []);
-  for (const attachment of payload.attachments) {
-    if (!uploaded.has(attachment.id)) {
-      await provider.copyAttachment(next.drive_folder_id, attachment);
-      uploaded.add(attachment.id);
-      next.uploaded_attachment_ids = [...uploaded];
-      await provider.checkpoint?.(next);
-    }
+  const remaining = (payload.attachments || []).filter((attachment) => !uploaded.has(attachment.id));
+  if (remaining.length && !next.attachments_folder_id) {
+    next.attachments_folder_id = await provider.ensureChildFolder(ATTACHMENTS_FOLDER_NAME, next.drive_folder_id);
+    await save();
   }
-  next.completed_at = new Date().toISOString();
-  next.sheet_row_reference = await provider.upsertSheetRow(`post_event_report:${payload.report.id}`, sheetRow(payload, { ...next, status: 'completed' }), next.sheet_row_reference);
+  for (const attachment of remaining) {
+    await provider.copyAttachment(next.attachments_folder_id, attachment);
+    uploaded.add(attachment.id);
+    next.uploaded_attachment_ids = [...uploaded];
+    await save();
+  }
+  next.completed_at = now();
+  next.sheet_row_reference = await provider.upsertSheetRow(`post_event_report:${payload.report.id}`, sheetRow(payload, { ...next, status: 'completed' }), next.sheet_row_reference, { currency: payload.finance.currency_code, reportId: payload.report.id });
   return next;
 }

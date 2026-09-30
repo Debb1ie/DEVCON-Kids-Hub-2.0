@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppState';
 import { canAccessRoute } from '../auth/permissions';
-import logo from '../assets/devcon-kids-logo.png';
+import { BrandLockup } from './brand/SparkHub';
 import './Sidebar.css';
 
 export default function Sidebar({ onNavigate, collapsed = false }) {
@@ -56,8 +56,7 @@ export default function Sidebar({ onNavigate, collapsed = false }) {
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-container">
-          <span className="brand-logo-surface"><img src={logo} alt="DEVCON Kids Hub" /></span>
-          <span className="brand-wordmark" aria-hidden="true">DEVCON Kids</span>
+          <BrandLockup layout="horizontal" size={36} />
         </div>
 
       </div>

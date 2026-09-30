@@ -91,7 +91,7 @@
 
 .report-steps button.active span,
 .report-steps button.complete span {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   color: var(--brand-white);
 }
 
@@ -183,9 +183,9 @@
 .transaction-form select,
 .approval-card select {
   width: 100%;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
-  background: var(--surface-default);
+  background: var(--surface-input);
   color: var(--text-primary);
   padding: 0.7rem 0.85rem;
   font: inherit;
@@ -500,9 +500,9 @@
 }
 
 .attachment-controls select {
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
-  background: var(--surface-default);
+  background: var(--surface-input);
   color: var(--text-primary);
   padding: 0.6rem 0.8rem;
   font-size: 0.875rem;

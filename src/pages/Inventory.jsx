@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppState';
 import {
   Package,
@@ -8,6 +9,7 @@ import {
   Plus,
   Trash2,
   Image as ImageIcon,
+  ImageOff,
   PencilLine,
   X,
 } from 'lucide-react';
@@ -230,7 +232,10 @@ export default function Inventory() {
       {showForm &&
         (editingId
           ? canManageItem(inventoryList.find((item) => item.id === editingId))
-          : canCreateItem) && (
+          : canCreateItem) &&
+        // Portaled to <body>: the page wrapper's entrance animation (transform)
+        // would otherwise become the containing block for position: fixed.
+        createPortal(
           <>
             <div className="inventory-modal-overlay" onClick={closeForm} />
             <div className="inventory-modal-container">
@@ -241,9 +246,14 @@ export default function Inventory() {
                 aria-labelledby="inventory-form-title"
               >
                 <div className="inventory-form-head">
-                  <h3 id="inventory-form-title">
-                    {editingId ? 'Edit Inventory Item' : 'Add New Inventory Item'}
-                  </h3>
+                  <div>
+                    <h3 id="inventory-form-title">
+                      {editingId ? 'Edit Inventory Item' : 'Add New Inventory Item'}
+                    </h3>
+                    {editingId && (
+                      <p className="inventory-editing">Editing: {name || 'Untitled item'}</p>
+                    )}
+                  </div>
                   <button
                     type="button"
                     className="modal-close-btn"
@@ -253,23 +263,20 @@ export default function Inventory() {
                     <X size={18} />
                   </button>
                 </div>
-                {editingId && (
-                  <p className="inventory-editing">Editing: {name || 'Untitled item'}</p>
-                )}
                 <form
                   onSubmit={handleAdd}
-                  className="inventory-form-grid"
+                  className="inventory-form"
                   aria-describedby={formError ? 'inventory-form-error' : undefined}
                 >
-                  <div className="inventory-form-section">
-                    <h4>Item Details</h4>
-                    <div className="inventory-form-fields">
+                  <div className="inventory-form-body">
+                    <section className="inventory-form-main" aria-labelledby="inventory-details-heading">
+                      <h4 id="inventory-details-heading">Item details</h4>
                       <div className="inventory-form-group">
                         <label htmlFor="inventory-item-name">Item Name</label>
                         <input
                           id="inventory-item-name"
                           type="text"
-                          placeholder="Item name"
+                          placeholder="e.g. mBot Robotics Kit"
                           value={name}
                           onChange={(e) => {
                             setFormError('');
@@ -280,110 +287,78 @@ export default function Inventory() {
                           required
                         />
                       </div>
-                      <div className="inventory-form-group">
-                        <label htmlFor="inventory-category">Category</label>
-                        <select
-                          id="inventory-category"
-                          value={category}
-                          onChange={(e) => setCategory(e.target.value)}
-                          disabled={isSubmitting}
-                        >
-                          <option>Robotics</option>
-                          <option>Microcontrollers</option>
-                          <option>Computers</option>
-                          <option>Electronics</option>
-                          <option>Swag</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="inventory-form-section">
-                    <h4>Stock</h4>
-                    <div className="inventory-form-group">
-                      <label htmlFor="inventory-stock">Stock Quantity</label>
-                      <input
-                        id="inventory-stock"
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="0"
-                        value={stock}
-                        onChange={(e) => {
-                          setFormError('');
-                          setStock(e.target.value);
-                        }}
-                        disabled={isSubmitting}
-                        aria-invalid={
-                          formError === 'Stock must be a whole number of 0 or more.'
-                        }
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="inventory-form-section inventory-media-section">
-                    <h4>Media</h4>
-                    <div className="inventory-form-group">
-                      <label htmlFor="inventory-image-url">
-                        Image URL <span>Optional</span>
-                      </label>
-                      <input
-                        id="inventory-image-url"
-                        type="url"
-                        placeholder="https://example.com/image.jpg"
-                        value={imageUrl}
-                        onChange={(e) => {
-                          setFormError('');
-                          setImagePreviewFailed(false);
-                          setImageUrl(e.target.value);
-                        }}
-                        disabled={isSubmitting}
-                        aria-invalid={
-                          formError ===
-                          'Enter a valid image URL beginning with http:// or https://.'
-                        }
-                      />
-                    </div>
-                    <div className="inventory-image-preview">
-                      {imageUrl.trim() &&
-                      isValidHttpUrl(imageUrl.trim()) &&
-                      !imagePreviewFailed ? (
-                        <img
-                          src={imageUrl.trim()}
-                          alt={name || 'Inventory item preview'}
-                          onError={() => setImagePreviewFailed(true)}
-                        />
-                      ) : (
-                        <div>
-                          <ImageIcon size={22} />
-                          <span>
-                            {imagePreviewFailed
-                              ? 'Image preview unavailable'
-                              : 'Image preview'}
-                          </span>
+                      <div className="inventory-form-row">
+                        <div className="inventory-form-group">
+                          <label htmlFor="inventory-category">Category</label>
+                          <select
+                            id="inventory-category"
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            disabled={isSubmitting}
+                          >
+                            <option>Robotics</option>
+                            <option>Microcontrollers</option>
+                            <option>Computers</option>
+                            <option>Electronics</option>
+                            <option>Swag</option>
+                          </select>
                         </div>
-                      )}
-                    </div>
+                        <div className="inventory-form-group">
+                          <label htmlFor="inventory-stock">Stock Quantity</label>
+                          <input
+                            id="inventory-stock"
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="0"
+                            value={stock}
+                            onChange={(e) => {
+                              setFormError('');
+                              setStock(e.target.value);
+                            }}
+                            disabled={isSubmitting}
+                            aria-invalid={
+                              formError === 'Stock must be a whole number of 0 or more.'
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="inventory-form-media" aria-labelledby="inventory-media-heading">
+                      <h4 id="inventory-media-heading">Image</h4>
+                      <div className="inventory-form-group">
+                        <label htmlFor="inventory-image-url">
+                          Image URL <span>Optional</span>
+                        </label>
+                        <input
+                          id="inventory-image-url"
+                          type="url"
+                          placeholder="https://example.com/image.jpg"
+                          value={imageUrl}
+                          onChange={(e) => {
+                            setFormError('');
+                            setImagePreviewFailed(false);
+                            setImageUrl(e.target.value);
+                          }}
+                          disabled={isSubmitting}
+                          aria-invalid={
+                            formError ===
+                            'Enter a valid image URL beginning with http:// or https://.'
+                          }
+                        />
+                      </div>
+                      <InventoryImagePreview
+                        url={imageUrl.trim()}
+                        valid={isValidHttpUrl(imageUrl.trim())}
+                        name={name}
+                        failed={imagePreviewFailed}
+                        onError={() => setImagePreviewFailed(true)}
+                      />
+                    </section>
                   </div>
 
-                  <div className="inventory-form-actions">
-                    <button type="submit" className="btn-primary" disabled={isSubmitting}>
-                      {isSubmitting
-                        ? 'Saving...'
-                        : editingId
-                        ? 'Update Item'
-                        : 'Save Item'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={closeForm}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </button>
-                  </div>
                   {formError && (
                     <p
                       id="inventory-form-error"
@@ -393,10 +368,29 @@ export default function Inventory() {
                       {formError}
                     </p>
                   )}
+
+                  <div className="inventory-form-actions">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={closeForm}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn-primary" disabled={isSubmitting}>
+                      {isSubmitting
+                        ? 'Saving...'
+                        : editingId
+                        ? 'Update Item'
+                        : 'Save Item'}
+                    </button>
+                  </div>
                 </form>
               </div>
             </div>
-          </>
+          </>,
+          document.body
         )}
 
       <section className="inventory-stats" aria-label="Inventory metrics">
@@ -612,5 +606,26 @@ export default function Inventory() {
         )}
       </div>
     </div>
+  );
+}
+
+function InventoryImagePreview({ url, valid, name, failed, onError }) {
+  const state = !url ? 'empty' : !valid || failed ? 'broken' : 'image';
+  return (
+    <figure className={`inventory-image-preview is-${state}`} aria-live="polite">
+      {state === 'image' ? (
+        <img src={url} alt={name ? `Preview of ${name}` : 'Inventory item preview'} onError={onError} />
+      ) : (
+        <div className="inventory-image-placeholder">
+          {state === 'broken' ? <ImageOff size={24} aria-hidden="true" /> : <ImageIcon size={24} aria-hidden="true" />}
+          <strong>{state === 'broken' ? 'Image could not be loaded' : 'Image preview'}</strong>
+          <span>
+            {state === 'broken'
+              ? 'Use a direct link to an image file.'
+              : 'Paste an image URL to preview it.'}
+          </span>
+        </div>
+      )}
+    </figure>
   );
 }

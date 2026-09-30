@@ -284,8 +284,8 @@
   min-height: 44px;
   padding: 0.6rem 0.85rem;
   color: var(--text-primary);
-  background: var(--surface-default);
-  border: 1px solid var(--border-default);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control, 8px);
   font: inherit;
   transition: border-color var(--transition-fast, 150ms ease), box-shadow var(--transition-fast, 150ms ease);
@@ -309,7 +309,7 @@
   padding: 2px;
   border-radius: var(--radius-control, 8px);
   cursor: pointer;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
 }
 
 .color-value-label {
@@ -364,7 +364,7 @@
 
 .chapter-pagination-page.active {
   color: white;
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   border-color: var(--brand-purple);
 }
 

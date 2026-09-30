@@ -10,6 +10,7 @@ const intro = read('src/pages/LandingPage.jsx');
 const introCss = read('src/pages/LandingPage.css');
 const login = read('src/pages/Login.jsx');
 const appState = read('src/context/AppState.jsx');
+const brandCss = read('src/components/brand/brand.css');
 
 test('dashboard growth chart uses a bounded responsive height without grid stretching', () => {
   assert.match(dashboardCss, /\.dashboard-content\s*\{[\s\S]*?align-items:\s*start/);
@@ -37,12 +38,19 @@ test('authenticated root bypasses the intro and routes directly to dashboard', (
   assert.match(app, /authenticatedDestination = '\/dashboard'/);
 });
 
-test('intro and login use the official logo safely with reduced motion', () => {
-  assert.match(intro, /assets\/devcon-kids-logo\.png/);
-  assert.match(login, /assets\/devcon-kids-logo\.png/);
-  assert.match(introCss, /object-fit:\s*contain/);
+test('intro and login use the approved Spark Hub branding safely with reduced motion', () => {
+  for (const source of [intro, login]) {
+    assert.match(source, /import \{ BrandLockup \} from '\.\.\/components\/brand\/SparkHub'/);
+    assert.match(source, /<BrandLockup\b/);
+    assert.doesNotMatch(source, /devcon-kids-logo/);
+    assert.doesNotMatch(source, /<img\b/);
+  }
+  assert.match(login, /<BrandLockup layout="horizontal" tone="onDark"/);
+  assert.match(login, /import \{ NovaHost \} from '\.\.\/components\/brand\/Nova'/);
+  assert.match(login, /<NovaHost\b/);
   assert.match(introCss, /prefers-reduced-motion:\s*reduce/);
   assert.match(introCss, /animation:\s*none/);
+  assert.match(brandCss, /prefers-reduced-motion: reduce[\s\S]*\.nova-host[\s\S]*animation: none !important/);
 });
 
 test('existing Google OAuth initiation path remains in use', () => {

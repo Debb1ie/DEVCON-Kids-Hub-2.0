@@ -1,0 +1,50 @@
+/* ── Brand lockup ─────────────────────────────────────────── */
+.brand-lockup { --lockup-size: 40px; display: inline-flex; align-items: center; gap: calc(var(--lockup-size) * .28); min-width: 0; line-height: 1; }
+.brand-lockup .spark-hub-mark { flex: none; }
+.brand-lockup-text { display: grid; min-width: 0; }
+.brand-lockup-parent { font: 700 calc(var(--lockup-size) * .23)/1 var(--font-ui); letter-spacing: .24em; color: var(--logo-accent); margin-bottom: calc(var(--lockup-size) * .1); }
+.brand-lockup-name { font: 700 calc(var(--lockup-size) * .56)/1 var(--font-display); letter-spacing: -.02em; color: var(--logo-text); white-space: nowrap; }
+.brand-lockup.is-inline .brand-lockup-text { display: block; font: 700 calc(var(--lockup-size) * .48)/1 var(--font-display); letter-spacing: -.015em; color: var(--logo-text); white-space: nowrap; }
+.brand-lockup.is-inline .brand-lockup-parent { font: inherit; letter-spacing: -.015em; margin: 0; }
+.brand-lockup.is-stacked { flex-direction: column; text-align: center; }
+.brand-lockup.is-stacked .brand-lockup-text { justify-items: center; }
+.brand-lockup.tone-onDark .brand-lockup-parent,
+.brand-lockup.tone-onDark .brand-lockup-name,
+.brand-lockup.tone-onDark .brand-lockup-text { color: #ffffff; text-shadow: 0 1px 0 rgba(20, 17, 28, .35), 0 0 22px rgba(183, 166, 255, .35); }
+.brand-lockup.tone-onDark .spark-hub-mark { filter: drop-shadow(0 0 10px rgba(183, 166, 255, .35)); }
+body.dark-mode .brand-lockup.tone-theme .brand-lockup-text { text-shadow: 0 0 18px rgba(159, 139, 255, .2); }
+
+/* ── NOVA ─────────────────────────────────────────────────── */
+.nova { display: block; overflow: visible; }
+.nova-eye, .nova-face .nova-eye { transform-box: fill-box; transform-origin: center; }
+.nova-host { --nova-size: 118px; position: relative; width: calc(var(--nova-size) * 1.7); height: calc(var(--nova-size) * 1.32); display: grid; place-items: center; margin-inline: auto; }
+.nova-host-glow { position: absolute; left: 50%; top: 50%; width: calc(var(--nova-size) * 1.27); height: calc(var(--nova-size) * 1.1); translate: -50% -52%; border-radius: 50%; background: radial-gradient(closest-side, var(--nova-glow), transparent); animation: nova-glow 4.8s ease-in-out infinite; }
+.nova-host-bot { position: relative; z-index: 2; animation: nova-float 5.2s ease-in-out infinite; }
+.nova-host-bot .nova-shadow { display: none; }
+.nova-host-bot .nova-eye { animation: nova-blink 5.6s infinite; }
+.nova-host-bot .nova-antenna { transform-box: fill-box; transform-origin: center; animation: nova-spark 3.4s ease-in-out infinite; }
+.nova-host-bot .nova-ear { animation: nova-ear 4.2s ease-in-out infinite; }
+.nova-host.has-entrance .nova-host-bot { animation: nova-enter .9s var(--ease-spring) both, nova-float 5.2s ease-in-out .9s infinite; }
+.nova-host-shadow { position: absolute; left: 50%; bottom: 6%; width: calc(var(--nova-size) * .54); height: 8px; translate: -50% 0; border-radius: 50%; background: rgba(86, 56, 216, .22); animation: nova-shadow 5.2s ease-in-out infinite; }
+.nova-host-ring { position: absolute; left: 50%; top: 50%; width: calc(var(--nova-size) * 1.56); height: calc(var(--nova-size) * 1.56); translate: -50% -50%; transform: rotate(-14deg) scaleY(.34); z-index: 1; }
+.nova-host-ring::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px dashed rgba(var(--cosmic-line), .3); }
+.nova-host-ring i { position: absolute; inset: 0; animation: nova-orbit 22s linear infinite; }
+.nova-host-ring i + i { animation-duration: 34s; animation-direction: reverse; }
+.nova-host-ring i::after { content: ""; position: absolute; left: calc(50% - 4px); top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--digital-cyan); box-shadow: 0 0 10px var(--digital-cyan); }
+.nova-host-ring i + i::after { top: auto; bottom: -4px; background: var(--solar-yellow); box-shadow: 0 0 10px var(--solar-yellow); }
+.nova-host-star { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgb(var(--cosmic-particle-primary)); opacity: .4; animation: nova-twinkle 5s ease-in-out infinite; z-index: 1; }
+.nova-host-star.is-cyan { background: var(--digital-cyan); }
+.nova-host-star.is-spark { width: 10px; height: 10px; border-radius: 0; background: var(--solar-yellow); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+@keyframes nova-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes nova-shadow { 0%, 100% { transform: scaleX(1); opacity: 1; } 50% { transform: scaleX(.82); opacity: .65; } }
+@keyframes nova-glow { 0%, 100% { opacity: .75; scale: 1; } 50% { opacity: 1; scale: 1.06; } }
+@keyframes nova-blink { 0%, 90%, 100% { transform: scaleY(1); } 92.5% { transform: scaleY(.1); } 95% { transform: scaleY(1); } }
+@keyframes nova-spark { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.25) rotate(20deg); } }
+@keyframes nova-ear { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+@keyframes nova-orbit { to { transform: rotate(360deg); } }
+@keyframes nova-twinkle { 0%, 100% { opacity: .18; } 50% { opacity: .8; } }
+@keyframes nova-enter { 0% { opacity: 0; transform: translateY(8px) scale(.94); } 100% { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nova-host *, .nova-host-bot, .nova-host.has-entrance .nova-host-bot { animation: none !important; }
+}

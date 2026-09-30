@@ -33,6 +33,11 @@
   outline: none;
 }
 
+.confirmation-modal-danger .confirmation-modal-icon {
+  background: var(--state-danger-surface);
+  color: var(--state-danger);
+}
+
 .confirmation-modal-icon {
   width: 42px;
   height: 42px;
@@ -61,7 +66,7 @@
 
 .confirmation-modal-primary .confirmation-modal-icon {
   background: color-mix(in srgb, var(--action-primary) 12%, transparent);
-  color: var(--action-primary);
+  color: var(--action-primary-text);
 }
 
 .confirmation-modal-primary .confirmation-modal-confirm {
@@ -86,9 +91,9 @@
 .confirmation-modal-confirm {
   min-height: 38px;
   padding: 0.5rem 0.9rem;
-  border: 1px solid var(--state-danger);
+  border: 1px solid var(--danger-fill);
   border-radius: var(--border-radius-sm);
-  background: var(--state-danger);
+  background: var(--danger-fill);
   color: var(--text-on-accent);
   font: inherit;
   font-size: 0.88rem;
@@ -96,8 +101,8 @@
 }
 
 .confirmation-modal-confirm:hover:not(:disabled) {
-  background: var(--state-danger-hover);
-  border-color: var(--state-danger-hover);
+  background: var(--danger-fill-hover);
+  border-color: var(--danger-fill-hover);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -118,4 +123,15 @@
   .confirmation-modal-actions button {
     width: 100%;
   }
+}
+
+.confirmation-modal-danger .confirmation-modal-confirm {
+  border-color: var(--danger-fill);
+  background: var(--danger-fill);
+  color: var(--text-on-accent);
+}
+
+.confirmation-modal-danger .confirmation-modal-confirm:hover:not(:disabled) {
+  border-color: var(--danger-fill-hover);
+  background: var(--danger-fill-hover);
 }

@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, Users } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { MoreHorizontal, Search, Trash2, Users } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
 import { useApp } from '../context/AppState';
-import { CHAPTER_ROLES } from '../auth/userManagementRules';
-import { changeManagedUserRole, listAssignableLocations, listManagedUsers, USER_ROLES } from '../services/userManagementService';
+import {
+  assignableRolesFor,
+  getManagedUserAccess,
+  getRowSaveState,
+  managedUserName,
+  runUserDeletion,
+} from '../auth/userManagementRules';
+import { changeManagedUserRole, deleteManagedUser, listAssignableLocations, listManagedUsers, USER_ROLES } from '../services/userManagementService';
 import './UserManagement.css';
 
 const label = (value) => value?.split('_').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ') || 'Pending Volunteer';
-const needsChapter = (role) => CHAPTER_ROLES.includes(role);
 
 export default function UserManagement() {
   const { roleKey, user } = useApp();
@@ -23,6 +28,8 @@ export default function UserManagement() {
   const [chapterFilter, setChapterFilter] = useState('all');
   const [pending, setPending] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,10 +68,8 @@ export default function UserManagement() {
     [users, search, roleFilter, chapterFilter]
   );
 
-  const allowedRoles =
-    roleKey === 'super_admin'
-      ? USER_ROLES
-      : USER_ROLES.filter((role) => !['admin', 'super_admin'].includes(role));
+  const allowedRoles = assignableRolesFor(roleKey);
+  const superAdminCount = users.filter((item) => item.role === 'super_admin').length;
 
   const propose = (item, nextRole, chapterId, locationName) =>
     setPending({ item, role: nextRole, chapterId, locationName });
@@ -92,6 +97,19 @@ export default function UserManagement() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    setError('');
+    setNotice('');
+    const result = await runUserDeletion({ users, target: deleting, remove: deleteManagedUser });
+    setUsers(result.users);
+    if (result.ok) setNotice(result.message);
+    else setError(result.message);
+    setDeleting(null);
+    setDeleteBusy(false);
   };
 
   return (
@@ -160,12 +178,20 @@ export default function UserManagement() {
         <div className="um-list">
           {filtered.map((item) => (
             <UserRow
-              key={item.user_id}
+              key={`${item.user_id}:${item.role}:${item.chapter_id || ''}`}
               item={item}
               locations={locations}
               roles={allowedRoles}
-              currentUserEmail={user?.email}
+              access={getManagedUserAccess({
+                actorRole: roleKey,
+                actorId: user?.id,
+                actorEmail: user?.email,
+                target: item,
+                superAdminCount,
+              })}
+              saving={busy && pending?.item.user_id === item.user_id}
               onPropose={propose}
+              onDelete={setDeleting}
             />
           ))}
         </div>
@@ -184,6 +210,23 @@ export default function UserManagement() {
           onCancel={() => setPending(null)}
           onConfirm={confirm}
           isBusy={busy}
+          tone="primary"
+        />
+      )}
+
+      {deleting && (
+        <ConfirmationModal
+          title="Delete user?"
+          message={`This will permanently remove ${managedUserName(
+            deleting
+          )} from DEVCON Kids Hub. This action cannot be undone.`}
+          confirmLabel="Delete user"
+          busyLabel="Deleting…"
+          cancelLabel="Cancel"
+          onCancel={() => setDeleting(null)}
+          onConfirm={confirmDelete}
+          isBusy={deleteBusy}
+          tone="danger"
         />
       )}
     </div>
@@ -215,24 +258,79 @@ function LocationOptions({ locations }) {
   );
 }
 
-function UserRow({ item, locations, roles, currentUserEmail, onPropose }) {
+function RowMenu({ item, access, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (event.type === 'keydown' ? event.key === 'Escape' : !ref.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  return (
+    <div className="um-menu" ref={ref}>
+      <button
+        type="button"
+        className="um-menu-trigger"
+        aria-label={`More actions for ${managedUserName(item)}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <MoreHorizontal size={18} />
+      </button>
+      {open && (
+        <div className="um-menu-list" role="menu" id={menuId}>
+          <button
+            type="button"
+            role="menuitem"
+            className="um-menu-item danger"
+            disabled={!access.canDelete}
+            onClick={() => {
+              setOpen(false);
+              onDelete(item);
+            }}
+          >
+            <Trash2 size={16} />
+            Delete user
+          </button>
+          {!access.canDelete && access.reason && (
+            <p className="um-menu-note">{access.reason}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UserRow({ item, locations, roles, access, saving, onPropose, onDelete }) {
   const [role, setRole] = useState(item.role);
   const [chapterId, setChapterId] = useState(item.chapter_id || '');
-  const isSelf = item.email?.toLowerCase() === currentUserEmail?.toLowerCase();
+  const hintId = useId();
+  const { canEdit } = access;
+  const roleOptions = canEdit && roles.includes(item.role) ? roles : [item.role];
+  const state = getRowSaveState({ original: item, role, chapterId, locations, canEdit, saving });
   const selectedLocation = locations.find(
     (location) => location.location_id === chapterId && location.is_active
   );
-  const changed =
-    role !== item.role ||
-    (needsChapter(role) && chapterId !== (item.chapter_id || ''));
 
   const changeRole = (nextRole) => {
     setRole(nextRole);
-    if (!needsChapter(nextRole)) setChapterId('');
+    if (!getRowSaveState({ original: item, role: nextRole, chapterId, locations }).requiresLocation) setChapterId('');
   };
 
   return (
-    <article className="um-user card">
+    <article className={`um-user card${canEdit ? '' : ' is-readonly'}`}>
       <div className="um-identity">
         <div className="um-avatar">
           {(item.full_name || item.email || '?')[0].toUpperCase()}
@@ -250,10 +348,10 @@ function UserRow({ item, locations, roles, currentUserEmail, onPropose }) {
         <span>Role</span>
         <select
           value={role}
-          disabled={isSelf}
+          disabled={!canEdit || saving}
           onChange={(e) => changeRole(e.target.value)}
         >
-          {roles.map((value) => (
+          {roleOptions.map((value) => (
             <option key={value} value={value}>
               {label(value)}
             </option>
@@ -261,27 +359,39 @@ function UserRow({ item, locations, roles, currentUserEmail, onPropose }) {
         </select>
       </label>
       <label>
-        <span>Location</span>
+        <span>
+          Location{state.requiresLocation && canEdit ? <em className="um-required"> (required)</em> : null}
+        </span>
         <select
           value={chapterId}
-          disabled={isSelf || !needsChapter(role)}
+          disabled={!canEdit || saving || !state.requiresLocation}
+          aria-invalid={Boolean(state.hint) || undefined}
+          aria-describedby={state.hint ? hintId : undefined}
           onChange={(e) => setChapterId(e.target.value)}
         >
           <option value="">Select location</option>
           <LocationOptions locations={locations} />
         </select>
       </label>
-      <button
-        type="button"
-        className="btn-primary"
-        disabled={isSelf || !changed || (needsChapter(role) && !selectedLocation)}
-        onClick={() =>
-          onPropose(item, role, chapterId, selectedLocation?.display_name)
-        }
-      >
-        {item.role === 'pending_volunteer' ? 'Approve' : 'Save'}
-      </button>
-      {isSelf && <small className="um-self">Your own assignment is read-only.</small>}
+      <div className="um-actions">
+        <button
+          type="button"
+          className="btn-primary um-save"
+          disabled={state.disabled}
+          onClick={() =>
+            onPropose(item, role, state.requiresLocation ? chapterId : '', selectedLocation?.display_name)
+          }
+        >
+          {saving ? 'Saving…' : item.role === 'pending_volunteer' ? 'Approve' : 'Save'}
+        </button>
+        {!access.isSelf && <RowMenu item={item} access={access} onDelete={onDelete} />}
+      </div>
+      {state.hint && (
+        <small id={hintId} className="um-hint" role="status">
+          {state.hint}
+        </small>
+      )}
+      {!canEdit && access.reason && <small className="um-self">{access.reason}</small>}
     </article>
   );
 }

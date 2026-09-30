@@ -1,41 +1,145 @@
+/* =============================================================
+   DEVCON Kids Hub 2.0 · Orbit Lab design tokens
+   Single token source for the whole app. Page CSS must reference
+   semantic tokens; do not add raw hex values in components.
+   ============================================================= */
+
 :root {
-  --brand-dark: #464646;
+  /* DEVCON parent-brand primitives (kept for partner and legacy surfaces) */
+  --devcon-dark: #464646;
+  --devcon-white: #ffffff;
+  --devcon-yellow: #e8ca04;
+  --devcon-orange: #ea641d;
+  --devcon-purple: #7f08ff;
+  --devcon-green: #71b406;
+
+  /* Orbit Lab primitives */
+  --orbit-purple-700: #4326A8;
+  --orbit-purple-600: #5638D8;
+  --orbit-purple-500: #6C50E8;
+  --orbit-purple-300: #B7A6FF;
+  --orbit-purple-200: #C9BCFF;
+  --orbit-purple-100: #ECE8FD;
+  --orbit-purple-50: #F5F3FE;
+  --solar-yellow: #FFC93C;
+  --digital-cyan: #28C6E5;
+  --digital-cyan-700: #0A7189;
+  --creator-mint: #39D49A;
+  --creative-coral: #FF716B;
+  --ink-950: #151221;
+  --ink-800: #2A2635;
+  --ink-600: #625D6B;
+  --cloud-200: #E7E5EB;
+  --cloud-100: #F3F2F6;
+  --cloud-50: #FAF9FC;
+
+  /* Brand roles (text-safe on the active theme's surfaces) */
+  --brand-dark: var(--ink-950);
   --brand-white: #ffffff;
-  --brand-yellow: #e8ca04;
-  --brand-orange: #ea641d;
-  --brand-purple: #7f08ff;
-  --brand-green: #71b406;
-  --surface-page: #f5f2f8;
+  --brand-purple: var(--orbit-purple-600);
+  --brand-fill: var(--orbit-purple-600);
+  --brand-yellow: var(--solar-yellow);
+  --brand-orange: var(--creative-coral);
+  --brand-green: var(--creator-mint);
+  --brand-cyan: var(--digital-cyan);
+
+  /* Surfaces and text · Daylight: warm off-white base, clean white cards */
+  --surface-page: #fbf8f4;
   --surface-default: #ffffff;
   --surface-elevated: #ffffff;
-  --surface-muted: #eee9f2;
-  --surface-subtle: #faf8fc;
-  --text-primary: #28242f;
-  --text-secondary: #655e70;
-  --text-disabled: #857e8e;
+  --surface-muted: #f4f0ea;
+  --surface-subtle: #fffcf8;
+  --surface-hover: #f5f1fc;
+  --surface-input: #ffffff;
+  --text-primary: #1c1726;
+  --text-secondary: #4e4759;
+  --text-tertiary: #6b6475;
+  --text-placeholder: #767080;
+  --text-disabled: #8e8798;
   --text-on-accent: #ffffff;
-  --border-default: #d9d2e1;
-  --border-strong: #9a90a3;
-  --border-danger: #d92d20;
-  --action-primary: #7f08ff;
-  --action-primary-hover: #6500cc;
-  --action-primary-pressed: #5200a8;
+  --border-default: #efe9e1;
+  --border-strong: #948ca0;
+  --border-danger: #b42f2f;
+
+  /* Actions */
+  --action-primary: var(--orbit-purple-600);
+  --action-primary-hover: var(--orbit-purple-700);
+  --action-primary-pressed: #3a1f95;
+  --action-primary-text: var(--orbit-purple-700);
   --action-secondary: #ffffff;
-  --state-success: #33691e;
-  --state-success-surface: #f1f8e9;
-  --state-warning: #e65100;
-  --state-warning-surface: #fff3e0;
-  --state-danger: #b42318;
-  --state-danger-surface: #fff1f0;
-  --state-danger-hover: #912018;
-  --state-information: #4527a0;
-  --state-information-surface: #ede7f6;
-  --focus-ring: #7f08ff;
-  --selected-navigation: #ede7f6;
-  --accent-subtle: #f1e8fb;
-  --disabled-control: #e5e2e8;
-  --overlay: rgba(24, 23, 27, 0.72);
-  --skeleton: #e8e5eb;
+
+  /* Warm accent (supporting only: dots, counts, highlight glow) */
+  --warm-accent: #f2a93b;
+  --warm-accent-text: #8a4b00;
+  --warm-accent-surface: #fff1d6;
+
+  /* Semantic (fill + text-safe pair + soft surface) */
+  --state-success: #0e7c55;
+  --state-success-surface: #e3f6ee;
+  --state-warning: #8a4b00;
+  --state-warning-surface: #fff1d6;
+  --state-danger: #b42f2f;
+  --state-danger-surface: #fdecec;
+  --state-danger-hover: #962626;
+  --danger-fill: #b42f2f;
+  --danger-fill-hover: #962626;
+  --state-information: var(--orbit-purple-700);
+  --state-information-surface: #efeafe;
+  --state-info-blue: #1a5fb4;
+  --state-info-blue-surface: #e7f0fc;
+  --state-tech: #0a6379;
+  --state-tech-surface: #e0f6fa;
+  --focus-ring: var(--orbit-purple-500);
+  --selected-navigation: #efeafe;
+  --accent-subtle: #f5f1fc;
+  --disabled-control: #f3f0ec;
+  --overlay: rgba(21, 18, 33, 0.56);
+  --scrim: rgba(15, 15, 25, 0.3);
+  --skeleton: #efe9e1;
+  --skeleton-highlight: #f8f4ee;
+
+  /* Charts: purple leads, cyan and yellow support */
+  --chart-1: var(--orbit-purple-600);
+  --chart-2: var(--digital-cyan);
+  --chart-3: var(--solar-yellow);
+  --chart-4: var(--orbit-purple-300);
+  --chart-grid: #efe9e1;
+  --chart-muted: #d3d0da;
+
+  /* Logo lockup (theme aware) */
+  --logo-line: var(--orbit-purple-700);
+  --logo-hub: var(--orbit-purple-600);
+  --logo-core: #ffffff;
+  --logo-text: var(--ink-950);
+  --logo-accent: var(--orbit-purple-700);
+
+  /* Cosmic atmosphere (RGB triplets for alpha control) */
+  --cosmic-particle-primary: 86, 56, 216;
+  --cosmic-particle-far: 183, 166, 255;
+  --cosmic-particle-secondary: 40, 198, 229;
+  --cosmic-spark: 255, 201, 60;
+  --cosmic-line: 86, 56, 216;
+  --cosmic-nebula-1: rgba(108, 80, 232, 0.07);
+  --cosmic-nebula-2: rgba(40, 198, 229, 0.045);
+  --cosmic-nebula-3: rgba(183, 166, 255, 0.12);
+  --cosmic-nebula-4: rgba(255, 201, 60, 0.03);
+  --nova-glow: rgba(108, 80, 232, 0.22);
+
+  /* Header atmosphere (Daylight) */
+  --atmo-glow: rgba(255, 196, 92, 0.30);
+  --atmo-glow-2: rgba(255, 160, 90, 0.10);
+  --atmo-arc: rgba(242, 169, 59, 0.22);
+  --atmo-arc-2: rgba(242, 169, 59, 0.14);
+  --atmo-speck: #f2a93b;
+  --atmo-speck-2: #b7a6ff;
+
+  /* Typography */
+  --font-display: Sora, Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-play: Fredoka, Sora, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Spacing (4px base) */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -45,14 +149,35 @@
   --space-8: 2rem;
   --space-10: 2.5rem;
   --space-12: 3rem;
-  --radius-sm: 0.25rem;
-  --radius-control: 0.5rem;
-  --radius-panel: 0.75rem;
-  --radius-dialog: 1rem;
-  --shadow-sticky: 0 1px 0 rgba(24, 23, 27, 0.08);
-  --shadow-popover: 0 12px 30px rgba(24, 23, 27, 0.14);
-  --font-ui: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* Radius: 8 controls-small, 12 inputs/buttons, 16 cards, 20 panels, 24 dialogs */
+  --radius-sm: 0.5rem;
+  --radius-control: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-dialog: 1.5rem;
+  --radius-pill: 999px;
+
+  --shadow-sticky: 0 1px 0 rgba(21, 18, 33, 0.06);
+  --shadow-popover: 0 16px 40px rgba(21, 18, 33, 0.14), 0 4px 10px rgba(21, 18, 33, 0.08);
   --content-max: 90rem;
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-standard: 200ms;
+  --duration-panel: 280ms;
+  --duration-celebration: 700ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-spring: cubic-bezier(.34, 1.36, .64, 1);
+
+  /* Layering */
+  --z-cosmic: 0;
+  --z-shell: 10;
+
+  /* Compatibility aliases */
   --bg-main: var(--surface-page);
   --bg-card: var(--surface-default);
   --bg-sidebar: var(--surface-default);
@@ -62,48 +187,92 @@
   --border-color: var(--border-default);
   --text-main: var(--text-primary);
   --text-muted: var(--text-secondary);
-  --primary-purple: var(--action-primary);
+  --primary-purple: var(--action-primary-text);
   --primary-purple-dark: var(--action-primary-hover);
-  --accent-green: var(--brand-green);
-  --accent-yellow: var(--brand-yellow);
-  --accent-orange: var(--brand-orange);
+  --accent-green: var(--state-success);
+  --accent-yellow: var(--state-warning);
+  --accent-orange: var(--state-warning);
   --success: var(--state-success);
   --warning: var(--state-warning);
   --error: var(--state-danger);
 }
 
 body.dark-mode {
-  --surface-page: #19151f;
-  --surface-default: #241f2b;
-  --surface-elevated: #2d2735;
-  --surface-muted: #352e3d;
-  --surface-subtle: #2a2431;
-  --text-primary: #f8f5fa;
-  --text-secondary: #c9c1d1;
-  --text-disabled: #8e8498;
+  /* Moonlight: deep violet-navy base, cards one clear step above, inputs one step above cards */
+  --surface-page: #0e0d1a;
+  --surface-default: #1b1832;
+  --surface-elevated: #221e3b;
+  --surface-muted: #231f3d;
+  --surface-subtle: #141226;
+  --surface-hover: #2b2648;
+  --surface-input: #231f3d;
+  --text-primary: #f4f2fb;
+  --text-secondary: #cfc9e2;
+  --text-tertiary: #aba4c4;
+  --text-placeholder: #9c95b8;
+  --text-disabled: #8a84a6;
   --text-on-accent: #ffffff;
-  --border-default: #4b4254;
-  --border-strong: #756a7f;
-  --border-danger: #f97066;
-  --action-primary: #c49aff;
-  --action-primary-hover: #d8bdff;
-  --action-primary-pressed: #a66cff;
-  --action-secondary: #2d2735;
-  --state-success: #aed581;
-  --state-success-surface: #26371f;
-  --state-warning: #ffb74d;
-  --state-warning-surface: #402919;
-  --state-danger: #fda29b;
-  --state-danger-surface: #402221;
-  --state-danger-hover: #ffb4ad;
-  --state-information: #d1c4e9;
-  --state-information-surface: #35284a;
-  --focus-ring: #c49aff;
-  --selected-navigation: #48266b;
-  --accent-subtle: #3c2852;
-  --disabled-control: #3b3840;
-  --overlay: rgba(0, 0, 0, 0.78);
-  --skeleton: #39363e;
+  --border-default: #2a2545;
+  --border-strong: #77709c;
+  --border-danger: #ff9c97;
+  --brand-dark: #f4f2fb;
+  --brand-purple: #bba9ff;
+  --brand-fill: #6d4df2;
+  --action-primary: #6d4df2;
+  --action-primary-hover: #7c5cff;
+  --action-primary-pressed: var(--orbit-purple-600);
+  --action-primary-text: #bba9ff;
+  --action-secondary: #221e3b;
+  --warm-accent: #ffc93c;
+  --warm-accent-text: #ffd36b;
+  --warm-accent-surface: #3a2c10;
+  --state-success: #5fe3ae;
+  --state-success-surface: #12302a;
+  --state-warning: #ffd36b;
+  --state-warning-surface: #3a2c10;
+  --state-danger: #ff9c97;
+  --state-danger-surface: #3d1d24;
+  --state-danger-hover: #ffb4b0;
+  --danger-fill: #c43c3c;
+  --danger-fill-hover: #a93030;
+  --state-information: #d5caff;
+  --state-information-surface: #2a2352;
+  --state-info-blue: #9ccbff;
+  --state-info-blue-surface: #1a2a4a;
+  --state-tech: #7fe3f5;
+  --state-tech-surface: #123440;
+  --focus-ring: #bba9ff;
+  --selected-navigation: #2a2352;
+  --accent-subtle: #2a2352;
+  --disabled-control: #1f1c36;
+  --overlay: rgba(6, 5, 12, 0.72);
+  --scrim: rgba(4, 3, 10, 0.62);
+  --skeleton: #231f3d;
+  --skeleton-highlight: #2b2648;
+  --chart-1: #a48bff;
+  --chart-2: #7cc8ff;
+  --chart-grid: #2a2545;
+  --chart-muted: #4a4370;
+  --logo-line: var(--orbit-purple-200);
+  --logo-hub: #8c6cff;
+  --logo-core: #141226;
+  --logo-text: #ffffff;
+  --logo-accent: var(--orbit-purple-200);
+  --cosmic-particle-primary: 183, 166, 255;
+  --cosmic-particle-far: 236, 232, 255;
+  --cosmic-line: 183, 166, 255;
+  --cosmic-nebula-1: rgba(86, 56, 216, 0.20);
+  --cosmic-nebula-2: rgba(52, 40, 140, 0.24);
+  --cosmic-nebula-3: rgba(40, 198, 229, 0.06);
+  --cosmic-nebula-4: rgba(150, 60, 170, 0.05);
+  --nova-glow: rgba(159, 139, 255, 0.45);
+  --atmo-glow: rgba(124, 92, 255, 0.30);
+  --atmo-glow-2: rgba(80, 120, 230, 0.10);
+  --atmo-arc: rgba(187, 169, 255, 0.22);
+  --atmo-arc-2: rgba(187, 169, 255, 0.10);
+  --atmo-speck: #ede8ff;
+  --atmo-speck-2: #d5caff;
+  --shadow-popover: 0 22px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(187, 169, 255, 0.08);
   /* Rebind compatibility aliases in the active theme scope. Custom-property
      aliases computed on :root otherwise retain their light-theme values. */
   --bg-main: var(--surface-page);
@@ -115,42 +284,53 @@ body.dark-mode {
   --border-color: var(--border-default);
   --text-main: var(--text-primary);
   --text-muted: var(--text-secondary);
-  --primary-purple: var(--action-primary);
+  --primary-purple: var(--action-primary-text);
   --primary-purple-dark: var(--action-primary-hover);
-  --accent-green: var(--brand-green);
-  --accent-yellow: var(--brand-yellow);
-  --accent-orange: var(--brand-orange);
+  --accent-green: var(--state-success);
+  --accent-yellow: var(--state-warning);
+  --accent-orange: var(--state-warning);
   --success: var(--state-success);
   --warning: var(--state-warning);
   --error: var(--state-danger);
 }
 
 /* =============================================================
-   Alias tokens — derived from the brand kit above.
-   Page CSS must reference these; do not add raw hex values.
+   Alias tokens, derived from the scales above.
    ============================================================= */
 :root {
   /* Motion */
-  --transition-fast: 0.15s ease-in-out;
-  --transition-normal: 0.3s ease-in-out;
+  --transition-fast: var(--duration-fast) var(--ease-out);
+  --transition-normal: var(--duration-panel) var(--ease-out);
 
-  /* Shadow scale */
-  --shadow-sm: 0 1px 2px rgba(24, 23, 27, 0.06);
-  --shadow-md: 0 4px 12px rgba(24, 23, 27, 0.10);
-  --shadow-lg: 0 10px 28px rgba(24, 23, 27, 0.14);
+  /* Shadow scale (Daylight: warm, soft) */
+  --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.05), 0 1px 1px rgba(60, 40, 20, 0.03);
+  --shadow-md: 0 8px 24px rgba(60, 40, 20, 0.08), 0 2px 6px rgba(60, 40, 20, 0.05);
+  --shadow-lg: 0 18px 44px rgba(40, 24, 10, 0.14);
 
-  /* Radius shortcuts (map to named radii above) */
+  /* Radius shortcuts */
   --border-radius-sm: var(--radius-control);
   --border-radius-md: var(--radius-panel);
   --border-radius-lg: var(--radius-dialog);
 
-  /* Brand gradient (uses brand-purple + deep pressed purple) */
-  --gradient-purple: linear-gradient(135deg, var(--brand-purple), var(--action-primary-pressed));
+  /* Brand gradient */
+  --gradient-purple: linear-gradient(150deg, var(--orbit-purple-500), var(--orbit-purple-700));
 
-  /* Purple range (deepPurple scale from tokens.json) */
-  --primary-purple-light: #b388ff;   /* deepPurple A100 */
+  --primary-purple-light: var(--orbit-purple-300);
+  --accent-green-dark: var(--state-success);
+  --accent-green-light: var(--creator-mint);
+}
 
-  /* Green scale extras (lightGreen from tokens.json) */
-  --accent-green-dark:  #558b2f;     /* lightGreen 800  */
-  --accent-green-light: #aed581;     /* lightGreen 300  */
+/* Moonlight cards lift with a faint lavender inner light instead of an outline. */
+body.dark-mode {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(187, 169, 255, 0.08), 0 0 0 1px rgba(187, 169, 255, 0.06);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(187, 169, 255, 0.08), 0 0 0 1px rgba(187, 169, 255, 0.06);
+  --shadow-lg: 0 22px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(187, 169, 255, 0.08);
+}
+
+/* Theme change: a quiet colour fade on the main surfaces only. */
+body, .sidebar, .topbar, .card {
+  transition: background-color 350ms ease, color 350ms ease, box-shadow 350ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  body, .sidebar, .topbar, .card { transition: none; }
 }

@@ -120,7 +120,7 @@
 }
 
 .process-upload-btn {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   color: var(--brand-white);
   margin-left: 0.75rem;
 }

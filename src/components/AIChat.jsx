@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Send, MessageSquare, Maximize2, Minimize2, Loader, Trash2, Copy, ThumbsUp, ThumbsDown, Check, Bot, FileText } from 'lucide-react';
+import { X, Send, Maximize2, Minimize2, Loader, Trash2, Copy, ThumbsUp, ThumbsDown, Check, FileText } from 'lucide-react';
 import { callChatWithContext } from '../services/chatService';
 import { logQuestion } from '../services/faqService';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppState';
 import { clearLegacySharedChatHistory, clearPrivateChatHistory, loadPrivateChatHistory } from '../services/chatHistoryService';
+import { NovaFace, NovaHost } from './brand/Nova';
+import CosmicBackground from './brand/CosmicBackground';
 import './AIChat.css';
 
 const welcomeMessage = () => ({
@@ -334,7 +336,7 @@ export default function AIChat() {
 
   const renderMessage = (msg) => (
     <div key={msg.id} className={`message ${msg.role} ${msg.isError ? 'error' : ''}`}>
-      {msg.role === 'assistant' && <div className="message-avatar" aria-hidden="true"><Bot size={16} /></div>}
+      {msg.role === 'assistant' && <div className="message-avatar" aria-hidden="true"><NovaFace size={24} /></div>}
       <div className="message-body">
       <div className={`message-content ${msg.role === 'assistant' ? 'markdown-content' : ''}`}>
         {msg.role === 'assistant' && msg.isStreaming && !msg.content ? (
@@ -506,6 +508,9 @@ export default function AIChat() {
     <div className="ai-chat-messages" ref={messagesRef} onScroll={handleConversationScroll}>
       {historyLoading && <div className="chat-history-state" role="status"><Loader size={16} className="spinner" /> Loading your conversation…</div>}
       {historyError && <div className="chat-history-state error" role="alert">{historyError}</div>}
+      {messages.length === 1 && !historyLoading && (
+        <div className="nova-welcome" aria-hidden="true"><NovaHost state="helping" size={84} entrance={false} /></div>
+      )}
       {messages.map(renderMessage)}
       <div ref={messagesEndRef} />
     </div>
@@ -518,20 +523,22 @@ export default function AIChat() {
           ref={launcherRef}
           onClick={() => setOpen(true)}
           className="chat-toggle-btn"
-          aria-label="Open DEVCON Kids Assistant"
+          aria-label="Open NOVA Assistant"
         >
-          <MessageSquare size={24} />
+          <NovaFace size={40} background="#6C50E8" />
         </button>
       </div>
     );
   }
 
   return (
-    <section className={`ai-chat-shell ${expanded ? 'is-expanded' : 'is-compact'}`} aria-label="DEVCON Kids Assistant">
+    <section className={`ai-chat-shell ${expanded ? 'is-expanded' : 'is-compact'}`} aria-label="NOVA Assistant">
+      {expanded && <CosmicBackground mode="container" intensity={0.8} seed={9} />}
+      <span className="nova-open-burst" aria-hidden="true"><i /><i /><i /></span>
       <div className="ai-chat-header">
         <div className="assistant-identity">
-          <span className="assistant-avatar" aria-hidden="true"><Bot size={20} /></span>
-          <div><h2>DEVCON Kids Assistant</h2><p>Hub AI <span>•</span> Ready</p></div>
+          <span className="assistant-avatar" aria-hidden="true"><NovaFace size={34} /></span>
+          <div><h2>NOVA Assistant</h2><p><i className="assistant-status-dot" aria-hidden="true" />DEVCON Kids Hub AI <span>•</span> Ready</p></div>
         </div>
         <div className="ai-header-actions">
           {expanded && <button type="button" onClick={handleClearChat} className="icon-btn" aria-label="Clear conversation" title="Clear conversation">

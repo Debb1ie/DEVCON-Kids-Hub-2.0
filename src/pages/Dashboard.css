@@ -47,7 +47,7 @@
 }
 
 .kpi-icon--purple {
-  color: var(--action-primary);
+  color: var(--action-primary-text);
   background: var(--accent-subtle);
 }
 
@@ -57,17 +57,17 @@
 }
 
 .kpi-icon--yellow {
-  color: var(--action-primary);
+  color: var(--action-primary-text);
   background: var(--accent-subtle);
 }
 
 body.dark-mode .kpi-icon--yellow {
-  color: var(--action-primary);
+  color: var(--action-primary-text);
   background: var(--accent-subtle);
 }
 
 .kpi-icon--orange {
-  color: var(--action-primary);
+  color: var(--action-primary-text);
   background: var(--accent-subtle);
 }
 

@@ -302,11 +302,11 @@ body.dark-mode .ladder-step-pending.is-reached .ladder-step-icon {
 }
 
 .ladder-connector.is-approved-path .ladder-rung:first-child {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
 }
 
 .ladder-connector.is-approved-path::after {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
 }
 
 .ladder-connector.is-active-path .ladder-rung:first-child {
@@ -388,9 +388,9 @@ body.dark-mode .ladder-step-pending.is-reached .ladder-step-icon {
   gap: var(--space-2, 0.5rem);
   min-height: 42px;
   padding: 0.45rem 0.85rem;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control, 8px);
-  background: var(--surface-default);
+  background: var(--surface-input);
   width: 100%;
   max-width: 360px;
   transition: border-color var(--transition-fast, 150ms ease), box-shadow var(--transition-fast, 150ms ease);
@@ -447,7 +447,7 @@ body.dark-mode .ladder-step-pending.is-reached .ladder-step-icon {
 }
 
 .filter-tab.active {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   border-color: var(--brand-purple);
   color: white;
 }
@@ -571,7 +571,7 @@ body.dark-mode .ladder-step-pending.is-reached .ladder-step-icon {
 }
 
 .ladder-progress-segment.filled {
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   border-color: var(--brand-purple);
 }
 
@@ -651,7 +651,7 @@ body.dark-mode .ladder-step-pending.is-reached .ladder-step-icon {
 
 .approve-pill:hover {
   background: var(--brand-green);
-  color: white;
+  color: var(--ink-950);
 }
 
 .reject-pill {
@@ -700,7 +700,7 @@ body.dark-mode .ladder-step-pending.is-reached .ladder-step-icon {
 
 .volunteer-pagination-page.active {
   color: white;
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   border-color: var(--brand-purple);
 }
 
@@ -831,8 +831,8 @@ body.dark-mode .ladder-step-pending.is-reached .ladder-step-icon {
   min-height: 44px;
   padding: 0.6rem 0.85rem;
   color: var(--text-primary);
-  background: var(--surface-default);
-  border: 1px solid var(--border-default);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control, 8px);
   font: inherit;
   transition: border-color var(--transition-fast, 150ms ease), box-shadow var(--transition-fast, 150ms ease);

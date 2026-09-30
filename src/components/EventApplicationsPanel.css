@@ -4,7 +4,7 @@
 .event-applications-heading p { color:var(--text-muted); margin:.35rem 0 0; }
 .event-application-filters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; margin:1.25rem 0; }
 .event-application-filters label { display:grid; gap:.4rem; font-weight:600; }
-.event-application-filters select { padding:.7rem; border:1px solid var(--border-color); border-radius:8px; background:var(--card-bg); color:var(--text-main); }
+.event-application-filters select { padding:.7rem; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-input); color:var(--text-main); }
 .event-applications-list { display:grid; gap:.75rem; }
 .event-applications-list article { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:1rem; padding:1rem; border:1px solid var(--border-color); border-radius:10px; }
 .event-applications-list article > div:first-child { display:grid; gap:.2rem; }

@@ -1,15 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Loader2, RotateCcw } from 'lucide-react';
+import { AlertCircle, Lock, RotateCcw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AUTH_CALLBACK_PATH, completeOAuthCallback, getPostAuthRoute, withTimeout } from '../auth/authFlow';
 import { useApp } from '../context/AppState';
 import { supabase } from '../lib/supabase';
+import CelestialLoader from '../components/brand/CelestialLoader';
+import HeaderAtmosphere from '../components/brand/HeaderAtmosphere';
+import './AuthCallback.css';
+
+// Labels follow real steps of the existing flow; nothing waits on a timer.
+const STAGE_LABELS = ['Completing Google sign-in...', 'Verifying your account...', 'Preparing your dashboard...'];
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const { acceptSession } = useApp();
   const started = useRef(false);
   const [error, setError] = useState('');
+  const [stage, setStage] = useState(0);
 
   useEffect(() => {
     if (started.current) return;
@@ -21,7 +28,9 @@ export default function AuthCallback() {
         // Remove the one-time code and provider parameters without logging or
         // retaining them in browser history.
         window.history.replaceState({}, document.title, AUTH_CALLBACK_PATH);
+        setStage(1);
         const profile = await acceptSession(session);
+        setStage(2);
         navigate(getPostAuthRoute(profile), { replace: true });
       } catch {
         setError('Google sign-in could not be completed. Please return to login and try again.');
@@ -32,25 +41,31 @@ export default function AuthCallback() {
   }, [acceptSession, navigate]);
 
   return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center', background: 'var(--surface-canvas, var(--bg-main))' }}>
-      <div className="card" style={{ maxWidth: 440, width: '100%', padding: '2.5rem 2rem', borderRadius: 'var(--radius-lg, 16px)' }}>
+    <main className="auth-callback">
+      <HeaderAtmosphere className="auth-callback-atmosphere" />
+      <div className="auth-callback-glow" aria-hidden="true" />
+      <section className="auth-callback-card" aria-labelledby="auth-callback-title">
         {error ? (
           <>
-            <AlertCircle size={44} color="var(--state-danger, #d62035)" aria-hidden="true" style={{ margin: '0 auto' }} />
-            <h2 style={{ margin: '1rem 0 0.5rem', color: 'var(--text-main)', fontSize: '1.4rem' }}>Sign-in needs another try</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: 1.5 }}>{error}</p>
-            <button className="btn-primary" type="button" onClick={() => navigate('/login', { replace: true })} style={{ width: '100%', minHeight: 44, justifyContent: 'center' }}>
-              <RotateCcw size={17} /> Return to login
+            <span className="auth-callback-error-icon" aria-hidden="true"><AlertCircle size={32} /></span>
+            <h1 id="auth-callback-title">Sign-in needs another try</h1>
+            <p role="alert">{error}</p>
+            <button className="btn-primary auth-callback-action" type="button" onClick={() => navigate('/login', { replace: true })}>
+              <RotateCcw size={17} aria-hidden="true" /> Return to login
             </button>
           </>
         ) : (
           <>
-            <Loader2 className="spin" size={44} color="var(--brand-purple)" aria-hidden="true" style={{ margin: '0 auto' }} />
-            <h2 style={{ margin: '1rem 0 0.5rem', color: 'var(--text-main)', fontSize: '1.4rem' }}>Completing Google sign-in…</h2>
-            <p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>Please keep this page open while your secure session is initialized.</p>
+            <CelestialLoader size={112} />
+            <h1 id="auth-callback-title" role="status" aria-live="polite">{STAGE_LABELS[stage]}</h1>
+            <p>Please keep this page open while your secure session is initialized.</p>
+            <div className="auth-callback-foot">
+              <span className="auth-callback-chip"><Lock size={14} aria-hidden="true" />Secure sign-in in progress</span>
+              <span className="auth-callback-steps" aria-hidden="true">{STAGE_LABELS.map((label, index) => <i key={label} className={index <= stage ? 'is-done' : ''} />)}</span>
+            </div>
           </>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

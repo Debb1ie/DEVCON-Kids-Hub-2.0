@@ -7,8 +7,8 @@
 }
 
 .checklist-selector-card {
-  background: var(--surface-default);
-  border: 1px solid var(--border-default);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-panel);
   padding: 1.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -25,8 +25,8 @@
   width: 100%;
   padding: 0.75rem 1rem;
   border-radius: var(--radius-control);
-  border: 1px solid var(--border-default);
-  background: var(--surface-default);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-input);
   color: var(--text-primary);
   font-size: 0.95rem;
   outline: none;
@@ -91,7 +91,7 @@
 .checklist-progress-fill {
   height: 100%;
   border-radius: 4px;
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -173,8 +173,8 @@
   flex: 1;
   padding: 0.65rem 0.9rem;
   border-radius: var(--radius-control);
-  border: 1px solid var(--border-default);
-  background: var(--surface-default);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-input);
   color: var(--text-primary);
   font-size: 0.9rem;
   outline: none;

@@ -33,3 +33,18 @@ export async function changeManagedUserRole(userId, role, chapterId, locations =
   });
   if (error) throw new Error('The role could not be updated.');
 }
+
+const DELETE_FALLBACK = 'The user could not be deleted. Please try again.';
+
+// Deletion runs in the admin-delete-user Edge Function, which re-checks the
+// caller's authority in the database before using its server-side service role.
+export async function deleteManagedUser(userId) {
+  const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+    body: { target_user_id: userId },
+  });
+  if (error) {
+    const payload = await error.context?.json?.().catch(() => null);
+    throw new Error(typeof payload?.error === 'string' && payload.error ? payload.error : DELETE_FALLBACK);
+  }
+  if (!data?.deleted) throw new Error(DELETE_FALLBACK);
+}

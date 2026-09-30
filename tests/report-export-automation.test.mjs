@@ -27,24 +27,26 @@ test('only approved reports enter the export runner', async () => {
 });
 
 test('export is resumable and does not recreate completed resources', async () => {
-  const calls = { folder: 0, file: 0, attachment: 0, sheet: 0 };
+  const calls = { folder: 0, file: 0, pdf: 0, attachmentsFolder: 0, attachment: 0, sheet: 0 };
   const provider = {
     ensureFolderPath: async () => { calls.folder += 1; return 'folder'; },
     upsertJsonFile: async () => { calls.file += 1; return 'file'; },
+    upsertFile: async () => { calls.pdf += 1; return 'pdf'; },
+    ensureChildFolder: async () => { calls.attachmentsFolder += 1; return 'attachments'; },
     copyAttachment: async () => { calls.attachment += 1; }, checkpoint: async () => {},
     upsertSheetRow: async (_key, _values, ref) => { calls.sheet += 1; return ref || 'row-2'; },
   };
   const payload = buildReportExport(base);
   const first = await runReportExport({ provider, payload });
   const second = await runReportExport({ provider, payload, checkpoint: first });
-  assert.deepEqual(calls, { folder: 1, file: 1, attachment: 1, sheet: 2 });
+  assert.deepEqual(calls, { folder: 1, file: 1, pdf: 1, attachmentsFolder: 1, attachment: 1, sheet: 2 });
   assert.equal(second.drive_folder_id, 'folder'); assert.equal(second.sheet_row_reference, 'row-2');
 });
 
 test('partial attachment failure checkpoints successes for a safe retry', async () => {
   const checkpoints = []; let calls = 0;
   const payload = buildReportExport({ ...base, attachments: [...base.attachments, { ...base.attachments[0], id: 'a2' }] });
-  const provider = { ensureFolderPath: async () => 'folder', upsertJsonFile: async () => 'file', copyAttachment: async () => { calls += 1; if (calls === 2) throw new Error('provider unavailable'); }, checkpoint: async (state) => checkpoints.push(structuredClone(state)) };
+  const provider = { ensureFolderPath: async () => 'folder', upsertJsonFile: async () => 'file', upsertFile: async () => 'pdf', ensureChildFolder: async () => 'attachments', copyAttachment: async () => { calls += 1; if (calls === 2) throw new Error('provider unavailable'); }, checkpoint: async (state) => checkpoints.push(structuredClone(state)) };
   await assert.rejects(() => runReportExport({ provider, payload }), /provider unavailable/);
   assert.deepEqual(checkpoints.at(-1).uploaded_attachment_ids, ['a1']);
 });
@@ -54,6 +56,8 @@ test('folder and JSON identifiers are checkpointed before later provider work', 
   const provider = {
     ensureFolderPath: async () => 'folder-1',
     upsertJsonFile: async () => 'file-1',
+    upsertFile: async () => 'pdf-1',
+    ensureChildFolder: async () => 'attachments-1',
     copyAttachment: async () => { throw new Error('stop after durable resources'); },
     checkpoint: async (state) => checkpoints.push(structuredClone(state)),
   };
@@ -66,7 +70,8 @@ test('folder and JSON identifiers are checkpointed before later provider work', 
 
 test('normalized payload, Drive path, and Sheet row use real schema values', () => {
   const payload = buildReportExport(base); const row = sheetRow(payload, { status: 'completed', drive_folder_id: 'folder' })[0];
-  assert.equal(payload.finance.expenses, 250); assert.equal(payload.finance.balance, 750); assert.equal(row[0], 'report-1'); assert.equal(row[16], 'completed');
+  assert.equal(payload.finance.expenses, 250); assert.equal(payload.finance.balance, 750);
+  assert.equal(row[0], 'Kids / AI'); assert.equal(row[14], 'Completed'); assert.equal(row[20], 'report-1');
   assert.equal(reportFolderPath(payload).at(-1), '2026-09-21_Manila_Kids - AI_report-1');
   assert.equal(sanitizeSegment('bad<>:"/\\|?* name.'), 'bad--------- name');
 });
@@ -83,7 +88,7 @@ test('migration enforces authorization, scope, approval, idempotency, transition
 test('Edge Function keeps privileged credentials and attachments server-side', () => {
   assert.match(edge, /SUPABASE_SERVICE_ROLE_KEY/); assert.match(edge, /decryptToken.*refreshGoogleToken/s);
   assert.match(edge, /storage\.from\('event-report-attachments'\)\.download/); assert.match(edge, /appProperties/);
-  assert.match(edge, /REPORT_EXPORT_DESTINATION_READY/); assert.match(edge, /'Report ID'.*'Exported at'/s);
+  assert.match(edge, /REPORT_EXPORT_DESTINATION_READY/); assert.match(edge, /TRACKER_HEADERS/);
   assert.doesNotMatch(page, /SERVICE_ROLE|PRIVATE_KEY|REFRESH_TOKEN|GOOGLE_OAUTH_CLIENT_SECRET/);
   assert.match(dispatchService, /42P01.*PGRST205/s);
   assert.match(service, /createReportAutomationService\(supabase\)/);

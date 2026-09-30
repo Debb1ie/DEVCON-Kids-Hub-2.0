@@ -97,9 +97,13 @@ test('one consistent hamburger controls navigation with a 44 by 44 hit area', ()
   assert.doesNotMatch(sidebar, /PanelLeftClose|PanelLeftOpen|sidebar-toggle/);
 });
 
-test('official transparent mark keeps its intrinsic ratio inside a bounded brand area', () => {
-  assert.match(sidebarCss, /\.brand-logo-surface img[^\n]*width: auto[^\n]*height: auto[^\n]*object-fit: contain/);
-  assert.doesNotMatch(sidebarCss, /\.brand-logo-surface img[^\n]*(object-fit: cover|transform: scale)/);
+test('Spark Hub mark keeps its intrinsic square ratio inside a bounded brand area', () => {
+  const sparkHub = read('src/components/brand/SparkHub.jsx');
+  const brandCss = read('src/components/brand/brand.css');
+  assert.match(sidebar, /<BrandLockup layout="horizontal" size=\{36\} \/>/);
+  assert.match(sparkHub, /viewBox="0 0 64 64"\s+width=\{size\}\s+height=\{size\}/);
+  assert.match(brandCss, /\.brand-lockup \.spark-hub-mark \{ flex: none; \}/);
+  assert.doesNotMatch(sidebarCss, /\.spark-hub-mark[^\n]*(object-fit: cover|transform: scale)/);
 });
 
 test('desktop density uses readable type, practical controls, and a bounded editor rail', () => {

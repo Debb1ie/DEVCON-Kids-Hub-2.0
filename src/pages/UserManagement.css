@@ -43,9 +43,9 @@
 .um-filters select,
 .um-user select {
   width: 100%;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
-  background: var(--surface-default);
+  background: var(--surface-input);
   color: var(--text-primary);
   padding: 0.7rem 0.85rem;
   font: inherit;
@@ -65,10 +65,10 @@
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
   padding: 0 0.85rem;
-  background: var(--surface-default);
+  background: var(--surface-input);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -154,7 +154,7 @@
   height: 42px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--brand-purple);
+  background: var(--brand-fill);
   color: var(--brand-white);
   font-weight: 700;
   font-size: 1rem;
@@ -200,9 +200,9 @@
 
 .um-badge.admin,
 .um-badge.super_admin {
-  background: var(--brand-dark);
-  color: var(--brand-white);
-  border-color: var(--brand-dark);
+  background: var(--text-primary);
+  color: var(--surface-page);
+  border-color: var(--text-primary);
 }
 
 .um-self {
@@ -211,6 +211,116 @@
   font-size: 0.8rem;
   font-style: italic;
   margin-top: 0.25rem;
+}
+
+.um-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.um-save:disabled {
+  cursor: not-allowed;
+}
+
+.um-user.is-readonly {
+  background: var(--surface-subtle);
+}
+
+.um-required {
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--state-warning);
+}
+
+.um-hint {
+  grid-column: 1 / -1;
+  color: var(--state-warning);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.um-user select[aria-invalid="true"] {
+  border-color: var(--state-warning);
+}
+
+.um-menu {
+  position: relative;
+}
+
+.um-menu-trigger {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.um-menu-trigger:hover,
+.um-menu-trigger[aria-expanded="true"] {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.um-menu-trigger:focus-visible,
+.um-menu-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.um-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 220px;
+  padding: 0.35rem;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
+}
+
+.um-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.um-menu-item.danger {
+  color: var(--state-danger);
+}
+
+.um-menu-item.danger:hover:not(:disabled) {
+  background: var(--state-danger-surface);
+}
+
+.um-menu-item:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.um-menu-note {
+  margin: 0.25rem 0.7rem 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .sr-only {
@@ -247,7 +357,7 @@
   .um-identity {
     grid-column: auto;
   }
-  .um-user button {
-    width: 100%;
+  .um-save {
+    flex: 1;
   }
 }

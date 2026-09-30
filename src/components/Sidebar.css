@@ -16,7 +16,8 @@
   display: flex;
   flex-direction: column;
   color: var(--text-primary);
-  background: var(--surface-default);
+  /* Panel tone: one step above the page in both themes */
+  background: var(--surface-subtle);
   box-shadow: 10px 0 28px color-mix(in srgb, var(--brand-dark) 7%, transparent);
   transition: width var(--transition-normal);
   z-index: 10;
@@ -39,33 +40,8 @@
   min-width: 0;
 }
 
-/* The transparent official mark stays unframed and keeps its intrinsic ratio. */
-.brand-logo-surface {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 3.5rem;
-  height: 2.75rem;
-}
-
-.brand-logo-surface img { display: block; width: auto; height: auto; max-width: 100%; max-height: 2.75rem; object-fit: contain; }
-
-/* Wordmark — hidden when sidebar is collapsed (desktop) */
-.brand-wordmark {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 0.9375rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  max-width: 10rem;
-  opacity: 1;
-  transition:
-    max-width var(--transition-normal),
-    opacity var(--transition-fast);
-}
+/* Spark Hub lockup: theme-aware wordmark, readable on light and dark surfaces */
+.logo-container .brand-lockup-text { transition: max-width var(--transition-normal), opacity var(--transition-fast); max-width: 12rem; }
 
 /* ── Navigation ─────────────────────────────────────────────── */
 
@@ -164,11 +140,24 @@
 
 /* Active state: left inset border in brand purple */
 .nav-item.active {
-  color: var(--action-primary-pressed);
+  color: var(--action-primary-text);
   background: var(--selected-navigation);
-  box-shadow: inset 3px 0 0 var(--brand-purple);
   font-weight: 600;
 }
+
+/* Approved active indicator: a short purple rail on the sidebar edge */
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1);
+  top: 0.625rem;
+  bottom: 0.625rem;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--action-primary);
+}
+
+.nav-item.active .nav-icon { color: var(--action-primary-text); }
 
 body.dark-mode .nav-item.active {
   color: var(--brand-white);
@@ -233,6 +222,9 @@ body.dark-mode .nav-item.active {
 /* ── Collapsed desktop sidebar ──────────────────────────────── */
 
 @media (min-width: 769px) {
+  /* Positioned (z auto) so it paints above the cosmic layer without trapping modals. */
+  .sidebar-wrapper { position: relative; }
+
   .sidebar.collapsed {
     width: 4.75rem;
     min-width: 4.75rem;
@@ -249,10 +241,13 @@ body.dark-mode .nav-item.active {
   }
 
   /* Animate wordmark out */
-  .sidebar.collapsed .brand-wordmark {
+  .sidebar.collapsed .brand-lockup-text {
     max-width: 0;
     opacity: 0;
+    overflow: hidden;
   }
+
+  .sidebar.collapsed .brand-lockup { gap: 0; }
 
   .sidebar.collapsed .sidebar-nav {
     padding-inline: var(--space-2);
@@ -322,10 +317,12 @@ body.dark-mode .nav-item.active {
   }
 
   /* Override collapsed styles on mobile — keep full sidebar visible */
-  .sidebar.collapsed .brand-wordmark {
-    max-width: 10rem;
+  .sidebar.collapsed .brand-lockup-text {
+    max-width: 12rem;
     opacity: 1;
   }
+
+  .sidebar.collapsed .brand-lockup { gap: 0.625rem; }
 
   .sidebar.collapsed .nav-text {
     max-width: 12rem;
@@ -381,7 +378,7 @@ body.dark-mode .nav-item.active {
   .sidebar-wrapper,
   .nav-item,
   .nav-text,
-  .brand-wordmark,
+  .brand-lockup-text,
   .nav-section-label {
     transition: none;
   }
